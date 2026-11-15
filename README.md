@@ -35,13 +35,25 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
 
 ## Configuração
 
-Os limites ficam no objeto `CFG` no começo de `content.js`:
+### Compras (no painel)
+
+Expanda o painel para ver a seção de compras. Os valores são salvos no navegador e valem para o modo 2:
+
+| Campo | Padrão | Descrição |
+|-------|--------|-----------|
+| Bola: item | `Ultra Ball` | Pokébola reposta. É também a bola usada nos arremessos. |
+| Bola: mín. | 10 | Repõe quando tiver este tanto ou menos |
+| Bola: comprar | 100 | Quantidade por refill |
+| Poção: item | `auto (em uso)` | `auto` repõe as poções que você está usando. Ou escolha um tipo fixo. |
+| Poção: mín. | 10 | Repõe quando tiver este tanto ou menos |
+| Poção: comprar | 100 | Quantidade por refill |
+
+Se o Market não vender o item escolhido ou o ouro não bastar, o bot registra isso no log e não compra.
+
+### Outros ajustes (`CFG` no começo de `content.js`)
 
 | Chave | Padrão | Descrição |
 |-------|--------|-----------|
-| `ball` | `Ultra Ball` | Bola usada e reposta |
-| `ballMin` / `ballBuy` | 10 / 100 | Limite para repor e quantidade comprada |
-| `potMin` / `potBuy` | 10 / 100 | Idem, para poções |
 | `throwGapMs` | 1400 | Intervalo mínimo entre arremessos |
 | `buyCooldownMs` | 60000 | Intervalo mínimo entre compras do mesmo item |
 | `huntEvalMs` | 600000 | Intervalo entre avaliações de hunt |

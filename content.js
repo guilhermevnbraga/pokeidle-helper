@@ -13,6 +13,13 @@
     captureRe: /captur(ou|ad[oa]|a!)|gotcha|foi capturad/i,
     dry: false,
   };
+  // configurações editáveis no painel (salvas no navegador); potType 'auto' = repõe as poções em uso
+  CFG.potType = 'auto';
+  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy'];
+  try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
+  const saveCfg = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(Object.fromEntries(EDITABLE.map(k => [k, CFG[k]])))); } catch (e) {} };
+  const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
+  const POTIONS = ['Small Potion', 'Great Potion', 'Ultra Potion', 'Hyper Potion', 'Ultimate Potion', 'Golden Potion'];
   const S = JSON.parse(localStorage.getItem('pkbot') || '{}');
   const st = Object.assign({ capture: false, eterna: false, potions: false, hunt: false }, S);
   const save = () => localStorage.setItem('pkbot', JSON.stringify(st));
@@ -61,6 +68,17 @@
     mk('potions', '2 Repor bolas/poções');
     mk('eterna', '3 Captura eterna');
     mk('hunt', '4 Gerenciador de hunt');
+    // compras: tipo, mínimo para repor e quantidade por refill (bolas e poções)
+    const box = document.createElement('div'); box.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3;display:grid;grid-template-columns:auto 1fr 52px 52px;gap:3px 5px;align-items:center';
+    const fld = (el, key, tip) => { el.title = tip; el.style.cssText = 'width:100%;box-sizing:border-box;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:11px monospace;padding:1px 2px'; el.value = CFG[key];
+      el.onchange = () => { let v = el.value; if (el.type === 'number') { v = Math.max(el.min ? +el.min : 0, Math.min(+el.max || 9999, Math.floor(+v) || 0)); el.value = v; } CFG[key] = v; saveCfg(); log('config', key, '=', v); }; return el; };
+    const sel = (opts, key, tip) => { const s = document.createElement('select'); opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); return fld(s, key, tip); };
+    const nbr = (key, tip, min, max) => { const i = document.createElement('input'); i.type = 'number'; i.min = min; i.max = max; return fld(i, key, tip); };
+    const cell = t => { const d = document.createElement('div'); d.textContent = t; d.style.cssText = 'font-size:10px;color:#aab'; return d; };
+    box.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
+      cell('Bola'), sel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta'), nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
+      cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
+    body.append(box);
     logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
     p.append(head, body);
@@ -133,10 +151,11 @@
   function checkSupplies() {
     const bq = ballQty(CFG.ball);
     if (bq !== null && bq <= CFG.ballMin) buy('Pokebolas', CFG.ball, CFG.ballBuy);
-    // poção: repõe só as que estão em uso (chip ligado e que já teve estoque nesta sessão)
+    // poção: tipo escolhido, ou (auto) só as que estão em uso: chip ligado e com estoque já visto nesta sessão
     for (const p of potChips()) {
       seenPot[p.name] = Math.max(seenPot[p.name] || 0, p.qty);
-      if (p.on && seenPot[p.name] > 0 && p.qty <= CFG.potMin) { buy('Poç', p.name, CFG.potBuy); break; }
+      const alvo = CFG.potType === 'auto' ? (p.on && seenPot[p.name] > 0) : p.name === CFG.potType;
+      if (alvo && p.qty <= CFG.potMin) { buy('Poç', p.name, CFG.potBuy); break; }
     }
   }
 
