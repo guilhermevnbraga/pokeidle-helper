@@ -61,6 +61,18 @@ Se o Market não vender o item escolhido ou o ouro não bastar, o bot registra i
 | `minRatio` | 0.5 | Vantagem de tipo mínima aceita |
 | `dry` | `false` | Com `true`, só escreve no log o que faria |
 
+## Segundo plano
+
+O Chrome limita os timers de abas ocultas (cerca de 1 por minuto) e pode até congelá-las. Para o bot não parar de repor poções, há três camadas:
+
+- **Alarme de reserva:** o service worker (`background.js`) acorda a cada 30 s e manda a aba do jogo rodar a rotina.
+- **Keep-alive:** um Web Lock eterno e um áudio inaudível (checkbox "Manter ativo em 2º plano", ligado por padrão). O áudio só liga depois de um clique na página, então clique uma vez no jogo depois de recarregar.
+- **Vigia:** se o relógio ficar parado por mais de 8 s, o log registra "relógio ficou parado" e o estoque é checado na hora.
+
+Dicas:
+- Em `chrome://settings/performance`, desligue o **Economizador de memória** ou adicione `pokeidle.io` aos sites que ficam sempre ativos, senão o Chrome pode descartar a aba.
+- Use um mínimo de poção maior que 10 (por exemplo 30 a 50). Assim sobra margem se o relógio atrasar.
+
 ## Regras do jogo
 
 Os [Termos do Pokeidle](https://pokeidle.io/terms) (seção 5, "Automação") permitem automação, desde que ela não explore falhas, não burle limites do jogo e não sobrecarregue o servidor. Por isso a extensão só faz cliques de interface, com intervalos conservadores. Releia os Termos antes de usar, porque eles podem mudar.

@@ -21,7 +21,7 @@
   const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
   const POTIONS = ['Small Potion', 'Great Potion', 'Ultra Potion', 'Hyper Potion', 'Ultimate Potion', 'Golden Potion'];
   const S = JSON.parse(localStorage.getItem('pkbot') || '{}');
-  const st = Object.assign({ capture: false, eterna: false, potions: false, hunt: false }, S);
+  const st = Object.assign({ capture: false, eterna: false, potions: false, hunt: false, keepalive: true }, S);
   const save = () => localStorage.setItem('pkbot', JSON.stringify(st));
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -61,13 +61,14 @@
     const mk = (key, label) => {
       const l = document.createElement('label'); l.style.cssText = 'display:block;cursor:pointer';
       const c = document.createElement('input'); c.type = 'checkbox'; c.checked = !!st[key]; c.id = 'pkbot-' + key;
-      c.onchange = () => { st[key] = c.checked; save(); log(label, c.checked ? 'ON' : 'OFF'); if (key === 'hunt') huntState.next = 0; ui.refresh(); };
+      c.onchange = () => { st[key] = c.checked; save(); log(label, c.checked ? 'ON' : 'OFF'); if (key === 'hunt') huntState.next = 0; if (key === 'keepalive') applyKeepAlive(); ui.refresh(); };
       l.append(c, ' ' + label); body.append(l);
     };
     mk('capture', '1 Captura (para ao capturar)');
     mk('potions', '2 Repor bolas/poções');
     mk('eterna', '3 Captura eterna');
     mk('hunt', '4 Gerenciador de hunt');
+    mk('keepalive', 'Manter ativo em 2º plano');
     // compras: tipo, mínimo para repor e quantidade por refill (bolas e poções)
     const box = document.createElement('div'); box.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3;display:grid;grid-template-columns:auto 1fr 52px 52px;gap:3px 5px;align-items:center';
     const fld = (el, key, tip) => { el.title = tip; el.style.cssText = 'width:100%;box-sizing:border-box;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:11px monospace;padding:1px 2px'; el.value = CFG[key];
@@ -274,14 +275,38 @@
   }
 
   // ---------- loop (Worker evita throttle em aba em segundo plano) ----------
-  let tickN = 0;
+  let lastTick = Date.now(), lastSupply = 0;
   async function tick() {
     try {
-      captureTick(); tickN++;
-      if (st.potions && tickN % 5 === 0 && !busy) checkSupplies();
+      const now = Date.now(), gap = now - lastTick; lastTick = now;
+      if (gap > 8000) { log('relógio ficou parado', Math.round(gap / 1000) + 's (aba oculta/freada?) - checando estoque já'); lastSupply = 0; }
+      captureTick();
+      if (st.potions && !busy && now - lastSupply >= 5000) { lastSupply = now; checkSupplies(); }
       await huntTick();
     } catch (e) { log('erro:', e.message); }
   }
+  // 2º relógio: o service worker (alarme de 30 s) cutuca a aba, que roda a mesma rotina
+  try { chrome.runtime.onMessage.addListener(m => { if (m && m.type === 'pk-tick') tick(); }); } catch (e) {}
+
+  // Mantém a aba "viva" quando oculta: um Web Lock eterno e um áudio inaudível (sem isso o Chrome
+  // limita os timers a ~1/min e pode congelar a aba). O áudio só liga depois de um clique na página.
+  let audioCtx;
+  function startAudio() {
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        g.gain.value = 0.00001; o.frequency.value = 20; o.connect(g).connect(audioCtx.destination); o.start();
+      }
+      audioCtx.resume().then(() => log('keep-alive: áudio mudo', audioCtx.state === 'running' ? 'ativo' : 'aguardando clique na página'));
+    } catch (e) { log('keep-alive áudio falhou:', e.message); }
+  }
+  function applyKeepAlive() {
+    if (!st.keepalive) { audioCtx && audioCtx.suspend(); return; }
+    startAudio();
+  }
+  try { navigator.locks.request('pkbot-keepalive', () => new Promise(() => {})); } catch (e) {}
+  addEventListener('pointerdown', () => { if (st.keepalive && (!audioCtx || audioCtx.state !== 'running')) startAudio(); }, true);
   function startTimer() {
     try {
       const w = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(1),1000)'], { type: 'text/javascript' })));
