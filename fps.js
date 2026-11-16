@@ -19,9 +19,18 @@
     if (ts - last < gap - 2) { arm(gap - (ts - last)); return; }
     last = ts;
     const batch = [...pending]; pending.clear();
+    const t = performance.now();
     for (const [, cb] of batch) { try { cb(ts); } catch (err) { setTimeout(() => { throw err; }); } }
+    frames++; jsMs += performance.now() - t;
     if (pending.size) arm(0);
   }
+  // diagnóstico: a cada 30 s informa quadros/s reais e ms/s gastos no JS da cena (aparece no log do painel)
+  let frames = 0, jsMs = 0, t0 = performance.now();
+  setInterval(() => {
+    const s = (performance.now() - t0) / 1000;
+    document.dispatchEvent(new CustomEvent('pk-stat', { detail: { fps: +(frames / s).toFixed(1), ms: Math.round(jsMs / s), limite: fps } }));
+    frames = 0; jsMs = 0; t0 = performance.now();
+  }, 30000);
   window.requestAnimationFrame = cb => { const id = nextId++; pending.set(id, cb); arm(0); return id; };
   window.cancelAnimationFrame = id => { pending.delete(id); };
 })();

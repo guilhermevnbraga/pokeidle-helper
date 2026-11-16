@@ -18,12 +18,13 @@
   CFG.fps = 10; // quadros/s do jogo (0 = sem limite); aplicado por fps.js
   const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps'];
   const applyFps = () => document.dispatchEvent(new CustomEvent('pk-fps', { detail: +CFG.fps || 0 }));
+  document.addEventListener('pk-stat', e => log('cena:', e.detail.fps + ' fps reais (limite ' + (e.detail.limite || 'nenhum') + '),', e.detail.ms + ' ms/s de JS'));
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
   const saveCfg = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(Object.fromEntries(EDITABLE.map(k => [k, CFG[k]])))); } catch (e) {} };
   const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
   const POTIONS = ['Small Potion', 'Great Potion', 'Ultra Potion', 'Hyper Potion', 'Ultimate Potion', 'Golden Potion'];
   const S = JSON.parse(localStorage.getItem('pkbot') || '{}');
-  const st = Object.assign({ capture: false, eterna: false, potions: false, hunt: false, keepalive: true }, S);
+  const st = Object.assign({ capture: false, eterna: false, potions: false, hunt: false, keepalive: false }, S);
   const save = () => localStorage.setItem('pkbot', JSON.stringify(st));
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
