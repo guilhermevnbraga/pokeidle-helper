@@ -1,5 +1,5 @@
 # Chromium numa tela virtual, com a extensão carregada, para rodar 24/7 num servidor.
-# Não testado ainda: confirme no primeiro uso que o painel "PokeIdle Helper" aparece.
+# O consumo de CPU vem quase todo do jogo desenhando a cena: use o modo "ULTRA Economia" no painel da extensão.
 services:
   chromium:
     image: lscr.io/linuxserver/chromium:latest
@@ -7,16 +7,21 @@ services:
     security_opt:
       - seccomp:unconfined          # exigido pelo Chromium dentro do Docker
     shm_size: "1gb"
+    cpus: "1.5"                      # teto de CPU: evita esquentar o servidor
+    mem_limit: 2g
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=America/Sao_Paulo
       - CUSTOM_USER=${WEB_USER:-pokeidle}
       - PASSWORD=${WEB_PASSWORD:?defina WEB_PASSWORD no arquivo .env}
-      - CHROME_CLI=--load-extension=/extension --disable-extensions-except=/extension https://pokeidle.io/app
+      # --disable-gpu: o jogo usa canvas 2D, e sem GPU real o Chromium gasta menos CPU em renderização por software
+      - CHROME_CLI=--load-extension=/extension --disable-extensions-except=/extension --disable-gpu --disable-smooth-scrolling --disable-background-networking https://pokeidle.io/app
     volumes:
       - ./profile:/config            # perfil do navegador: o login do jogo fica salvo aqui
       - ../:/extension:ro            # esta pasta é a extensão
     ports:
-      - "127.0.0.1:3001:3001"        # interface web em HTTPS (certificado autoassinado). Só local: exponha por Cloudflare Tunnel ou Tailscale, com senha
+      # interface web em HTTPS (certificado autoassinado). Por padrão só local; defina BIND_IP no .env
+      # (ex.: o IP do CT) para acessar pela rede. Exponha fora de casa só por Cloudflare Tunnel ou Tailscale.
+      - "${BIND_IP:-127.0.0.1}:3001:3001"
     restart: unless-stopped
