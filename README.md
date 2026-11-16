@@ -73,7 +73,17 @@ O jogo tem três modos em Configurações → Desempenho. **A extensão nunca es
 
 O modo é uma configuração do navegador, não da conta.
 
-Ainda não foi verificado se o arremesso de bolas funciona durante o ULTRA com um Pokémon real no chão.
+### O que continua disponível no ULTRA
+
+Medido com o jogo em ULTRA durante 20 s:
+
+- O **HUD congela**: o ouro e (provavelmente) os contadores de bola e poção param de atualizar. Só a caixa do ULTRA atualiza, a cada 10 s, com XP, ouro, shinies e drops raros.
+- O **log de combate continua atualizando**: aparecem "derrotado!", "poção usada" e "escapou e sumiu".
+- A **lista de captura não recebe Pokémon novos**, e a cena para por completo (0 ms/s de JS).
+
+Por isso, com o modo 2 ligado e o jogo em ULTRA, o bot sai do ULTRA a cada 3 minutos (`ultraCheckMs`), ou antes se o log mostrar 15 poções usadas, espera o HUD atualizar, repõe o que faltar e volta ao ULTRA. No servidor isso levou cerca de 6 s. A volta ao ULTRA foi confirmada; uma compra durante esse ciclo ainda não aconteceu, porque o estoque estava acima do mínimo.
+
+A captura **não funciona em Economia nem em ULTRA**, e o painel avisa. Sair do ULTRA a cada abate (um a cada ~6 s) anularia a economia, então os modos 1 e 3 só valem em modo normal.
 
 ## Consumo de CPU no servidor
 
