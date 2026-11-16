@@ -1,0 +1,22 @@
+# Chromium numa tela virtual, com a extensão carregada, para rodar 24/7 num servidor.
+# Não testado ainda: confirme no primeiro uso que o painel "PokeIdle Helper" aparece.
+services:
+  chromium:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: pokeidle-chromium
+    security_opt:
+      - seccomp:unconfined          # exigido pelo Chromium dentro do Docker
+    shm_size: "1gb"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Sao_Paulo
+      - CUSTOM_USER=${WEB_USER:-pokeidle}
+      - PASSWORD=${WEB_PASSWORD:?defina WEB_PASSWORD no arquivo .env}
+      - CHROME_CLI=--load-extension=/extension --disable-extensions-except=/extension https://pokeidle.io/app
+    volumes:
+      - ./profile:/config            # perfil do navegador: o login do jogo fica salvo aqui
+      - ../:/extension:ro            # esta pasta é a extensão
+    ports:
+      - "127.0.0.1:3000:3000"        # só local: exponha por Cloudflare Tunnel ou Tailscale, com senha
+    restart: unless-stopped

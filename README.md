@@ -73,6 +73,20 @@ Dicas:
 - Em `chrome://settings/performance`, desligue o **Economizador de memória** ou adicione `pokeidle.io` aos sites que ficam sempre ativos, senão o Chrome pode descartar a aba.
 - Use um mínimo de poção maior que 10 (por exemplo 30 a 50). Assim sobra margem se o relógio atrasar.
 
+## Rodar 24/7 num servidor (Proxmox)
+
+Um Chromium numa tela virtual, com a extensão carregada, evita de vez o problema da aba oculta. Esta configuração ainda não foi testada.
+
+1. Crie um CT (LXC) Debian 12 com 2 vCPU, 2 GB de RAM e 8 GB de disco. Em **Options → Features**, ligue **Nesting** e **keyctl**.
+2. Instale o Docker no CT e clone este repositório.
+3. Em `deploy/`, copie `.env.example` para `.env` e defina `WEB_PASSWORD`.
+4. Rode `docker compose up -d` em `deploy/`.
+5. Acesse `http://127.0.0.1:3000` pelo túnel (veja abaixo), faça login no jogo uma vez e ligue os modos no painel. O login fica salvo em `deploy/profile/`.
+
+Acesso remoto: a porta só escuta em `127.0.0.1`. Exponha com **Cloudflare Tunnel** protegido por Cloudflare Access, ou por Tailscale. Não abra a porta direto na internet, porque quem entrar controla o navegador com a sua conta logada.
+
+Atenção: o login do jogo tem verificação anti-robô, então ele é feito à mão. Não sei se o jogo aceita a mesma conta em duas sessões ao mesmo tempo. Se uma derrubar a outra, jogue só pelo servidor.
+
 ## Regras do jogo
 
 Os [Termos do Pokeidle](https://pokeidle.io/terms) (seção 5, "Automação") permitem automação, desde que ela não explore falhas, não burle limites do jogo e não sobrecarregue o servidor. Por isso a extensão só faz cliques de interface, com intervalos conservadores. Releia os Termos antes de usar, porque eles podem mudar.
