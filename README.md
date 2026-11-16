@@ -61,6 +61,20 @@ Se o Market não vender o item escolhido ou o ouro não bastar, o bot registra i
 | `minRatio` | 0.5 | Vantagem de tipo mínima aceita |
 | `dry` | `false` | Com `true`, só escreve no log o que faria |
 
+## Modos de tela do jogo (menos CPU)
+
+O jogo tem três modos em Configurações → Desempenho. Na linha **Tela** do painel dá para escolher qual manter:
+
+| Modo | O que o jogo faz | Na extensão |
+|------|------------------|-------------|
+| normal | Cena completa | Tudo funciona |
+| Economia | Desliga a cena (mapa e animações), mantém menus e painéis | Tudo funciona (Market e Mapa abrem normalmente) |
+| ULTRA Economia | Esconde o jogo todo e mostra só uma caixa de texto com XP e ouro, atualizada a cada 10 s | O Market e o Mapa **não abrem** nesse modo. Para comprar ou trocar de hunt, o bot sai do ULTRA por instantes (botão `#ultra-sair`), faz a ação e volta. O painel da extensão continua visível. |
+
+A opção "não mexer" é o padrão e não altera o modo do jogo. O modo é uma configuração do navegador, não da conta.
+
+Ainda não foi verificado se o arremesso de bolas funciona durante o ULTRA com um Pokémon real no chão.
+
 ## Segundo plano
 
 O Chrome limita os timers de abas ocultas (cerca de 1 por minuto) e pode até congelá-las. Para o bot não parar de repor poções, há três camadas:
@@ -83,7 +97,11 @@ Um Chromium numa tela virtual, com a extensão carregada, evita de vez o problem
 4. Rode `docker compose up -d` em `deploy/`.
 5. Acesse `https://127.0.0.1:3001` pelo túnel (veja abaixo), faça login no jogo uma vez e ligue os modos no painel. O login fica salvo em `deploy/profile/`. A interface exige HTTPS, com certificado autoassinado: aceite o aviso do navegador. Em `http://...:3000` ela mostra "requires a secure connection".
 
-Para acessar pela rede local durante a configuração, troque `127.0.0.1` pelo IP do CT na linha da porta do `docker-compose.yml`.
+Para acessar pela rede local, defina `BIND_IP=` com o IP do CT no `.env` (o padrão é `127.0.0.1`, só local) e rode `docker compose up -d` de novo. Para atualizar a extensão, rode `git pull` e `docker compose up -d` em `deploy/`.
+
+O contêiner tem teto de 1,5 CPU e 2 GB de RAM. O consumo vem quase todo do jogo desenhando a cena, então use o modo **ULTRA Economia** (veja "Modos de tela"). Num teste, o CT foi de cerca de 15% de CPU, 1,2 GiB de RAM e 48% de swap para cerca de 5% de CPU, 770 MiB e 3% de swap.
+
+**Uma sessão por conta:** o jogo só deixa uma sessão jogar por vez. Se você abrir o jogo em outro navegador ou aba, a do servidor pausa e mostra "Account opened elsewhere". Clique em "Play here" para retomar. Jogar de novo no servidor desconecta a outra.
 
 Acesso remoto: a porta só escuta em `127.0.0.1`. Exponha com **Cloudflare Tunnel** protegido por Cloudflare Access, ou por Tailscale. Não abra a porta direto na internet, porque quem entrar controla o navegador com a sua conta logada.
 
@@ -95,6 +113,8 @@ Os [Termos do Pokeidle](https://pokeidle.io/terms) (seção 5, "Automação") pe
 
 ## Limitações conhecidas
 
+- O bot encontra os elementos do jogo por atributos e classes (`data-modal`, `.mk-acao` etc.), então funciona com o jogo em português ou inglês. As mensagens de combate e captura ainda são reconhecidas por texto, em português e inglês.
+- A lista "Proximidade para Capturar" às vezes mantém um Pokémon que já sumiu do chão. O bot ignora esse alvo por 60 s quando um clique não gasta bola.
 - A detecção de captura usa uma expressão regular (`captureRe`) sobre os avisos do jogo e ainda não foi confirmada com uma captura real. Se o modo 1 não parar sozinho, ajuste essa expressão.
 - A comparação de tipos considera só o Pokémon em campo. Se o jogo usar o time inteiro, a conta muda.
 - O Analyser não considera desmaios. Uma hunt forte demais pode gastar poções.
