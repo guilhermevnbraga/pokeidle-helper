@@ -81,7 +81,9 @@ Um Chromium numa tela virtual, com a extensão carregada, evita de vez o problem
 2. Instale o Docker no CT e clone este repositório.
 3. Em `deploy/`, copie `.env.example` para `.env` e defina `WEB_PASSWORD`.
 4. Rode `docker compose up -d` em `deploy/`.
-5. Acesse `http://127.0.0.1:3000` pelo túnel (veja abaixo), faça login no jogo uma vez e ligue os modos no painel. O login fica salvo em `deploy/profile/`.
+5. Acesse `https://127.0.0.1:3001` pelo túnel (veja abaixo), faça login no jogo uma vez e ligue os modos no painel. O login fica salvo em `deploy/profile/`. A interface exige HTTPS, com certificado autoassinado: aceite o aviso do navegador. Em `http://...:3000` ela mostra "requires a secure connection".
+
+Para acessar pela rede local durante a configuração, troque `127.0.0.1` pelo IP do CT na linha da porta do `docker-compose.yml`.
 
 Acesso remoto: a porta só escuta em `127.0.0.1`. Exponha com **Cloudflare Tunnel** protegido por Cloudflare Access, ou por Tailscale. Não abra a porta direto na internet, porque quem entrar controla o navegador com a sua conta logada.
 
