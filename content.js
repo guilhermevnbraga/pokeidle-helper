@@ -15,8 +15,7 @@
   };
   // configurações editáveis no painel (salvas no navegador); potType 'auto' = repõe as poções em uso
   CFG.potType = 'auto';
-  CFG.energy = 'manual'; // manual = não mexe; ou normal | economia | ultra (modos de tela do jogo, menos CPU)
-  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'energy'];
+  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy'];
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
   const saveCfg = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(Object.fromEntries(EDITABLE.map(k => [k, CFG[k]])))); } catch (e) {} };
   const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
@@ -81,8 +80,6 @@
     box.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
       cell('Bola'), sel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta'), nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
-    const en = sel([['manual', 'não mexer'], ['normal', 'normal'], ['economia', 'Economia (sem cena)'], ['ultra', 'ULTRA Economia (mín. CPU)']], 'energy', 'Modo de tela do jogo. Economia e ULTRA gastam bem menos CPU. No ULTRA o bot sai por instantes para comprar e trocar de hunt.');
-    en.style.gridColumn = '2 / 5'; box.append(cell('Tela'), en);
     body.append(box);
     logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
@@ -133,20 +130,17 @@
     const b = $('#ultra-sair'); if (!b) return false;
     b.click(); await sleep(1500); return true;
   }
-  async function setEnergy(target) {
-    if (energyNow() === target) return;
-    if (energyNow() === 'ultra') await leaveUltra();
+  // Só devolve o ULTRA ao estado em que o usuário o deixou (liga apenas o ULTRA; não mexe no Economia).
+  // A extensão nunca escolhe o modo de tela por conta própria.
+  async function reenterUltra() {
+    if (energyNow() === 'ultra') return;
     await closeModal();
     const btn = $('#btn-config'); if (!btn) return log('botão de configurações não achado');
     btn.click(); await sleep(900);
     const m = modalVisible(), tab = m && $$('button', m).find(b => /desempenho|performance/i.test(b.innerText));
     tab && tab.click(); await sleep(400);
-    const on = id => { const b = $('#' + id); return !!b && b.classList.contains('on'); };
-    const flip = async id => { const b = $('#' + id); if (b) { b.click(); await sleep(600); } };
-    if (on('cfg-economia') !== (target !== 'normal')) await flip('cfg-economia');
-    if (on('cfg-ultra') !== (target === 'ultra')) await flip('cfg-ultra');
-    await sleep(500); await closeModal();
-    log('tela ->', energyNow());
+    const u = $('#cfg-ultra'); if (u && !u.classList.contains('on')) { u.click(); await sleep(800); }
+    await closeModal();
   }
 
   let busy = false; // uma ação de UI por vez
@@ -177,7 +171,7 @@
       const after = num((($('.mk-tem', card) || {}).dataset || {}).tem);
       log(after > before ? 'Comprou' : 'COMPRA NÃO CONFIRMADA:', item, 'tinha', before, '->', after);
     } catch (e) { log('erro na compra:', e.message); }
-    finally { await closeModal(); if (voltarUltra) await setEnergy('ultra'); busy = false; }
+    finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
   }
 
   // ---------- 2: reposição ----------
@@ -315,15 +309,7 @@
         '| atual:', cur, curE ? curE[1].xp + ' xp/h ×' + curE[1].m.ratio.toFixed(2) : '?');
       if (curE && curE[1].ok && best.score <= curE[1].score * CFG.huntGain) return; // sem ganho relevante: fica onde está
       await switchTo(slug, best.nome);
-    } finally { await closeModal(); if (voltarUltra) await setEnergy('ultra'); busy = false; }
-  }
-  // mantém o modo de tela escolhido no painel (manual = não mexe)
-  let lastEnergyCheck = 0;
-  async function energyTick() {
-    if (CFG.energy === 'manual' || busy || Date.now() - lastEnergyCheck < 30000) return;
-    lastEnergyCheck = Date.now();
-    if (energyNow() === CFG.energy) return;
-    busy = true; try { await setEnergy(CFG.energy); } catch (e) { log('erro ao mudar a tela:', e.message); } finally { busy = false; }
+    } finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
   }
 
   // ---------- loop (Worker evita throttle em aba em segundo plano) ----------
@@ -335,7 +321,6 @@
       captureTick();
       if (st.potions && !busy && now - lastSupply >= 5000) { lastSupply = now; checkSupplies(); }
       await huntTick();
-      await energyTick();
     } catch (e) { log('erro:', e.message); }
   }
   // 2º relógio: o service worker (alarme de 30 s) cutuca a aba, que roda a mesma rotina

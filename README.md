@@ -63,15 +63,15 @@ Se o Market não vender o item escolhido ou o ouro não bastar, o bot registra i
 
 ## Modos de tela do jogo (menos CPU)
 
-O jogo tem três modos em Configurações → Desempenho. Na linha **Tela** do painel dá para escolher qual manter:
+O jogo tem três modos em Configurações → Desempenho. **A extensão nunca escolhe nem muda o modo**: ela funciona em qualquer um, e você liga ou desliga o que quiser pelo próprio jogo.
 
 | Modo | O que o jogo faz | Na extensão |
 |------|------------------|-------------|
 | normal | Cena completa | Tudo funciona |
 | Economia | Desliga a cena (mapa e animações), mantém menus e painéis | Tudo funciona (Market e Mapa abrem normalmente) |
-| ULTRA Economia | Esconde o jogo todo e mostra só uma caixa de texto com XP e ouro, atualizada a cada 10 s | O Market e o Mapa **não abrem** nesse modo. Para comprar ou trocar de hunt, o bot sai do ULTRA por instantes (botão `#ultra-sair`), faz a ação e volta. O painel da extensão continua visível. |
+| ULTRA Economia | Esconde o jogo todo e mostra só uma caixa de texto com XP e ouro, atualizada a cada 10 s | O Market e o Mapa **não abrem** nesse modo. Para comprar ou trocar de hunt, o bot sai do ULTRA por instantes, faz a ação e liga o ULTRA de novo, deixando tudo como estava. O painel da extensão continua visível. |
 
-A opção "não mexer" é o padrão e não altera o modo do jogo. O modo é uma configuração do navegador, não da conta.
+O modo é uma configuração do navegador, não da conta.
 
 Ainda não foi verificado se o arremesso de bolas funciona durante o ULTRA com um Pokémon real no chão.
 
@@ -99,7 +99,7 @@ Um Chromium numa tela virtual, com a extensão carregada, evita de vez o problem
 
 Para acessar pela rede local, defina `BIND_IP=` com o IP do CT no `.env` (o padrão é `127.0.0.1`, só local) e rode `docker compose up -d` de novo. Para atualizar a extensão, rode `git pull` e `docker compose up -d` em `deploy/`.
 
-O contêiner tem teto de 1,5 CPU e 2 GB de RAM. O consumo vem quase todo do jogo desenhando a cena, então use o modo **ULTRA Economia** (veja "Modos de tela"). Num teste, o CT foi de cerca de 15% de CPU, 1,2 GiB de RAM e 48% de swap para cerca de 5% de CPU, 770 MiB e 3% de swap.
+O contêiner tem teto de 1,5 CPU e 2 GB de RAM. O consumo vem quase todo do jogo desenhando a cena, então, se o servidor esquentar, ligue o modo **ULTRA Economia** do próprio jogo (veja "Modos de tela"). Num teste, o CT foi de cerca de 15% de CPU, 1,2 GiB de RAM e 48% de swap para cerca de 5% de CPU, 770 MiB e 3% de swap.
 
 **Uma sessão por conta:** o jogo só deixa uma sessão jogar por vez. Se você abrir o jogo em outro navegador ou aba, a do servidor pausa e mostra "Account opened elsewhere". Clique em "Play here" para retomar. Jogar de novo no servidor desconecta a outra.
 
