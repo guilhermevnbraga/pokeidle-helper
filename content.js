@@ -10,12 +10,13 @@
     huntEvalMs: 10 * 60000,  // reavalia a cada 10 min (a leitura do Hunt Analyser é instantânea)
     huntGain: 1.10,          // só troca de hunt se a melhor render >10% mais que a atual
     minRatio: 0.5,           // descarta hunts em que (ataque amplificado / dano recebido amplificado) < 0.5
-    captureRe: /captur(ou|ad[oa]|a!)|gotcha|foi capturad/i,
+    captureRe: /captur(ou|ad[oa]|a!|ed)|caught|gotcha/i,
     dry: false,
   };
   // configurações editáveis no painel (salvas no navegador); potType 'auto' = repõe as poções em uso
   CFG.potType = 'auto';
-  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy'];
+  CFG.energy = 'manual'; // manual = não mexe; ou normal | economia | ultra (modos de tela do jogo, menos CPU)
+  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'energy'];
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
   const saveCfg = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(Object.fromEntries(EDITABLE.map(k => [k, CFG[k]])))); } catch (e) {} };
   const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
@@ -47,7 +48,8 @@
     const u = Object.assign({ x: null, y: null, min: true, hidden: false }, loadUI());
     const saveUI = () => { try { localStorage.setItem(UI_KEY, JSON.stringify(u)); } catch (e) {} };
     const p = document.createElement('div');
-    p.style.cssText = 'position:fixed;z-index:99999;background:#1b1f2acc;color:#fff;font:12px/1.35 monospace;border:1px solid #fff3;border-radius:8px;width:290px;box-shadow:0 2px 10px #0008;opacity:.5;transition:opacity .15s;user-select:none';
+    p.id = 'pkbot-panel';
+    p.style.cssText = 'position:fixed;z-index:2147483647;background:#1b1f2acc;color:#fff;font:12px/1.35 monospace;border:1px solid #fff3;border-radius:8px;width:290px;box-shadow:0 2px 10px #0008;opacity:.5;transition:opacity .15s;user-select:none';
     p.onmouseenter = () => p.style.opacity = '1'; p.onmouseleave = () => p.style.opacity = '.5';
 
     const head = document.createElement('div');
@@ -79,6 +81,8 @@
     box.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
       cell('Bola'), sel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta'), nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
+    const en = sel([['manual', 'não mexer'], ['normal', 'normal'], ['economia', 'Economia (sem cena)'], ['ultra', 'ULTRA Economia (mín. CPU)']], 'energy', 'Modo de tela do jogo. Economia e ULTRA gastam bem menos CPU. No ULTRA o bot sai por instantes para comprar e trocar de hunt.');
+    en.style.gridColumn = '2 / 5'; box.append(cell('Tela'), en);
     body.append(box);
     logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
@@ -91,7 +95,7 @@
       p.style.left = u.x + 'px'; p.style.top = u.y + 'px';
     };
     const render = () => {
-      p.style.display = u.hidden ? 'none' : ''; body.style.display = u.min ? 'none' : '';
+      p.classList.toggle('pk-oculto', u.hidden); p.style.display = u.hidden ? 'none' : ''; body.style.display = u.min ? 'none' : '';
       const on = [['capture', 1], ['potions', 2], ['eterna', 3], ['hunt', 4]].filter(([k]) => st[k]).map(([, n]) => n);
       title.textContent = 'PokeIdle Helper' + (on.length ? ' · ativos: ' + on.join(',') : ' · parado');
       place();
@@ -116,47 +120,76 @@
     const m = modalVisible(); if (!m) return;
     const x = $$('button', m).find(b => b.innerText.trim() === '×'); x && x.click(); await sleep(400);
   }
-  const navBtn = name => $$('button').find(b => new RegExp('^' + name, 'i').test(b.innerText.trim()));
+  // seletores estruturais (data-modal, classes): funcionam com o jogo em qualquer idioma
+  const navBtn = key => $(`button[data-modal="${key}"]`);
   const gold = () => num((($('#tr-gold') || {}).textContent) || 0);
   const ballQty = name => { const c = $$('#auto-ball-opts .auto-chip').find(b => (b.title || '').startsWith(name)); return c ? num($('.q', c).textContent) : null; };
   const potChips = () => $$('#auto-potion-opts .auto-chip').map(b => ({ name: (b.title || '').split(' — ')[0], qty: num($('.q', b).textContent), on: b.classList.contains('on') }));
 
+  // ---------- modos de tela do jogo (Configurações → Desempenho) ----------
+  const energyNow = () => { const c = document.documentElement.classList; return c.contains('modo-ultra') ? 'ultra' : c.contains('modo-economia') ? 'economia' : 'normal'; };
+  async function leaveUltra() { // o ULTRA esconde menus e bloqueia Market/Mapa: sai por um instante
+    if (energyNow() !== 'ultra') return false;
+    const b = $('#ultra-sair'); if (!b) return false;
+    b.click(); await sleep(1500); return true;
+  }
+  async function setEnergy(target) {
+    if (energyNow() === target) return;
+    if (energyNow() === 'ultra') await leaveUltra();
+    await closeModal();
+    const btn = $('#btn-config'); if (!btn) return log('botão de configurações não achado');
+    btn.click(); await sleep(900);
+    const m = modalVisible(), tab = m && $$('button', m).find(b => /desempenho|performance/i.test(b.innerText));
+    tab && tab.click(); await sleep(400);
+    const on = id => { const b = $('#' + id); return !!b && b.classList.contains('on'); };
+    const flip = async id => { const b = $('#' + id); if (b) { b.click(); await sleep(600); } };
+    if (on('cfg-economia') !== (target !== 'normal')) await flip('cfg-economia');
+    if (on('cfg-ultra') !== (target === 'ultra')) await flip('cfg-ultra');
+    await sleep(500); await closeModal();
+    log('tela ->', energyNow());
+  }
+
   let busy = false; // uma ação de UI por vez
   const lastBuy = {};
-  async function buy(category, item, qty) {
-    const key = category + item;
+  // catIdx: posição da categoria no Market (0 = pokebolas, 1 = poções), independente do idioma
+  async function buy(catIdx, item, qty) {
+    const key = catIdx + item;
     if (Date.now() - (lastBuy[key] || 0) < CFG.buyCooldownMs) return;
     lastBuy[key] = Date.now();
     if (busy) return; busy = true;
+    let voltarUltra = false;
     try {
       if (CFG.dry) { log('[dry] compraria', qty, item); return; }
-      await closeModal(); navBtn('Market').click(); await sleep(1200);
+      voltarUltra = await leaveUltra();
+      await closeModal(); const nav = navBtn('market'); if (!nav) return log('botão do Market não encontrado'); nav.click(); await sleep(1200);
       const m = $('.modal-caixa[data-modal=market]'); if (!m) return log('Market não abriu');
-      const cat = $$('.mk-cat', m).find(b => b.innerText.toLowerCase().includes(category.toLowerCase())); cat && cat.click(); await sleep(600);
+      const cat = $$('.mk-cat', m)[catIdx]; cat && cat.click(); await sleep(600);
       const card = $$('.mk-card', m).find(c => ($('.mk-nome', c) || {}).title === item);
       if (!card) return log('Item não achado no Market:', item);
       const price = num($('.mk-moeda', card).textContent), before = num((($('.mk-tem', card) || {}).dataset || {}).tem);
       if (gold() < price * qty) return log('Ouro insuficiente p/', qty, item, '(precisa', price * qty + ')');
-      const btnQ = $$('button', card).find(b => b.innerText.trim() === '×' + qty);
+      const btnQ = $(`.mk-atalho[data-q="${qty}"]`, card);
       const input = $('input[type=number]', card);
       if (btnQ) btnQ.click(); else if (input) { input.value = qty; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); }
       await sleep(300);
-      const b = $$('button', card).find(b => /^comprar/i.test(b.innerText.trim())); b.click(); await sleep(1200);
+      const b = $('.mk-acao', card); if (!b) return log('botão de comprar não encontrado');
+      b.click(); await sleep(1500);
       const after = num((($('.mk-tem', card) || {}).dataset || {}).tem);
-      log('Comprou', item, 'tinha', before, '->', after);
-    } finally { await closeModal(); busy = false; }
+      log(after > before ? 'Comprou' : 'COMPRA NÃO CONFIRMADA:', item, 'tinha', before, '->', after);
+    } catch (e) { log('erro na compra:', e.message); }
+    finally { await closeModal(); if (voltarUltra) await setEnergy('ultra'); busy = false; }
   }
 
   // ---------- 2: reposição ----------
   const seenPot = {};
   function checkSupplies() {
     const bq = ballQty(CFG.ball);
-    if (bq !== null && bq <= CFG.ballMin) buy('Pokebolas', CFG.ball, CFG.ballBuy);
+    if (bq !== null && bq <= CFG.ballMin) buy(0, CFG.ball, CFG.ballBuy);
     // poção: tipo escolhido, ou (auto) só as que estão em uso: chip ligado e com estoque já visto nesta sessão
     for (const p of potChips()) {
       seenPot[p.name] = Math.max(seenPot[p.name] || 0, p.qty);
       const alvo = CFG.potType === 'auto' ? (p.on && seenPot[p.name] > 0) : p.name === CFG.potType;
-      if (alvo && p.qty <= CFG.potMin) { buy('Poç', p.name, CFG.potBuy); break; }
+      if (alvo && p.qty <= CFG.potMin) { buy(1, p.name, CFG.potBuy); break; }
     }
   }
 
@@ -169,20 +202,28 @@
   function captureTick() {
     if (!(st.capture || st.eterna) || busy) return;
     if (st.capture && !st.eterna && captured) { st.capture = false; save(); ui.refresh(); log('Capturou! Modo captura parou.'); captured = false; return; }
-    const list = $$('#caidos-lista .caido'); if (!list.length) return;
-    if ((ballQty(CFG.ball) || 0) <= 0) return;
-    if (Date.now() - lastThrow < CFG.throwGapMs) return;
-    ensureBall(); lastThrow = Date.now();
-    if (CFG.dry) return log('[dry] arremessaria em', list[0].innerText.replace(/\s+/g, ' '));
-    list[0].click();
+    const now = Date.now();
+    // ignora entradas "fantasma" (o jogo às vezes deixa na lista um pokemon que já sumiu do chão)
+    const list = $$('#caidos-lista .caido').filter(e => (badSlots[e.dataset.slot] || 0) < now); if (!list.length) return;
+    const q = ballQty(CFG.ball); if ((q || 0) <= 0) return;
+    if (now - lastThrow < CFG.throwGapMs) return;
+    const pick = list[0], slot = pick.dataset.slot;
+    if (slot === lastSlot && q === lastQty) { // mesmo alvo e nenhuma bola gasta desde o último clique
+      if (now - lastThrow < 3000) return;     // dá tempo do contador atualizar
+      badSlots[slot] = now + 60000; lastSlot = null; return log('alvo', slot, 'não está mais no chão; ignorando por 60s');
+    }
+    ensureBall(); lastThrow = now; lastSlot = slot; lastQty = q;
+    if (CFG.dry) return log('[dry] arremessaria em', pick.innerText.replace(/\s+/g, ' '));
+    pick.click();
   }
+  const badSlots = {}; let lastSlot = null, lastQty = null;
   // detecta captura em toasts/log do jogo
   function watch() {
     const mo = new MutationObserver(ms => {
       for (const m of ms) for (const n of m.addedNodes) {
         const t = (n.textContent || '').trim(); if (!t) continue;
         if (m.target.id === 'toast' || n.id === 'toast' || (m.target.closest && m.target.closest('#toast'))) log('toast:', t.slice(0, 90));
-        if (CFG.captureRe.test(t) && !/derrotado/.test(t)) { captured = true; log('captura detectada:', t.slice(0, 90)); }
+        if (CFG.captureRe.test(t) && !/derrotado|defeated/i.test(t)) { captured = true; log('captura detectada:', t.slice(0, 90)); }
         if (m.target.id === 'hud-log') xpEvent(t);
       }
     });
@@ -195,29 +236,30 @@
   // ---------- 4: hunt (usa o Hunt Analyser do próprio jogo; nada de testar hunt por hunt) ----------
   const xpEvents = []; // log real de xp, só para conferir a estimativa
   function xpEvent(text) {
-    const m = text.match(/\+([\d.]+)\s*xp pokemon/i); if (m) xpEvents.push({ t: Date.now(), xp: num(m[1]) });
+    const m = text.match(/\+([\d.,]+)\s*(?:xp\s*pokemon|pokemon\s*xp)/i); if (m) xpEvents.push({ t: Date.now(), xp: num(m[1]) });
     if (xpEvents.length > 5000) xpEvents.splice(0, 1000);
   }
   const hover = el => ['mouseover', 'mouseenter'].forEach(ev => el.dispatchEvent(new MouseEvent(ev, { bubbles: true })));
   const readAnalyser = () => {
-    const t = (($('#hunt-analyser-corpo') || {}).innerText || '').replace(/\n+/g, '|');
-    const g = l => { const m = t.match(new RegExp(l + '\\|([\\d.]+)')); return m ? num(m[1]) : null; };
+    // números do analyser em ordem: XP treinador/h, XP pokemon/h, Ouro/h (sem depender do texto dos rótulos)
+    const nums = $$('#hunt-analyser-corpo *').filter(e => e.children.length === 0 && /^[\d.,]+$/.test(e.textContent.trim())).map(e => num(e.textContent));
+    const g = l => (l === 'xp' ? nums[1] : nums[2]) ?? null;
     // tipos do monstro = os .tipo que vêm antes da 1ª seção (Fraco a / Resiste a)
     const types = [];
     for (const e of $$('#hunt-analyser-corpo .tipo, #hunt-analyser-corpo .ha-sec')) { if (e.classList.contains('ha-sec')) break; types.push(e.textContent.trim().toUpperCase()); }
-    return { xp: g('XP pokemon / hora'), gold: g('Ouro / hora'), types };
+    return { xp: g('xp'), gold: g('gold'), types };
   };
-  // tipo(s) do pokemon que está em campo (card "EM CAMPO")
+  // tipo(s) do pokemon em campo: o 1º grupo de .tipo fora de modais, analyser e fichas
   const myTypes = () => {
-    const h = $$('*').find(e => e.children.length === 0 && /^EM CAMPO$/i.test(e.textContent.trim()));
-    const card = h && h.parentElement && h.parentElement.parentElement;
-    return card ? [...new Set($$('.tipo', card).map(t => t.textContent.trim().toUpperCase()))] : [];
+    const els = $$('.tipo').filter(e => !e.closest('.modal-caixa,#hunt-analyser,#ficha,#caidos,#palco'));
+    if (!els.length) return [];
+    return [...new Set($$('.tipo', els[0].parentElement).map(t => t.textContent.trim().toUpperCase()))];
   };
   const currentHuntName = () => ((($('#hud-hunt') || {}).innerText || '').split('·')[0] || '').trim().toLowerCase();
   const regionBtns = () => $$('button.mapa-reg-bt', modalVisible()).filter(b => !b.classList.contains('mapa-area-travada'));
   async function openMap() {
-    await closeModal(); navBtn('Mapa').click(); await sleep(1000);
-    const bt = $$('.mapa-modo-bt').find(b => /^mapa$/i.test(b.innerText.trim())); bt && !bt.classList.contains('on') && bt.click(); await sleep(800);
+    await closeModal(); const nav = navBtn('mapa'); if (!nav) throw new Error('botão do Mapa não encontrado'); nav.click(); await sleep(1000);
+    const bt = $$('.mapa-modo-bt')[0]; bt && !bt.classList.contains('on') && bt.click(); await sleep(800); // 1º botão = visão de mapa
   }
   // lê xp/h de todas as hunts liberadas de todas as regiões abertas
   async function scanHunts() {
@@ -244,7 +286,7 @@
       if (CFG.dry) return log('[dry] trocaria p/', slug);
       mk.click(); await sleep(900);
       const toast = (($('#toast') || {}).innerText || '');
-      const w = toast.match(/em combate.*?espere\s*([\d.,]+)\s*s/i);
+      const w = toast.match(/(?:em combate|in combat).*?(?:espere|wait)\s*([\d.,]+)\s*s/i);
       if (w) { const s = parseFloat(w[1].replace(',', '.')) + 0.6; log('em combate, aguardando', s.toFixed(1) + 's'); await closeModal(); await sleep(s * 1000); continue; }
       await closeModal(); await sleep(500);
       if (currentHuntName().startsWith(nome)) return log('hunt ->', nome);
@@ -255,7 +297,9 @@
   async function huntTick() {
     if (!st.hunt || busy || Date.now() < huntState.next) return;
     busy = true; huntState.next = Date.now() + CFG.huntEvalMs;
+    let voltarUltra = false;
     try {
+      voltarUltra = await leaveUltra();
       const all = await scanHunts(); await closeModal();
       const list = Object.entries(all); if (!list.length) return log('analyser sem dados');
       const cur = currentHuntName(), mine = myTypes();
@@ -271,7 +315,15 @@
         '| atual:', cur, curE ? curE[1].xp + ' xp/h ×' + curE[1].m.ratio.toFixed(2) : '?');
       if (curE && curE[1].ok && best.score <= curE[1].score * CFG.huntGain) return; // sem ganho relevante: fica onde está
       await switchTo(slug, best.nome);
-    } finally { await closeModal(); busy = false; }
+    } finally { await closeModal(); if (voltarUltra) await setEnergy('ultra'); busy = false; }
+  }
+  // mantém o modo de tela escolhido no painel (manual = não mexe)
+  let lastEnergyCheck = 0;
+  async function energyTick() {
+    if (CFG.energy === 'manual' || busy || Date.now() - lastEnergyCheck < 30000) return;
+    lastEnergyCheck = Date.now();
+    if (energyNow() === CFG.energy) return;
+    busy = true; try { await setEnergy(CFG.energy); } catch (e) { log('erro ao mudar a tela:', e.message); } finally { busy = false; }
   }
 
   // ---------- loop (Worker evita throttle em aba em segundo plano) ----------
@@ -283,6 +335,7 @@
       captureTick();
       if (st.potions && !busy && now - lastSupply >= 5000) { lastSupply = now; checkSupplies(); }
       await huntTick();
+      await energyTick();
     } catch (e) { log('erro:', e.message); }
   }
   // 2º relógio: o service worker (alarme de 30 s) cutuca a aba, que roda a mesma rotina
@@ -315,6 +368,9 @@
   }
 
   window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
-  const boot = () => { buildPanel(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : ''); };
+  const boot = () => {
+    // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
+    const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);
+    buildPanel(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : ''); };
   document.body ? boot() : addEventListener('DOMContentLoaded', boot);
 })();
