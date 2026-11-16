@@ -7,6 +7,7 @@
     potMin: 10, potBuy: 100,
     throwGapMs: 1400,        // intervalo mínimo entre arremessos
     buyCooldownMs: 60000,    // não tenta comprar o mesmo item de novo antes disso
+    ultraCheckMs: 3 * 60000, // no ULTRA, de quanto em quanto tempo sai para atualizar os estoques
     huntEvalMs: 10 * 60000,  // reavalia a cada 10 min (a leitura do Hunt Analyser é instantânea)
     huntGain: 1.10,          // só troca de hunt se a melhor render >10% mais que a atual
     minRatio: 0.5,           // descarta hunts em que (ataque amplificado / dano recebido amplificado) < 0.5
@@ -180,15 +181,36 @@
 
   // ---------- 2: reposição ----------
   const seenPot = {};
-  function checkSupplies() {
-    const bq = ballQty(CFG.ball);
-    if (bq !== null && bq <= CFG.ballMin) buy(0, CFG.ball, CFG.ballBuy);
+  // O que precisa ser reposto agora: [[categoria, item, quantidade], ...]
+  function supplyNeeds() {
+    const needs = [], bq = ballQty(CFG.ball);
+    if (bq !== null && bq <= CFG.ballMin) needs.push([0, CFG.ball, CFG.ballBuy]);
     // poção: tipo escolhido, ou (auto) só as que estão em uso: chip ligado e com estoque já visto nesta sessão
     for (const p of potChips()) {
       seenPot[p.name] = Math.max(seenPot[p.name] || 0, p.qty);
       const alvo = CFG.potType === 'auto' ? (p.on && seenPot[p.name] > 0) : p.name === CFG.potType;
-      if (alvo && p.qty <= CFG.potMin) { buy(1, p.name, CFG.potBuy); break; }
+      if (alvo && p.qty <= CFG.potMin) { needs.push([1, p.name, CFG.potBuy]); break; }
     }
+    return needs;
+  }
+  function checkSupplies() { supplyNeeds().forEach(n => buy(...n)); }
+
+  // No ULTRA Economia o HUD (ouro, bolas, poções) congela, então os estoques lidos ficam velhos.
+  // Aqui o bot sai do ULTRA de tempos em tempos (ou quando o log mostra muitas poções usadas),
+  // deixa o HUD atualizar, repõe o que faltar e volta ao ULTRA.
+  let potUsed = 0, lastUltraRefresh = Date.now(), potUsedAtRefresh = 0;
+  async function ultraSupplyTick() {
+    const due = Date.now() - lastUltraRefresh >= CFG.ultraCheckMs || potUsed - potUsedAtRefresh >= 15;
+    if (!due || busy) return;
+    lastUltraRefresh = Date.now(); potUsedAtRefresh = potUsed;
+    busy = true; let saiu = false;
+    try {
+      log('ULTRA: saindo por instantes para atualizar os estoques');
+      saiu = await leaveUltra(); await sleep(2500);
+      const needs = supplyNeeds();
+      busy = false; for (const n of needs) await buy(...n); busy = true;
+    } catch (e) { log('erro no ULTRA:', e.message); }
+    finally { try { if (saiu) await reenterUltra(); } finally { busy = false; } }
   }
 
   // ---------- 1/3: captura ----------
@@ -222,7 +244,7 @@
         const t = (n.textContent || '').trim(); if (!t) continue;
         if (m.target.id === 'toast' || n.id === 'toast' || (m.target.closest && m.target.closest('#toast'))) log('toast:', t.slice(0, 90));
         if (CFG.captureRe.test(t) && !/derrotado|defeated/i.test(t)) { captured = true; log('captura detectada:', t.slice(0, 90)); }
-        if (m.target.id === 'hud-log') xpEvent(t);
+        if (m.target.id === 'hud-log') { xpEvent(t); if (/poção usada|potion used/i.test(t)) potUsed++; }
       }
     });
     const t = $('#toast'), h = $('#hud-log');
@@ -317,13 +339,15 @@
   }
 
   // ---------- loop (Worker evita throttle em aba em segundo plano) ----------
-  let lastTick = Date.now(), lastSupply = 0;
+  let lastTick = Date.now(), lastSupply = 0, warnedCapture = false;
   async function tick() {
     try {
       const now = Date.now(), gap = now - lastTick; lastTick = now;
       if (gap > 8000) { log('relógio ficou parado', Math.round(gap / 1000) + 's (aba oculta/freada?) - checando estoque já'); lastSupply = 0; }
       captureTick();
-      if (st.potions && !busy && now - lastSupply >= 5000) { lastSupply = now; checkSupplies(); }
+      if (st.potions && !busy && now - lastSupply >= 5000) { lastSupply = now; energyNow() === 'ultra' ? ultraSupplyTick() : checkSupplies(); }
+      if ((st.capture || st.eterna) && energyNow() !== 'normal' && !warnedCapture) { warnedCapture = true; log('aviso: captura não funciona em Economia/ULTRA (a lista de corpos não atualiza)'); }
+      if (energyNow() === 'normal') warnedCapture = false;
       await huntTick();
     } catch (e) { log('erro:', e.message); }
   }
