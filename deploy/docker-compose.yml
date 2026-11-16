@@ -16,7 +16,7 @@ services:
       - CUSTOM_USER=${WEB_USER:-pokeidle}
       - PASSWORD=${WEB_PASSWORD:?defina WEB_PASSWORD no arquivo .env}
       # --disable-gpu: o jogo usa canvas 2D, e sem GPU real o Chromium gasta menos CPU em renderização por software
-      - CHROME_CLI=--load-extension=/extension --disable-extensions-except=/extension --disable-gpu --disable-smooth-scrolling --disable-background-networking https://pokeidle.io/app
+      - CHROME_CLI=--load-extension=/extension --disable-extensions-except=/extension --disable-gpu --disable-smooth-scrolling --disable-background-networking --disable-component-update --disable-sync --disable-features=site-per-process,Translate,MediaRouter https://pokeidle.io/app
     volumes:
       - ./profile:/config            # perfil do navegador: o login do jogo fica salvo aqui
       - ../:/extension:ro            # esta pasta é a extensão
