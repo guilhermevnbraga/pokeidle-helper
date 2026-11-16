@@ -75,12 +75,30 @@ O modo é uma configuração do navegador, não da conta.
 
 Ainda não foi verificado se o arremesso de bolas funciona durante o ULTRA com um Pokémon real no chão.
 
+## Consumo de CPU no servidor
+
+Medido no CT (2 vCPU) com o jogo em modo normal e capturando:
+
+| Situação | CPU do CT |
+|----------|-----------|
+| Tela remota **fechada** | cerca de 15% (a thread principal do jogo gasta uns 14% de um core) |
+| Tela remota **aberta** | cerca de 95% de um core: codificador de vídeo da tela remota (~21%), renderizador (~37%) e compositor (~17%) |
+| ULTRA Economia (sem capturar) | cerca de 5% |
+
+O que mais pesa é **deixar a tela remota aberta**. Feche a aba do Selkies quando não estiver mexendo.
+
+O seletor **FPS** do painel limita a cena do jogo (padrão 10). No jogo isso reduz o JS da cena de cerca de 130 ms/s para 20 ms/s e a imagem muda 9 vezes por segundo em vez de 30; a captura continua funcionando. No servidor, com a tela remota fechada, o consumo total quase não mudou, porque o gasto restante vem de pintura e composição e não do JS da cena. Se for jogar na mão, escolha "sem limite" ou 60.
+
+Foram testados e **não ajudaram** (removidos): reduzir as animações CSS da interface.
+
+Ainda não testado: passar a GPU integrada do host para o CT (`/dev/dri`) e tirar o `--disable-gpu`, para a composição sair da CPU.
+
 ## Segundo plano
 
 O Chrome limita os timers de abas ocultas (cerca de 1 por minuto) e pode até congelá-las. Para o bot não parar de repor poções, há três camadas:
 
 - **Alarme de reserva:** o service worker (`background.js`) acorda a cada 30 s e manda a aba do jogo rodar a rotina.
-- **Keep-alive:** um Web Lock eterno e um áudio inaudível (checkbox "Manter ativo em 2º plano", ligado por padrão). O áudio só liga depois de um clique na página, então clique uma vez no jogo depois de recarregar.
+- **Keep-alive:** um Web Lock eterno e um áudio inaudível (checkbox "Manter ativo em 2º plano", **desligado por padrão**). Ligue só se deixar o jogo numa aba oculta no PC: o áudio custa um pouco de CPU (o `pulseaudio` aparece no `top`) e não faz falta no servidor, onde a janela é sempre visível. O áudio só liga depois de um clique na página.
 - **Vigia:** se o relógio ficar parado por mais de 8 s, o log registra "relógio ficou parado" e o estoque é checado na hora.
 
 Dicas:
