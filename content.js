@@ -16,7 +16,16 @@
   // configurações editáveis no painel (salvas no navegador); potType 'auto' = repõe as poções em uso
   CFG.potType = 'auto';
   CFG.fps = 10; // quadros/s do jogo (0 = sem limite); aplicado por fps.js
-  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps'];
+  CFG.anim = 1; // 1 = animações CSS reduzidas (menos layout/pintura), 0 = normais
+  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'anim'];
+  // Duração ~0 mantém os eventos de fim de animação (a interface não trava) e faz as animações em loop rodarem uma vez só.
+  const applyAnim = () => {
+    let s = document.getElementById('pk-noanim');
+    if (+CFG.anim) {
+      if (!s) { s = document.createElement('style'); s.id = 'pk-noanim'; (document.head || document.documentElement).append(s); }
+      s.textContent = '*,*::before,*::after{animation-duration:.001s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.001s!important;transition-delay:0s!important}';
+    } else if (s) s.remove();
+  };
   const applyFps = () => document.dispatchEvent(new CustomEvent('pk-fps', { detail: +CFG.fps || 0 }));
   document.addEventListener('pk-stat', e => log('cena:', e.detail.fps + ' fps reais (limite ' + (e.detail.limite || 'nenhum') + '),', e.detail.ms + ' ms/s de JS'));
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
@@ -76,7 +85,7 @@
     // compras: tipo, mínimo para repor e quantidade por refill (bolas e poções)
     const box = document.createElement('div'); box.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3;display:grid;grid-template-columns:auto 1fr 52px 52px;gap:3px 5px;align-items:center';
     const fld = (el, key, tip) => { el.title = tip; el.style.cssText = 'width:100%;box-sizing:border-box;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:11px monospace;padding:1px 2px'; el.value = CFG[key];
-      el.onchange = () => { let v = el.value; if (el.type === 'number') { v = Math.max(el.min ? +el.min : 0, Math.min(+el.max || 9999, Math.floor(+v) || 0)); el.value = v; } CFG[key] = v; saveCfg(); log('config', key, '=', v); if (key === 'fps') applyFps(); }; return el; };
+      el.onchange = () => { let v = el.value; if (el.type === 'number') { v = Math.max(el.min ? +el.min : 0, Math.min(+el.max || 9999, Math.floor(+v) || 0)); el.value = v; } CFG[key] = v; saveCfg(); log('config', key, '=', v); if (key === 'fps') applyFps(); if (key === 'anim') applyAnim(); }; return el; };
     const sel = (opts, key, tip) => { const s = document.createElement('select'); opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); return fld(s, key, tip); };
     const nbr = (key, tip, min, max) => { const i = document.createElement('input'); i.type = 'number'; i.min = min; i.max = max; return fld(i, key, tip); };
     const cell = t => { const d = document.createElement('div'); d.textContent = t; d.style.cssText = 'font-size:10px;color:#aab'; return d; };
@@ -85,6 +94,8 @@
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
     const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2'], [0, 'sem limite']], 'fps', 'Quadros por segundo da cena do jogo. Menos quadros = bem menos CPU; a captura continua funcionando. Use "sem limite" se for jogar na mão.');
     fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel);
+    const animSel = sel([[1, 'reduzidas (menos CPU)'], [0, 'normais']], 'anim', 'Animações CSS da interface (barras, ícones). Reduzidas gastam menos CPU de layout e pintura.');
+    animSel.style.gridColumn = '2 / 5'; box.append(cell('Anim.'), animSel);
     body.append(box);
     logEl =document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
@@ -361,6 +372,6 @@
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);
-    buildPanel(); applyFps(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : ''); };
+    buildPanel(); applyFps(); applyAnim(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : ''); };
   document.body ? boot() : addEventListener('DOMContentLoaded', boot);
 })();
