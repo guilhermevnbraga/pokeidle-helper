@@ -31,27 +31,6 @@
     document.dispatchEvent(new CustomEvent('pk-stat', { detail: { fps: +(frames / s).toFixed(1), ms: Math.round(jsMs / s), limite: fps } }));
     frames = 0; jsMs = 0; t0 = performance.now();
   }, 30000);
-  // ---- perfilador temporário: quais temporizadores/mensagens do jogo gastam mais tempo da thread principal ----
-  const prof = {}; let pT0 = performance.now();
-  const site = () => { const f = (new Error().stack || '').split('\n').slice(3).find(l => !/fps\.js/.test(l)) || '?'; return f.trim().replace(/^at\s+/, '').slice(-70); };
-  const rec = (tag, ms) => { const p = prof[tag] || (prof[tag] = { n: 0, ms: 0 }); p.n++; p.ms += ms; };
-  const wrap = (kind, fn) => { if (typeof fn !== 'function') return fn; const tag = kind + ' ' + site(); return function () { const t = performance.now(); try { return fn.apply(this, arguments); } finally { rec(tag, performance.now() - t); } }; };
-  const oST = window.setTimeout, oSI = window.setInterval;
-  window.setTimeout = function (fn, d, ...a) { return oST.call(this, wrap('T', fn), d, ...a); };
-  window.setInterval = function (fn, d, ...a) { return oSI.call(this, wrap('I', fn), d, ...a); };
-  try {
-    const d = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'onmessage');
-    Object.defineProperty(WebSocket.prototype, 'onmessage', { get: d.get, set(fn) { d.set.call(this, wrap('WS', fn)); } });
-    const ael = WebSocket.prototype.addEventListener;
-    WebSocket.prototype.addEventListener = function (t, fn, o) { return ael.call(this, t, t === 'message' ? wrap('WS', fn) : fn, o); };
-  } catch (e) {}
-  oSI.call(window, () => {
-    const s = (performance.now() - pT0) / 1000; pT0 = performance.now();
-    const top = Object.entries(prof).sort((a, b) => b[1].ms - a[1].ms).slice(0, 5).map(([k, v]) => `${k} | ${(v.n / s).toFixed(1)}/s ${(v.ms / s).toFixed(1)}ms/s`);
-    for (const k in prof) delete prof[k];
-    document.dispatchEvent(new CustomEvent('pk-prof', { detail: top }));
-  }, 30000);
-
   window.requestAnimationFrame = cb => { const id = nextId++; pending.set(id, cb); arm(0); return id; };
   window.cancelAnimationFrame = id => { pending.delete(id); };
 })();
