@@ -23,6 +23,8 @@
     delay > 4 ? setTimeout(go, delay) : go();
   };
   document.addEventListener('visibilitychange', () => { armed = false; token++; if (pending.size) arm(0); });
+  // aba oculta: timers da página são limitados (~1/min); o relógio da extensão (Worker) empurra a cena todo segundo
+  document.addEventListener('pk-pump', () => { if (document.hidden && pending.size) { armed = false; token++; pump(performance.now()); } });
   function pump(ts) {
     armed = false;
     const gap = fps > 0 ? 1000 / fps : 0;

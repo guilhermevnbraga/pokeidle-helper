@@ -341,6 +341,7 @@
   // ---------- loop (Worker evita throttle em aba em segundo plano) ----------
   let lastTick = Date.now(), lastSupply = 0, warnedCapture = false;
   async function tick() {
+    if (document.hidden) document.dispatchEvent(new CustomEvent('pk-pump'));
     try {
       const now = Date.now(), gap = now - lastTick; lastTick = now;
       if (gap > 8000) { log('relógio ficou parado', Math.round(gap / 1000) + 's (aba oculta/freada?) - checando estoque já'); lastSupply = 0; }
