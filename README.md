@@ -109,6 +109,7 @@ O Chrome limita os timers de abas ocultas (cerca de 1 por minuto) e pode até co
 
 - **Alarme de reserva:** o service worker (`background.js`) acorda a cada 30 s e manda a aba do jogo rodar a rotina.
 - **Keep-alive:** um Web Lock eterno e um áudio inaudível (checkbox "Manter ativo em 2º plano", **desligado por padrão**). Ligue só se deixar o jogo numa aba oculta no PC: o áudio custa um pouco de CPU (o `pulseaudio` aparece no `top`) e não faz falta no servidor, onde a janela é sempre visível. O áudio só liga depois de um clique na página.
+- **Timers do jogo:** `fps.js` troca `setTimeout`/`setInterval` da página por versões com um segundo despertador num Worker, que o Chrome não limita; em aba oculta/minimizada os timers do jogo (que alimentam a lista de captura) continuam a cada ~50 ms em vez de ~1/min.
 - **Vigia:** se o relógio ficar parado por mais de 8 s, o log registra "relógio ficou parado" e o estoque é checado na hora.
 
 Dicas:

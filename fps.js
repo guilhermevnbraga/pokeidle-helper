@@ -43,6 +43,41 @@
     document.dispatchEvent(new CustomEvent('pk-stat', { detail: { fps: +(frames / s).toFixed(1), ms: Math.round(jsMs / s), limite: fps } }));
     frames = 0; jsMs = 0; t0 = performance.now();
   }, 30000);
+  // Timers do próprio jogo (setTimeout/setInterval): em aba oculta o Chrome os limita a ~1/min (throttling intenso),
+  // o que congela a lista de captura. Cada timer ganha um "segundo despertador" num Worker (não é limitado);
+  // vale o que disparar primeiro e o outro é cancelado. Se o Worker for bloqueado (CSP), nada muda.
+  try {
+    const nSet = window.setTimeout.bind(window), nClr = window.clearTimeout.bind(window);
+    const nSetI = window.setInterval.bind(window), nClrI = window.clearInterval.bind(window);
+    const w = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),50)'], { type: 'text/javascript' })));
+    const table = new Map(); // id -> { due, every, fn, args, nat }
+    let seq = 1e9;
+    const fire = (id, t) => {
+      if (t.every != null) { t.due = performance.now() + t.every; } else { table.delete(id); nClr(t.nat); }
+      try { typeof t.fn === 'function' ? t.fn(...t.args) : (0, eval)(String(t.fn)); } catch (err) { nSet(() => { throw err; }); }
+    };
+    w.onmessage = () => {
+      if (!document.hidden || !table.size) return;
+      const now = performance.now();
+      for (const [id, t] of [...table]) if (table.has(id) && now >= t.due) fire(id, t);
+    };
+    window.setTimeout = (fn, ms, ...args) => {
+      ms = Math.max(0, +ms || 0);
+      const id = ++seq, t = { due: performance.now() + ms, every: null, fn, args };
+      t.nat = nSet(() => { if (table.has(id)) fire(id, t); }, ms);
+      table.set(id, t); return id;
+    };
+    window.setInterval = (fn, ms, ...args) => {
+      ms = Math.max(1, +ms || 0);
+      const id = ++seq, t = { due: performance.now() + ms, every: ms, fn, args };
+      // o nativo só é re-armado pelo próprio disparo; para evitar disparo duplo usa a mesma tabela
+      t.nat = nSetI(() => { if (!table.has(id)) return; if (performance.now() < t.due - 5) return; fire(id, t); }, ms);
+      table.set(id, t); return id;
+    };
+    window.clearTimeout = id => { const t = table.get(id); if (t) { table.delete(id); nClr(t.nat); } else nClr(id); };
+    window.clearInterval = id => { const t = table.get(id); if (t) { table.delete(id); nClrI(t.nat); } else nClrI(id); };
+  } catch (e) {}
+
   window.requestAnimationFrame = cb => { const id = nextId++; pending.set(id, cb); arm(0); return id; };
   window.cancelAnimationFrame = id => { pending.delete(id); };
 })();
