@@ -12,7 +12,17 @@
 
   const pending = new Map();
   let nextId = 1, armed = false, last = 0;
-  const arm = delay => { if (armed) return; armed = true; delay > 4 ? setTimeout(() => raf(pump), delay) : raf(pump); };
+  let token = 0;
+  // aba oculta: o Chrome pausa requestAnimationFrame, então a cena (e a lista de captura) pararia; usa timer
+  const arm = delay => {
+    if (armed) return;
+    armed = true;
+    const my = ++token;
+    if (document.hidden) { setTimeout(() => { if (my === token) pump(performance.now()); }, Math.max(delay, 100)); return; }
+    const go = () => raf(ts => { if (my === token) pump(ts); });
+    delay > 4 ? setTimeout(go, delay) : go();
+  };
+  document.addEventListener('visibilitychange', () => { armed = false; token++; if (pending.size) arm(0); });
   function pump(ts) {
     armed = false;
     const gap = fps > 0 ? 1000 / fps : 0;
