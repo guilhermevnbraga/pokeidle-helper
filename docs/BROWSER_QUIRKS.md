@@ -13,7 +13,7 @@ Leia este arquivo **antes** de usar o MCP do navegador. Acrescente novas armadil
 ## Extensão MV3 (`manifest.json`)
 - **Dois mundos JS:** `fps.js` roda em `world: "MAIN"` (`document_start`); `types.js` e `content.js` rodam no `world: "ISOLATED"` (`document_idle`). Comunicação entre eles só via eventos no `document` (`pk-fps`, `pk-pump`, `pk-stat`) e `localStorage`.
 - **`evaluate_script` roda no `MAIN` world da página:** objetos de `content.js` (`window.__pkBot`) ficam no **ISOLATED world** da extensão, então `evaluate_script` no mundo da página **não** enxerga `window.__pkBot` diretamente (enxerga o DOM `#pkbot-panel`, `localStorage['pkbot']`/`pkbot-cfg`, e `window.__pkFps`). Para inspecionar o estado do bot pelo MCP, leia `#pkbot-panel`, `localStorage`, ou logs `[pkbot]` em `list_console_messages`.
-- **Recarregar extensão:** após editar arquivos da extensão, use `list_extensions` + `reload_extension` do MCP `chrome-devtools` (`--categoryExtensions` já está ativo) **e** recarregue a aba `pokeidle.io/app` (`navigate_page` reload). Só peça ao usuário se o reload via MCP falhar.
+- **Recarregar extensão:** após editar arquivos da extensão, use `list_extensions` + `reload_extension` do MCP `chrome-devtools` (`--categoryExtensions` já está ativo) **e** recarregue a aba `pokeidle.io/app` (`navigate_page` reload). Só peça ao usuário se o reload via MCP falhar. Em **múltiplos perfis do Chrome**, `reload_extension` recarrega apenas o perfil padrão — perfis secundários precisam recarregar a extensão em `chrome://extensions` + recarregar a aba.
 
 ## Jogo (`pokeidle.io/app`) e abas ocultas
 - **Throttling em aba oculta:** Chrome pausa `requestAnimationFrame` e freia `setTimeout`/`setInterval` para ~1/min. `fps.js` espelha timers em Worker e `content.js` + `background.js` (alarme 30 s) mantêm o loop vivo.
@@ -21,3 +21,4 @@ Leia este arquivo **antes** de usar o MCP do navegador. Acrescente novas armadil
 - **ULTRA Economia:** Market e Mapa não abrem; HUD congela. Sempre restaurar o ULTRA se sair dele temporariamente.
 - **Em combate ao trocar hunt:** o jogo exibe toast `"Em combate — espere Xs"`; respeitar o cooldown, nunca clicar em "Desistir do Combate".
 - **RMT re-renderiza `#modal-corpo` ao clicar filtros:** botões `.cm-filtro`, `.cm-moeda` e `.cmp-op` recriam nós do DOM — sempre re-consultar elementos após cada clique e checar `.cm-preco.orb` (Gemas) vs sem `.orb` (Coins).
+- **Market re-renderiza `#mk-corpo` em cada tick de `gold`/`balls`/`items`:** `atualizarMarket()` chama `pintarMarket()` (`host.innerHTML = ''`) e lembra `abaMarket` (`compra` vs `pokemons`) — sempre garantir `[data-aba="compra"]` e re-consultar `.mk-card` antes de clicar `.mk-acao` e ao confirmar estoque.

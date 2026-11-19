@@ -19,7 +19,7 @@
   CFG.fps = 10; // quadros/s do jogo (0 = sem limite); aplicado por fps.js
   const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps'];
   const applyFps = () => document.dispatchEvent(new CustomEvent('pk-fps', { detail: +CFG.fps || 0 }));
-  document.addEventListener('pk-stat', e => log('cena:', e.detail.fps + ' fps reais (limite ' + (e.detail.limite || 'nenhum') + '),', e.detail.ms + ' ms/s de JS'));
+  document.addEventListener('pk-stat', e => console.log('[pkbot]', new Date().toLocaleTimeString(), 'cena:', e.detail.fps + ' fps reais (limite ' + (e.detail.limite || 'nenhum') + '),', e.detail.ms + ' ms/s de JS'));
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
   const saveCfg = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(Object.fromEntries(EDITABLE.map(k => [k, CFG[k]])))); } catch (e) {} };
   const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
@@ -175,33 +175,63 @@
   }
 
   let busy = false; // uma ação de UI por vez
-  const lastBuy = {};
+  const lastBuy = {}, knownPrice = {};
   // catIdx: posição da categoria no Market (0 = pokebolas, 1 = poções), independente do idioma
   async function buy(catIdx, item, qty) {
     const key = catIdx + item;
-    if (Date.now() - (lastBuy[key] || 0) < CFG.buyCooldownMs) return;
+    if (busy) return false;
+    if (Date.now() - (lastBuy[key] || 0) < CFG.buyCooldownMs) return false;
+    const estPrice = knownPrice[key];
+    if (estPrice > 0 && gold() < estPrice) {
+      lastBuy[key] = Date.now();
+      log('Ouro insuficiente p/', item, '(mín.', estPrice + ')');
+      return false;
+    }
     lastBuy[key] = Date.now();
-    if (busy) return; busy = true;
+    busy = true;
     let voltarUltra = false;
     try {
-      if (CFG.dry) { log('[dry] compraria', qty, item); return; }
+      if (CFG.dry) { log('[dry] compraria', qty, item); return true; }
       voltarUltra = await leaveUltra();
-      await closeModal(); const nav = navBtn('market'); if (!nav) return log('botão do Market não encontrado'); nav.click(); await sleep(1200);
-      const m = $('.modal-caixa[data-modal=market]'); if (!m) return log('Market não abriu');
-      const cat = $$('.mk-cat', m)[catIdx]; cat && cat.click(); await sleep(600);
-      const card = $$('.mk-card', m).find(c => ($('.mk-nome', c) || {}).title === item);
-      if (!card) return log('Item não achado no Market:', item);
-      const price = num($('.mk-moeda', card).textContent), before = num((($('.mk-tem', card) || {}).dataset || {}).tem);
-      if (gold() < price * qty) return log('Ouro insuficiente p/', qty, item, '(precisa', price * qty + ')');
-      const btnQ = $(`.mk-atalho[data-q="${qty}"]`, card);
+      await closeModal(); const nav = navBtn('market'); if (!nav) { log('botão do Market não encontrado'); return false; } nav.click(); await sleep(1200);
+      const m = $('.modal-caixa[data-modal=market]'); if (!m) { log('Market não abriu'); return false; }
+      // garante a aba "Comprar" caso o Market tenha ficado em "Vender" (pokemons)
+      const tabCompra = $('#mk-modos [data-aba="compra"]', m);
+      if (tabCompra && !tabCompra.classList.contains('on')) { tabCompra.click(); await sleep(500); }
+      const cat = $$('.mk-cat', m)[catIdx];
+      if (cat && !cat.classList.contains('on')) { cat.click(); await sleep(600); }
+      const findCard = () => $$('.mk-card', m).find(c => ($('.mk-nome', c) || {}).title === item);
+      let card = findCard();
+      if (!card) { log('Item não achado no Market:', item); return false; }
+      const price = num(($('.mk-moeda', card) || {}).textContent), before = num((($('.mk-tem', card) || {}).dataset || {}).tem);
+      if (price > 0) knownPrice[key] = price;
+      const buyQty = price > 0 ? Math.min(qty, 9999, Math.floor(gold() / price)) : qty;
+      if (buyQty < 1) { log('Ouro insuficiente p/', qty, item, '(precisa', price * qty + ', mín.', price + ')'); return false; }
+      if (buyQty < qty) log('Saldo parcial: comprando', buyQty + '/' + qty, item);
+      const btnQ = $(`.mk-atalho[data-q="${buyQty}"]`, card);
       const input = $('input[type=number]', card);
-      if (btnQ) btnQ.click(); else if (input) { input.value = qty; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); }
+      if (btnQ && !btnQ.disabled) btnQ.click();
+      else if (input) { input.value = buyQty; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); }
       await sleep(300);
-      const b = $('.mk-acao', card); if (!b) return log('botão de comprar não encontrado');
+      // re-consulta o card: pintarMarket() recria #mk-corpo a cada mudança de ouro/bolas/itens
+      card = findCard() || card;
+      const freshInput = $('input[type=number]', card);
+      if (freshInput && num(freshInput.value) !== buyQty) {
+        freshInput.value = buyQty;
+        freshInput.dispatchEvent(new Event('input', { bubbles: true }));
+        freshInput.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(150);
+      }
+      const b = $('.mk-acao', card); if (!b) { log('botão de comprar não encontrado'); return false; }
+      if (b.disabled) { log('botão Comprar desabilitado p/', buyQty, item); return false; }
       b.click(); await sleep(1500);
-      const after = num((($('.mk-tem', card) || {}).dataset || {}).tem);
-      log(after > before ? 'Comprou' : 'COMPRA NÃO CONFIRMADA:', item, 'tinha', before, '->', after);
-    } catch (e) { log('erro na compra:', e.message); }
+      card = findCard() || card;
+      const afterCard = num((($('.mk-tem', card) || {}).dataset || {}).tem);
+      const afterHud = catIdx === 0 ? ballQty(item) : (potChips().find(p => p.name === item)?.qty ?? null);
+      const after = Math.max(afterCard, afterHud ?? 0);
+      log(after > before ? 'Comprou' : 'COMPRA NÃO CONFIRMADA:', buyQty, item, 'tinha', before, '->', after);
+      return after > before;
+    } catch (e) { log('erro na compra:', e.message); return false; }
     finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
   }
 
@@ -219,7 +249,7 @@
     }
     return needs;
   }
-  function checkSupplies() { supplyNeeds().forEach(n => buy(...n)); }
+  async function checkSupplies() { for (const n of supplyNeeds()) await buy(...n); }
 
   // No ULTRA Economia o HUD (ouro, bolas, poções) congela, então os estoques lidos ficam velhos.
   // Aqui o bot sai do ULTRA de tempos em tempos (ou quando o log mostra muitas poções usadas),
@@ -240,7 +270,7 @@
   }
 
   // ---------- 1/3: captura ----------
-  let lastThrow = 0, captured = false;
+  let lastThrow = 0, captured = false, lastNoBallLog = 0;
   function ensureBall() {
     const b = $$('#caidos-bolas .caidos-bola').find(x => (x.title || '').startsWith(CFG.ball));
     if (b && !b.classList.contains('on')) b.click();
@@ -251,7 +281,12 @@
     const now = Date.now();
     // ignora entradas "fantasma" (o jogo às vezes deixa na lista um pokemon que já sumiu do chão)
     const list = $$('#caidos-lista .caido').filter(e => (badSlots[e.dataset.slot] || 0) < now); if (!list.length) return;
-    const q = ballQty(CFG.ball); if ((q || 0) <= 0) return;
+    const q = ballQty(CFG.ball);
+    if ((q || 0) <= 0) {
+      if (now - lastNoBallLog >= 60000) { lastNoBallLog = now; log('captura parada: sem', CFG.ball, '(0) no estoque'); }
+      return;
+    }
+    lastNoBallLog = 0;
     if (now - lastThrow < CFG.throwGapMs) return;
     const pick = list[0], slot = pick.dataset.slot;
     if (slot === lastSlot && q === lastQty) { // mesmo alvo e nenhuma bola gasta desde o último clique

@@ -12,6 +12,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [ ] Radar RMT: arredondamento (`ceil` vs `round`) no input de anúncio de Pokémon e seletores em idioma EN · NÃO validado: conta sem Pokémon N 3,5+ no Depot e jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.
+- [ ] Hardening Market/multi-conta (`content.js`): aba Comprar, card fresco, compra parcial, fila, aviso bola 0 e `cena` só no console · NÃO validado: compra real pós-fix no perfil 2
 - [x] Modo 4 (Gerenciador de hunt): lê Hunt Analyser em todas as regiões liberadas, aplica vantagem de tipo (`types.js`) e aguarda combate sem desistir.
 - [x] Limitador de FPS (`fps.js`, `world: MAIN`) e timers do jogo espelhados em Worker para captura continuar em aba oculta.
 - [x] Alarme de reserva de 30 s no service worker (`background.js`) e bloqueio de descarte da aba (`autoDiscardable: false`).
