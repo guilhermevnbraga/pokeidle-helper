@@ -37,7 +37,7 @@
 
   // ---------- log + painel ----------
   const logLines = [];
-  let logEl, rmtOutEl, rmtBtnEl;
+  let logEl, rmtOutEl, rmtBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl;
   const log = (...a) => {
     const l = new Date().toLocaleTimeString() + ' ' + a.join(' ');
     logLines.push(l); if (logLines.length > 60) logLines.shift();
@@ -48,6 +48,16 @@
   const rmtState = { scanning: false, last: null };
   try { rmtState.last = JSON.parse(localStorage.getItem(RMT_KEY) || 'null'); } catch (e) {}
   const saveRmt = () => { try { localStorage.setItem(RMT_KEY, JSON.stringify(rmtState.last)); } catch (e) {} };
+  const BALL_KEY = 'pkbot-ball';
+  const ballState = { scanning: false, focus: 'balanced', last: null };
+  try {
+    const savedBall = JSON.parse(localStorage.getItem(BALL_KEY) || 'null');
+    if (savedBall && typeof savedBall === 'object') {
+      if (['balanced', 'money', 'rare'].includes(savedBall.focus)) ballState.focus = savedBall.focus;
+      if (savedBall.last) ballState.last = savedBall.last;
+    }
+  } catch (e) {}
+  const saveBall = () => { try { localStorage.setItem(BALL_KEY, JSON.stringify({ focus: ballState.focus, last: ballState.last })); } catch (e) {} };
   const ui = { refresh() {} };
   const UI_KEY = 'pkbot-ui';
   const loadUI = () => { try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch (e) { return {}; } };
@@ -87,11 +97,43 @@
     const sel = (opts, key, tip) => { const s = document.createElement('select'); opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); return fld(s, key, tip); };
     const nbr = (key, tip, min, max) => { const i = document.createElement('input'); i.type = 'number'; i.min = min; i.max = max; return fld(i, key, tip); };
     const cell = t => { const d = document.createElement('div'); d.textContent = t; d.style.cssText = 'font-size:10px;color:#aab'; return d; };
+    ballSelEl = sel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta');
+    ballSelEl.id = 'pkbot-ball-sel';
     box.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
-      cell('Bola'), sel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta'), nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
+      cell('Bola'), ballSelEl, nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
     const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2'], [0, 'sem limite']], 'fps', 'Quadros por segundo da cena do jogo. Menos quadros = bem menos CPU; a captura continua funcionando. Use "sem limite" se for jogar na mão.');
     fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel); body.append(box);
+    // Analisador Otimizado de Pokébola (hunt atual: NPC + RMT + Shiny + ouro/h + taxa/preço)
+    const ballBox = document.createElement('div');
+    ballBox.id = 'pkbot-ball-box';
+    ballBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
+    const ballHead = document.createElement('div');
+    ballHead.style.cssText = 'display:flex;align-items:center;gap:4px';
+    const ballTit = document.createElement('span');
+    ballTit.textContent = 'Analisador Pokébola';
+    ballTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#7cf';
+    ballFocusEl = document.createElement('select');
+    ballFocusEl.id = 'pkbot-ball-focus';
+    ballFocusEl.title = 'Foco da recomendação: Equilibrado (lucro + Forte/Shiny), Dinheiro (máx lucro/h) ou Raro/Shiny';
+    ballFocusEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
+    [['balanced', 'Equilibrado'], ['money', 'Dinheiro'], ['rare', 'Raro/Shiny']].forEach(([v, t]) => {
+      const o = document.createElement('option'); o.value = v; o.textContent = t; ballFocusEl.append(o);
+    });
+    ballFocusEl.value = ballState.focus;
+    ballFocusEl.onchange = () => { ballState.focus = ballFocusEl.value; saveBall(); renderBall(); };
+    ballBtnEl = document.createElement('button');
+    ballBtnEl.id = 'pkbot-ball-scan';
+    ballBtnEl.textContent = 'Analisar';
+    ballBtnEl.title = 'Lê a hunt atual no Mapa + ficha da espécie na Pokedex + preços RMT e recomenda a melhor Pokébola';
+    ballBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#7cf3;border:1px solid #7cf6;font-size:10px;color:#fff';
+    ballBtnEl.onclick = () => analyzeCurrentHuntBalls();
+    ballHead.append(ballTit, ballFocusEl, ballBtnEl);
+    ballOutEl = document.createElement('div');
+    ballOutEl.id = 'pkbot-ball-out';
+    ballOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:240px;overflow:auto;user-select:text';
+    ballBox.append(ballHead, ballOutEl);
+    body.append(ballBox);
     // Radar RMT (Ouro -> Gema): passivo ao abrir RMT->Itens ou scan sob demanda
     const rmtBox = document.createElement('div');
     rmtBox.id = 'pkbot-rmt-box';
@@ -116,6 +158,7 @@
     logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
     p.append(head, body);
+    renderBall();
     renderRmt();
 
     const place = () => { // mantém dentro da janela
@@ -921,6 +964,389 @@
       if (!wasOpen) await closeModal();
       rmtState.scanning = false; busy = false;
       renderRmt();
+      if (ballState.last) renderBall();
+    }
+  }
+
+  // ---------- Analisador Otimizado de Pokébola (hunt atual) ----------
+  let ballTableOpen = false;
+  const normTxt = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+  function detectActiveBoosts() {
+    const items = $$('#tr-ativos .tr-ativo, #tr-ativos > *').filter(el => !el.classList.contains('pausado'));
+    let catchBoostActive = false, shinyLureActive = false;
+    for (const el of items) {
+      const txt = `${el.textContent || ''} ${el.title || ''}`;
+      if (/captura|catch/i.test(txt)) catchBoostActive = true;
+      if (/shiny.*lure|isca.*shiny|lure.*shiny/i.test(txt)) shinyLureActive = true;
+    }
+    return { catchBoostActive, shinyLureActive };
+  }
+
+  function applyRecommendedBall(ballName) {
+    if (!BALLS.includes(ballName)) return;
+    CFG.ball = ballName;
+    if (ballSelEl) ballSelEl.value = ballName;
+    saveCfg();
+    log('analisador: bola configurada para', ballName);
+    renderBall();
+  }
+
+  function renderBall(statusMsg) {
+    if (!ballOutEl || typeof PK_BALL === 'undefined') return;
+    if (ballBtnEl) ballBtnEl.textContent = ballState.scanning ? 'Lendo...' : 'Analisar';
+    if (ballFocusEl && ballFocusEl.value !== ballState.focus) ballFocusEl.value = ballState.focus;
+    ballOutEl.textContent = '';
+    const mk = (tag, css, txt) => {
+      const el = document.createElement(tag);
+      if (css) el.style.cssText = css;
+      if (txt != null) el.textContent = txt;
+      return el;
+    };
+    if (statusMsg) {
+      ballOutEl.append(mk('div', 'color:#7cf', statusMsg));
+      return;
+    }
+    const raw = ballState.last;
+    if (!raw || !raw.balls || !raw.balls.length) {
+      ballOutEl.append(mk('div', 'color:#aab', 'Clique em Analisar para calcular a melhor Pokébola da hunt atual (ouro/h, NPC, RMT e Shiny).'));
+      return;
+    }
+
+    const rmtMarket = PK_BALL.extractRmtMarketData(rmtState.last?.routes || []);
+    const boosts = detectActiveBoosts();
+    const res = PK_BALL.analyzeHuntBalls({
+      huntName: raw.huntName,
+      huntLevel: raw.huntLevel,
+      captureLevel: raw.captureLevel,
+      goldPerHour: raw.goldPerHour,
+      xpPerHour: raw.xpPerHour,
+      baseNpcPrice: raw.baseNpcPrice,
+      baseStats: raw.baseStats,
+      shinyChance: raw.shinyChance,
+      balls: raw.balls,
+      rmtMarket,
+      catchBoostActive: boosts.catchBoostActive || !!raw.catchBoostActive,
+      shinyLureActive: boosts.shinyLureActive || !!raw.shinyLureActive,
+      focus: ballState.focus,
+    });
+
+    const curHunt = currentHuntName();
+    const huntChanged = curHunt && raw.huntName && PK_HUNT.normalizeHuntName(raw.huntName) !== curHunt;
+    const ageMin = Math.max(0, Math.round((Date.now() - (raw.at || Date.now())) / 60000));
+    const rec = res.recommended;
+    const fc = PK_BALL.formatCoins;
+    const fh = PK_BALL.formatHours;
+    const fp = PK_BALL.formatPct;
+
+    // Cabeçalho da hunt analisada
+    const boostTags = [
+      res.boosts.catchBoostActive ? 'Boost Cap ×2' : '',
+      res.boosts.shinyLureActive ? 'Shiny Lure ×2' : '',
+    ].filter(Boolean).join(' · ');
+    ballOutEl.append(mk('div', 'color:#bcd;font-size:9.5px',
+      `${raw.huntName} · Nv ${res.huntLevel} (cap Nv ${res.captureLevel}) · ${fc(res.pace.goldPerHour)}/h abates (~${Math.round(res.pace.killsPerHour)}/h) · ${ageMin}m`
+      + (boostTags ? ` · ${boostTags}` : '')));
+    if (huntChanged) {
+      ballOutEl.append(mk('div', 'color:#fd8;font-size:9px', `⚠ Você mudou de hunt (${curHunt}) — clique Analisar p/ atualizar.`));
+    }
+
+    // Card da recomendação
+    const accent = rec.id === 'none' ? '#fd8' : (rec.ballProfitPerKill >= 0 ? '#6f9' : '#7cf');
+    const bg = rec.id === 'none' ? '#332b1488' : (rec.ballProfitPerKill >= 0 ? '#16332288' : '#14263688');
+    const card = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
+    const topRow = mk('div', 'display:flex;align-items:center;gap:6px');
+    const titleEl = mk('div', `flex:1;font-weight:bold;color:${accent}`, `MELHOR: ${rec.name}`);
+    topRow.append(titleEl);
+    if (BALLS.includes(rec.name)) {
+      const already = CFG.ball === rec.name;
+      const useBtn = mk('button',
+        `all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:9.5px;border:1px solid ${accent}88;background:${already ? '#fff2' : accent + '33'};color:#fff`,
+        already ? 'Em uso' : 'Usar');
+      useBtn.title = `Configurar ${rec.name} como Pokébola padrão do bot`;
+      useBtn.onclick = () => applyRecommendedBall(rec.name);
+      topRow.append(useBtn);
+    }
+    card.append(topRow);
+
+    const netBallTxt = rec.id === 'none'
+      ? 'gasto em bolas: 0'
+      : `bolas: ${rec.ballNetPerHour >= 0 ? '+' : ''}${fc(rec.ballNetPerHour)}/h (${rec.priceGold}/un)`;
+    card.append(mk('div', 'color:#fff;margin-top:2px',
+      `Lucro total: ${fc(rec.totalProfitPerHour)}/h · ${netBallTxt}`));
+
+    if (rec.id !== 'none') {
+      const rareTxt = Number.isFinite(rec.hoursPerRare) ? `1 raro/${fh(rec.hoursPerRare)}` : 'raro: —';
+      const shinyTxt = Number.isFinite(rec.hoursPerShiny) ? `1 shiny/${fh(rec.hoursPerShiny)}` : 'sem shiny';
+      card.append(mk('div', 'color:#cfe;font-size:9.5px',
+        `Taxa ${fp(rec.catchChance)} (~${rec.capturesPerHour.toFixed(1)} cap/h · ${fc(rec.costPerCapture)}/cap) · ${rareTxt} · ${shinyTxt}`));
+    }
+    if (res.focus === 'balanced' && res.balancedReason) {
+      card.append(mk('div', 'color:#9df;font-size:9px;margin-top:1px', res.balancedReason));
+    }
+
+    // Decomposição do EV por Pokémon capturado
+    const v = res.value;
+    card.append(mk('div', 'color:#aab;font-size:9px;margin-top:2px',
+      `EV/captura: ${fc(v.evTotal)} (NPC ${fc(v.evNpc)} + RMT N≥3,5 ${fc(v.evStrong)} + P5 ${fc(v.evP5)} + Shiny ${fc(v.evShiny)})`));
+
+    // Comparativo rápido dos 3 focos quando diferem
+    const fNames = `Dinheiro: ${res.byFocus.money.name} | Equil.: ${res.byFocus.balanced.name} | Raro: ${res.byFocus.rare.name}`;
+    card.append(mk('div', 'color:#bcd;font-size:9px;margin-top:2px', fNames));
+    ballOutEl.append(card);
+
+    // Avisos + atalho para escanear RMT se sem dados RMT
+    for (const w of res.warnings) {
+      const line = mk('div', 'margin-top:2px;color:#fc9;font-size:9px;display:flex;align-items:center;gap:4px');
+      line.append(mk('span', 'flex:1', '⚠ ' + w));
+      if (/Radar RMT/i.test(w)) {
+        const bRmt = mk('button', 'all:unset;cursor:pointer;padding:0 5px;border-radius:3px;background:#fd83;border:1px solid #fd86;color:#fff;font-size:9px', 'Ler RMT');
+        bRmt.onclick = () => scanRmt();
+        line.append(bRmt);
+      }
+      ballOutEl.append(line);
+    }
+
+    // Tabela dobrável comparando todas as Pokébolas
+    const det = document.createElement('details');
+    det.open = ballTableOpen;
+    det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
+    det.ontoggle = () => { ballTableOpen = det.open; };
+    det.append(mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Comparar todas as bolas (${res.options.length})`));
+    for (const o of res.options) {
+      const mark = o.id === rec.id ? '★' : (o.diamondOnly ? '◆' : '·');
+      const color = o.id === rec.id ? '#6f9' : (o.diamondOnly ? '#c9f' : '#cfd');
+      if (o.diamondOnly) {
+        const sh = Number.isFinite(o.hoursPerShiny) ? `1 shiny/${fh(o.hoursPerShiny)}` : 'sem shiny';
+        det.append(mk('div', `color:${color};font-size:9px;margin-top:1px`,
+          `${mark} ${o.name} (só Diamante): ${fp(o.catchChance)} · ${o.capturesPerHour.toFixed(1)} cap/h · ${sh}`));
+      } else if (o.id === 'none') {
+        det.append(mk('div', `color:${color};font-size:9px;margin-top:1px`,
+          `${mark} ${o.name}: total ${fc(o.totalProfitPerHour)}/h · 0 cap/h`));
+      } else {
+        const bSign = o.ballNetPerHour >= 0 ? '+' : '';
+        const sh = Number.isFinite(o.hoursPerShiny) ? ` · sh/${fh(o.hoursPerShiny)}` : '';
+        det.append(mk('div', `color:${color};font-size:9px;margin-top:1px`,
+          `${mark} ${o.name} (${o.priceGold}): ${fp(o.catchChance)} · total ${fc(o.totalProfitPerHour)}/h (bola ${bSign}${fc(o.ballNetPerHour)}/h)${sh}`));
+      }
+    }
+    ballOutEl.append(det);
+  }
+
+  async function waitForSelector(sel, rootFn = () => document, maxMs = 1500) {
+    const deadline = Date.now() + maxMs;
+    while (Date.now() < deadline) {
+      const el = $(sel, rootFn() || document);
+      if (el) return el;
+      await sleep(100);
+    }
+    return null;
+  }
+
+  async function readPokedexSpecies(speciesName) {
+    await closeModal();
+    const nav = navBtn('pokedex');
+    if (!nav) throw new Error('botão da Pokedex não encontrado');
+    nav.click();
+    const inp = await waitForSelector('#f-dex', () => $('#modal-corpo'), 1800);
+    if (!inp) throw new Error('busca da Pokedex não abriu');
+    inp.value = speciesName;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(300);
+
+    const target = normTxt(speciesName);
+    const cards = $$('#modal-corpo .dex-card');
+    const cleanCardName = el => normTxt((el.textContent || '').replace(/^#\d+\s*/, ''));
+    const card = cards.find(c => cleanCardName(c) === target)
+      || cards.find(c => cleanCardName(c).includes(target))
+      || cards[0];
+    if (!card) throw new Error(`espécie "${speciesName}" não encontrada na Pokedex`);
+
+    card.click();
+    const hasTable = await waitForSelector('#ficha-corpo .fi-tabela', () => document, 1800);
+    if (!hasTable) throw new Error(`ficha de "${speciesName}" não carregou`);
+    await sleep(150);
+
+    const corpo = $('#ficha-corpo');
+    const placas = $$('.fi-placa', corpo).map(p => ({
+      label: normTxt($('small', p)?.textContent || ''),
+      val: ($('b', p)?.textContent || '').trim(),
+      full: p.textContent.replace(/\s+/g, ' ').trim(),
+    }));
+
+    let baseNpcPrice = 0, captureLevel = 0, shinyChance = 0;
+    for (const pl of placas) {
+      if (/npc/i.test(pl.label)) baseNpcPrice = PK_BALL.parseIntStrict(pl.val);
+      else if (/capturar|capture.*level|level.*captur/i.test(pl.label)) captureLevel = PK_BALL.parseCaptureLevel(pl.val);
+      else if (/tentativa|throw|shiny/i.test(pl.label) && !/lure|isca|b[oô]nus|bonus/i.test(pl.label)) {
+        const p = PK_BALL.parseOneInN(pl.full) || PK_BALL.parsePercent(pl.full);
+        if (p > 0 && p < 0.1) shinyChance = p;
+      }
+    }
+
+    // Stats-base (HP, ATK, DEF, SP.ATK, SP.DEF, SPD)
+    const statsText = $$('.fi-stat, [class*="stat"]', corpo).map(e => e.textContent.replace(/\s+/g, ' ').trim()).join(' | ');
+    const statOf = re => { const m = statsText.match(re); return m ? parseInt(m[1], 10) : 0; };
+    const baseStats = [
+      statOf(/\bHP\s*(\d+)/i),
+      statOf(/\bATK\s*(\d+)/i),
+      statOf(/\bDEF\s*(\d+)/i),
+      statOf(/\bSP\.?\s*ATK\s*(\d+)/i),
+      statOf(/\bSP\.?\s*DEF\s*(\d+)/i),
+      statOf(/\bSPD\s*(\d+)/i),
+    ];
+    const validStats = baseStats.every(n => n > 0) ? baseStats : null;
+
+    // Tabelas da ficha: captura normal (5 colunas com Pokébolas + preço) e shiny (4 colunas)
+    const tables = $$('.fi-tabela', corpo).map(t =>
+      $$('tr', t).map(tr => [...tr.children].map(td => td.textContent.trim()))
+    );
+    const ballTable = tables.find(rows => rows.some(r => r.length >= 5 && /poke\s*ball|great\s*ball|ultra\s*ball/i.test(r[0] || '')))
+      || tables.find(rows => rows.some(r => r.length >= 4 && /poke\s*ball/i.test(r[0] || '')));
+    const balls = PK_BALL.parsePokedexBallRows(ballTable || []);
+
+    // Fallback para chanceShiny via tabela "Captura do shiny" (4 colunas)
+    if (!shinyChance) {
+      const shinyTable = tables.find(rows => rows !== ballTable && rows.some(r => r.length === 4 && /poke\s*ball/i.test(r[0] || '')));
+      if (shinyTable) {
+        const row = shinyTable.find(r => /poke\s*ball/i.test(r[0] || ''));
+        if (row) {
+          const cap = PK_BALL.parsePercent(row[2]);
+          const both = PK_BALL.parseOneInN(row[3]);
+          if (cap > 0 && both > 0) shinyChance = both / cap;
+        }
+      }
+    }
+
+    const fichaClose = $('#ficha-fechar');
+    if (fichaClose && fichaClose.offsetParent) { fichaClose.click(); await sleep(150); }
+    return { name: $('#ficha-titulo')?.textContent?.trim() || speciesName, baseNpcPrice, captureLevel, baseStats: validStats, shinyChance, balls };
+  }
+
+  async function analyzeCurrentHuntBalls() {
+    if (typeof PK_BALL === 'undefined') return;
+    if (ballState.scanning) return;
+    if (busy) { renderBall('Aguarde a ação atual terminar e tente de novo.'); return; }
+    if (!inHunt()) { renderBall('Entre em uma hunt ativa primeiro (não funciona no Centro/Safari).'); return; }
+
+    ballState.scanning = true; busy = true;
+    const wasUltra = energyNow() === 'ultra';
+    const wasOpen = !!modalVisible();
+    try {
+      const boosts = detectActiveBoosts();
+      const hudRaw = (($('#hud-hunt') || $('#eco-onde') || {}).innerText) || '';
+      const hudLevelMatch = hudRaw.match(/(?:n[ií]vel|level|nv\.?)\s*(\d+)/i);
+      let huntLevel = hudLevelMatch ? parseInt(hudLevelMatch[1], 10) : 1;
+      let huntName = hudRaw.split(/\s*[·—]\s*/)[0].trim() || currentHuntName();
+      let goldPerHour = 0, xpPerHour = 0;
+      let speciesList = [];
+
+      renderBall('Lendo hunt atual no Mapa...');
+      if (wasUltra) await leaveUltra();
+      await openMap();
+
+      // Localiza o marcador da hunt atual (.on) na região atual ou nas demais regiões
+      let mk = $('#mapa-tela .marcador.on');
+      if (!mk) {
+        for (const rb of regionBtns()) {
+          rb.click(); await sleep(500);
+          mk = $('#mapa-tela .marcador.on');
+          if (mk) break;
+        }
+      }
+      if (!mk && huntName) {
+        const targetNorm = PK_HUNT.normalizeHuntName(huntName);
+        mk = $$('#mapa-tela .marcador').find(x => PK_HUNT.normalizeHuntName((x.title || '').split(' — ')[0]) === targetNorm);
+      }
+      if (mk) {
+        hover(mk); await sleep(200);
+        const a = readAnalyser();
+        goldPerHour = a.gold || 0;
+        xpPerHour = a.xp || 0;
+        const areaTxt = ($('#hunt-analyser-corpo .ha-area')?.textContent || '').trim();
+        const lvlTxt = ($('#hunt-analyser-corpo .ha-nivel')?.textContent || '').trim();
+        if (areaTxt) huntName = areaTxt;
+        const lvlNum = PK_BALL.parseIntStrict(lvlTxt);
+        if (lvlNum > 0) huntLevel = lvlNum;
+        // 2ª linha de mk.title lista as espécies da hunt ("Diglett" ou "Mr. Mime, Abra")
+        const lines = String(mk.title || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines[1] && !/^[✓✔]/.test(lines[1])) {
+          speciesList = lines[1].split(',').map(s => s.trim()).filter(Boolean).slice(0, 3);
+        }
+      }
+      if (!speciesList.length && huntName) speciesList = [huntName];
+      if (!speciesList.length) throw new Error('não foi possível identificar o Pokémon da hunt atual');
+
+      // Lê a ficha na Pokedex (suporta 1 ou mais espécies na mesma hunt)
+      const fetched = [];
+      for (let i = 0; i < speciesList.length; i++) {
+        renderBall(`Lendo Pokedex (${i + 1}/${speciesList.length}): ${speciesList[i]}...`);
+        try {
+          fetched.push(await readPokedexSpecies(speciesList[i]));
+        } catch (e) {
+          log('analisador: falha na Pokedex p/', speciesList[i], '-', e.message);
+        }
+      }
+      if (!fetched.length) throw new Error('não foi possível ler a ficha na Pokedex');
+
+      // Agrega (média simples entre as espécies da hunt quando houver > 1)
+      const avg = arr => arr.reduce((s, x) => s + x, 0) / arr.length;
+      const baseNpcPrice = Math.round(avg(fetched.map(f => f.baseNpcPrice || 0)));
+      const captureLevel = Math.round(avg(fetched.map(f => f.captureLevel || Math.min(100, huntLevel))));
+      const shinyChance = avg(fetched.map(f => f.shinyChance || 0));
+      const validStatsList = fetched.map(f => f.baseStats).filter(Boolean);
+      const baseStats = validStatsList.length
+        ? [0, 1, 2, 3, 4, 5].map(i => Math.round(avg(validStatsList.map(s => s[i]))))
+        : null;
+
+      // Média das taxas de captura por bola entre as espécies lidas
+      const ballMap = new Map();
+      for (const f of fetched) {
+        for (const b of (f.balls || [])) {
+          const k = b.name.toLowerCase();
+          if (!ballMap.has(k)) ballMap.set(k, { ...b, _chances: [b.catchChance] });
+          else ballMap.get(k)._chances.push(b.catchChance);
+        }
+      }
+      const balls = [...ballMap.values()].map(b => ({
+        name: b.name,
+        catchRate: b.catchRate,
+        catchChance: avg(b._chances),
+        avgKills: Math.ceil(1 / avg(b._chances)),
+        priceGold: b.priceGold,
+        diamondOnly: b.diamondOnly,
+      }));
+      if (!balls.length) throw new Error('tabela de Pokébolas não encontrada na Pokedex');
+
+      ballState.last = {
+        at: Date.now(),
+        huntName,
+        species: fetched.map(f => f.name),
+        huntLevel,
+        captureLevel,
+        goldPerHour,
+        xpPerHour,
+        baseNpcPrice,
+        baseStats,
+        shinyChance,
+        balls,
+        catchBoostActive: boosts.catchBoostActive,
+        shinyLureActive: boosts.shinyLureActive,
+      };
+      saveBall();
+
+      const rmtMarket = PK_BALL.extractRmtMarketData(rmtState.last?.routes || []);
+      const res = PK_BALL.analyzeHuntBalls({ ...ballState.last, rmtMarket, focus: ballState.focus });
+      log('analisador:', `${huntName} Nv${huntLevel} -> melhor (${ballState.focus}): ${res.recommended.name} (${PK_BALL.formatCoins(res.recommended.totalProfitPerHour)}/h)`);
+    } catch (e) {
+      log('analisador erro:', e.message);
+      renderBall('Erro: ' + e.message);
+      return;
+    } finally {
+      if (!wasOpen) await closeModal();
+      if (wasUltra) await reenterUltra();
+      ballState.scanning = false; busy = false;
+      renderBall();
     }
   }
 
@@ -972,7 +1398,7 @@
   const rmtPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
     ? PK_RMT.buildActionPlan({ routes: rmtState.last.routes, gold: gold(), source: rmtState.last.source })
     : null;
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, rmtState, rmtPlan, scanRmt, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, rmtState, rmtPlan, scanRmt, ballState, analyzeCurrentHuntBalls, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);

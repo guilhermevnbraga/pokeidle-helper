@@ -4,10 +4,11 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 
 ## Ambiente de desenvolvimento & IA
 - [x] Arquitetura Antigravity econômica: `AGENTS.md`, hook `SessionStart`, Git `pre-commit`, `scripts/check.mjs`, `compact-progress.mjs`, skills `/handoff`, `/study-game`, `/feature` e `docs…
-- [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js`, `hunt.js` e `rmt.js` (`tests/*.test.mjs`).
+- [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js`, `hunt.js`, `rmt.js` e `ball.js` (`tests/*.test.mjs`).
 - [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
-## Extensão MV3 (estado atual v0.5.0)
+## Extensão MV3 (estado atual v0.6.0)
+- [ ] Analisador de Pokébola (`ball.js`+`content.js`): valida hunt atual (NPC, RMT, Shiny, abates/h) e aplica… · NÃO validado: hunt mista (>1 espécie), com Shiny/Lure e após scan RMT completo
 - [x] Radar RMT v0.5.0 (`rmt.js` + `content.js`): plano de ação ONDE/COMPRAR/VENDER (veredito comprar vs juntar + Pokémon exato em Sacrifício/P5/Mega/Shiny), validado em Node e Chrome.
 - [ ] Radar RMT: arredondamento (`ceil` vs `round`) no input de anúncio de Pokémon e seletores em idioma EN · NÃO validado: conta sem Pokémon N 3,5+ no Depot e jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.

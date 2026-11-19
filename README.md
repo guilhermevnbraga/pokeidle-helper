@@ -27,6 +27,16 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
 - Nunca tenta trocar para o mapa em que você já está (identifica a hunt ativa pelo marcador `.on` + estado da cena), e só troca para outra se a melhor render mais de 10% acima da atual (`huntGain`). Reavalia a cada 10 minutos (`huntEvalMs`).
 - Ao trocar, aguarda a brecha de 3 s sem dar/tomar dano até o botão **Ir para o Centro Pokémon** (`#ir-centro` / `#eco-ir-centro`) ficar liberado, volta ao Centro Pokémon, cura a equipe (`#centro-curar` / `#eco-curar`) e só então entra na nova hunt. Nunca usa "Desistir do Combate" e não interfere em Safari, Arena de Boss/Místico ou Casa.
 
+### Analisador Otimizado de Pokébola
+
+- Botão **`Analisar`** no painel (100% sob demanda): lê a hunt atual no **Mapa / Hunt Analyser** (`ouro/h`, `xp/h`, nível e espécies) e a ficha da(s) espécie(s) na **Pokedex** (preço base do NPC, nível ao capturar, stats-base, chance de Shiny e tabela oficial de taxa/preço de cada Pokébola).
+- Reaproveita automaticamente os pisos de Pokémon e a cotação Coins/Gema do **Radar RMT** (Sacrifício `N ≥ 3,5`, `P5` e `Shiny` já descontando comissões progressivas e pensão de `100k/dia`) e detecta boosts ativos no HUD (**Boost de Captura ×2** e **Shiny Secret Lure ×2**).
+- Calcula o valor esperado por captura (`EV/captura = NPC + RMT N≥3,5 + P5 + Shiny`) usando a distribuição oficial de qualidade, potência (`P1..P5`) e nota (`ball.js`), e compara todas as bolas (incluindo *Nenhuma* e *Beast Ball* informativa) em 3 focos:
+  - **Equilibrado** (padrão — Dinheiro + Raro/Shiny): escolhe a bola de maior taxa de captura que ainda dá lucro líquido na captura (ou, quando o EV é baixo, limita o investimento a uma fração segura do ouro dos abates).
+  - **Dinheiro:** maximiza o lucro líquido total/hora (incluindo *Nenhuma* se capturar der prejuízo).
+  - **Raro/Shiny:** maximiza a taxa de captura (e chances de Forte/P5/Shiny) mantendo a hunt sustentável.
+- Botão **`Usar`** aplica a Pokébola recomendada direto na configuração da extensão (`CFG.ball`) com 1 clique.
+
 ### Radar RMT (Ouro → Gema)
 
 - Funciona **100% sob demanda ou passivamente** (não varre em segundo plano, não compra nem anuncia nada e não sai do modo ULTRA sozinho).
@@ -162,5 +172,10 @@ Os [Termos do Pokeidle](https://pokeidle.io/terms) (seção 5, "Automação") pe
 ## Arquivos
 
 - `manifest.json`: manifesto da extensão (MV3).
+- `fps.js`: limitador de FPS e espelhamento de timers em Worker (`world: MAIN`).
 - `types.js`: tabela de tipos e cálculo de vantagem.
-- `content.js`: lógica dos modos e painel.
+- `hunt.js`: lógica pura do gerenciador de hunt.
+- `rmt.js`: lógica pura do Radar RMT (Ouro → Gema).
+- `ball.js`: lógica pura do Analisador Otimizado de Pokébola.
+- `content.js`: interface do painel e interação com o DOM.
+- `background.js`: service worker (alarme de 30 s e `autoDiscardable: false`).
