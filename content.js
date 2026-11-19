@@ -19,10 +19,12 @@
   // configurações editáveis no painel (salvas no navegador); potType 'auto' = repõe as poções em uso
   CFG.potType = 'auto';
   CFG.fps = 10; // quadros/s do jogo (0 = sem limite); aplicado por fps.js
-  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps'];
+  CFG.huntFocus = 'balanced'; // balanced | xp | lucro | shiny
+  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'huntFocus'];
   const applyFps = () => document.dispatchEvent(new CustomEvent('pk-fps', { detail: +CFG.fps || 0 }));
   document.addEventListener('pk-stat', e => console.log('[pkbot]', new Date().toLocaleTimeString(), 'cena:', e.detail.fps + ' fps reais (limite ' + (e.detail.limite || 'nenhum') + '),', e.detail.ms + ' ms/s de JS'));
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
+  if (!['balanced', 'xp', 'lucro', 'shiny'].includes(CFG.huntFocus)) CFG.huntFocus = 'balanced';
   const saveCfg = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(Object.fromEntries(EDITABLE.map(k => [k, CFG[k]])))); } catch (e) {} };
   const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
   const POTIONS = ['Small Potion', 'Great Potion', 'Ultra Potion', 'Hyper Potion', 'Ultimate Potion', 'Golden Potion'];
@@ -30,20 +32,46 @@
   const st = Object.assign({ capture: false, eterna: false, potions: false, hunt: false, keepalive: false }, S);
   const save = () => localStorage.setItem('pkbot', JSON.stringify(st));
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const _sleepPend = new Map();
+  let _sleepSeq = 0, _timerWorker = null;
+  const sleep = ms => {
+    if (!_timerWorker) return new Promise(r => setTimeout(r, ms));
+    return new Promise(r => {
+      const id = ++_sleepSeq;
+      _sleepPend.set(id, r);
+      _timerWorker.postMessage({ id, ms: Math.max(0, ms | 0) });
+    });
+  };
   const num = t => parseInt(String(t).replace(/[^\d]/g, ''), 10) || 0;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
   // ---------- log + painel ----------
   const logLines = [];
-  let logEl, rmtOutEl, rmtBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl;
+  let logEl, rmtOutEl, rmtBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, huntOutEl, huntBtnEl, huntFocusEl;
   const log = (...a) => {
     const l = new Date().toLocaleTimeString() + ' ' + a.join(' ');
     logLines.push(l); if (logLines.length > 60) logLines.shift();
     console.log('[pkbot]', l); if (logEl) logEl.textContent = logLines.slice(-12).join('\n');
   };
-  const huntState = { next: 0 };
+  const HUNT_KEY = 'pkbot-hunt';
+  const huntState = { next: 0, scanning: false, last: null };
+  try { huntState.last = JSON.parse(localStorage.getItem(HUNT_KEY) || 'null'); } catch (e) {}
+  const saveHunt = () => { try { localStorage.setItem(HUNT_KEY, JSON.stringify(huntState.last)); } catch (e) {} };
+  const DEX_CACHE_KEY = 'pkbot-dex-cache';
+  let dexCache = {};
+  try { dexCache = JSON.parse(localStorage.getItem(DEX_CACHE_KEY) || '{}') || {}; } catch (e) { dexCache = {}; }
+  const saveDexCache = () => {
+    try {
+      const keys = Object.keys(dexCache);
+      if (keys.length > 600) {
+        keys.sort((a, b) => (dexCache[a].ts || 0) - (dexCache[b].ts || 0))
+          .slice(0, keys.length - 500)
+          .forEach(k => delete dexCache[k]);
+      }
+      localStorage.setItem(DEX_CACHE_KEY, JSON.stringify(dexCache));
+    } catch (e) {}
+  };
   const RMT_KEY = 'pkbot-rmt';
   const rmtState = { scanning: false, last: null };
   try { rmtState.last = JSON.parse(localStorage.getItem(RMT_KEY) || 'null'); } catch (e) {}
@@ -104,6 +132,36 @@
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
     const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2'], [0, 'sem limite']], 'fps', 'Quadros por segundo da cena do jogo. Menos quadros = bem menos CPU; a captura continua funcionando. Use "sem limite" se for jogar na mão.');
     fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel); body.append(box);
+    // Gerenciador de Hunt v3 (simulação de combate/economia: XP/h real, lucro líquido, abates/h, poções, Outland e Shiny)
+    const huntBox = document.createElement('div');
+    huntBox.id = 'pkbot-hunt-box';
+    huntBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
+    const huntHead = document.createElement('div');
+    huntHead.style.cssText = 'display:flex;align-items:center;gap:4px';
+    const huntTit = document.createElement('span');
+    huntTit.textContent = 'Gerenciador Hunt';
+    huntTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#8f9';
+    huntFocusEl = document.createElement('select');
+    huntFocusEl.id = 'pkbot-hunt-focus';
+    huntFocusEl.title = 'Foco do Gerenciador de Hunt: Equilibrado (XP + Lucro + Abates/Outland), XP, Lucro/Outland ou Shiny/Caça';
+    huntFocusEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
+    [['balanced', 'Equilibrado'], ['xp', 'XP'], ['lucro', 'Lucro/Out'], ['shiny', 'Shiny']].forEach(([v, t]) => {
+      const o = document.createElement('option'); o.value = v; o.textContent = t; huntFocusEl.append(o);
+    });
+    huntFocusEl.value = CFG.huntFocus;
+    huntFocusEl.onchange = () => { CFG.huntFocus = huntFocusEl.value; saveCfg(); huntState.next = 0; log('hunt foco =', CFG.huntFocus); renderHunt(); };
+    huntBtnEl = document.createElement('button');
+    huntBtnEl.id = 'pkbot-hunt-scan';
+    huntBtnEl.textContent = 'Analisar';
+    huntBtnEl.title = 'Simula combate e lucro real das hunts liberadas (Kanto, Outland, Johto...) e mostra o Top 4';
+    huntBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#8f93;border:1px solid #8f96;font-size:10px;color:#fff';
+    huntBtnEl.onclick = () => analyzeHunts({ autoSwitch: false });
+    huntHead.append(huntTit, huntFocusEl, huntBtnEl);
+    huntOutEl = document.createElement('div');
+    huntOutEl.id = 'pkbot-hunt-out';
+    huntOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:210px;overflow:auto;user-select:text';
+    huntBox.append(huntHead, huntOutEl);
+    body.append(huntBox);
     // Analisador Otimizado de Pokébola (hunt atual: NPC + RMT + Shiny + ouro/h + taxa/preço)
     const ballBox = document.createElement('div');
     ballBox.id = 'pkbot-ball-box';
@@ -158,6 +216,7 @@
     logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
     p.append(head, body);
+    renderHunt();
     renderBall();
     renderRmt();
 
@@ -188,10 +247,14 @@
   }
 
   // ---------- helpers do jogo ----------
-  const modalVisible = () => $$('.modal-caixa').find(m => m.offsetParent);
+  const modalVisible = () => { const vis = $$('.modal-caixa').filter(m => m.offsetParent); return vis[vis.length - 1] || null; };
   async function closeModal() {
-    const m = modalVisible(); if (!m) return;
-    const x = $$('button', m).find(b => b.innerText.trim() === '×'); x && x.click(); await sleep(400);
+    for (let i = 0; i < 4; i++) {
+      const m = modalVisible(); if (!m) return;
+      const x = $$('button', m).find(b => b.innerText.trim() === '×') || $('#ficha-fechar', m);
+      if (!x) return;
+      x.click(); await sleep(320);
+    }
   }
   // seletores estruturais (data-modal, classes): funcionam com o jogo em qualquer idioma
   const navBtn = key => $(`button[data-modal="${key}"]`);
@@ -359,7 +422,7 @@
     mo.observe(document.body, { childList: true }); // toasts criados dinamicamente
   }
 
-  // ---------- 4: hunt (usa o Hunt Analyser do próprio jogo; nada de testar hunt por hunt) ----------
+  // ---------- 4: hunt v3 (simulação real de combate/economia da Wiki + 4 focos + cache Pokedex) ----------
   const xpEvents = []; // log real de xp, só para conferir a estimativa
   function xpEvent(text) {
     const m = text.match(/\+([\d.,]+)\s*(?:xp\s*pokemon|pokemon\s*xp)/i); if (m) xpEvents.push({ t: Date.now(), xp: num(m[1]) });
@@ -370,17 +433,22 @@
     // números do analyser em ordem: XP treinador/h, XP pokemon/h, Ouro/h (sem depender do texto dos rótulos)
     const nums = $$('#hunt-analyser-corpo *').filter(e => e.children.length === 0 && /^[\d.,]+$/.test(e.textContent.trim())).map(e => num(e.textContent));
     const g = l => (l === 'xp' ? nums[1] : nums[2]) ?? null;
-    // tipos do monstro = os .tipo que vêm antes da 1ª seção (Fraco a / Resiste a)
     const types = [];
     for (const e of $$('#hunt-analyser-corpo .tipo, #hunt-analyser-corpo .ha-sec')) { if (e.classList.contains('ha-sec')) break; types.push(e.textContent.trim().toUpperCase()); }
     return { xp: g('xp'), gold: g('gold'), types };
   };
-  // tipo(s) do pokemon em campo: o 1º grupo de .tipo fora de modais, analyser e fichas
+  // tipo(s) do pokemon em campo: prefere #ativo-card (ordem exata: 1º tipo = Investida), fallback geral
   const myTypes = () => {
+    const card = $('#ativo-card');
+    if (card) {
+      const t = $$('.tipo', card).map(e => e.textContent.trim().toUpperCase()).filter(Boolean);
+      if (t.length) return [...new Set(t)];
+    }
     const els = $$('.tipo').filter(e => !e.closest('.modal-caixa,#hunt-analyser,#ficha,#caidos,#palco'));
     if (!els.length) return [];
     return [...new Set($$('.tipo', els[0].parentElement).map(t => t.textContent.trim().toUpperCase()))];
   };
+  const trainerLevel = () => num((($('#tr-level') || {}).textContent) || 0);
   const currentHuntName = () => PK_HUNT.normalizeHuntName((($('#hud-hunt') || $('#eco-onde') || {}).innerText) || '');
   const inSafari = () => !!($('#palco') && $('#palco').classList.contains('safari-ativo'));
   const inHunt = () => !!($('#palco') && $('#palco').classList.contains('hunt-ativa')) && !inSafari();
@@ -390,33 +458,272 @@
     : { btn: $('#ir-centro'), conta: $('#ir-centro-conta') };
   const centerHealBtn = () => (energyNow() === 'economia' ? $('#eco-curar') : $('#centro-curar'));
   const regionBtns = () => $$('button.mapa-reg-bt', modalVisible()).filter(b => !b.classList.contains('mapa-area-travada'));
-  async function openMap() {
-    await closeModal(); const nav = navBtn('mapa'); if (!nav) throw new Error('botão do Mapa não encontrado'); nav.click(); await sleep(1000);
-    const bt = $$('.mapa-modo-bt')[0]; bt && !bt.classList.contains('on') && bt.click(); await sleep(800); // 1º botão = visão de mapa
+
+  function selectBestOutlandTier() {
+    const sel = $('.mapa-outland select') || $('select[id*="outland"]');
+    if (!sel) return null;
+    const enabled = [...sel.options].filter(o => !o.disabled);
+    const bestOpt = enabled[enabled.length - 1];
+    if (bestOpt && sel.value !== bestOpt.value) {
+      sel.value = bestOpt.value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return bestOpt ? bestOpt.textContent.trim() : null;
   }
-  // lê xp/h de todas as hunts liberadas de todas as regiões abertas
-  async function scanHunts() {
-    await openMap();
-    const regions = regionBtns(), all = {};
+
+  async function openMap(mode = 'mapa') {
+    await closeModal(); const nav = navBtn('mapa'); if (!nav) throw new Error('botão do Mapa não encontrado'); nav.click(); await sleep(900);
+    const bts = $$('.mapa-modo-bt');
+    const idx = mode === 'lista' ? 1 : 0;
+    if (bts[idx] && !bts[idx].classList.contains('on')) { bts[idx].click(); await sleep(500); }
+  }
+
+  // Lê perfil completo do Pokémon ativo (stats atuais, IV SPD, base SPD e golpes reais com cache)
+  let activeProfileCache = null;
+  async function readActivePokemonProfile() {
+    const cardEl = $('#ativo-card');
+    const card = PK_HUNT.parseActiveCard({
+      text: cardEl ? (cardEl.innerText || '') : '',
+      types: myTypes(),
+    });
+    const cacheKey = `${card.name}|${card.level}|${card.hpMax}|${card.types.join('/')}`;
+    if (activeProfileCache && activeProfileCache.key === cacheKey && activeProfileCache.profile.atk > 0) {
+      return activeProfileCache.profile;
+    }
+
+    let sheet = { hpMax: card.hpMax, atk: 0, def: 0, spAtk: 0, spDef: 0, spd: 0, ivSpd: 16, baseSpd: 75 };
+    let attacks = null;
+    const dexKey = card.name ? normTxt(card.name) : '';
+    if (dexKey && dexCache[dexKey] && Array.isArray(dexCache[dexKey].attacks) && dexCache[dexKey].attacks.length) {
+      attacks = dexCache[dexKey].attacks;
+    }
+
+    const infoBtn = $('#time-corpo .pl-ficha');
+    if (infoBtn) {
+      await closeModal();
+      infoBtn.click();
+      const box = await waitForSelector('.caixa-ficha', () => document, 1500);
+      if (box) {
+        await sleep(180);
+        const statLines = $$('.fi-stat', box).map(e => (e.textContent || '').replace(/\s+/g, ' ').trim());
+        sheet = PK_HUNT.parseActiveSheet(statLines, box.innerText || '');
+        // Se ainda não temos os golpes desta espécie em cache, abre a ficha da espécie ali mesmo
+        if (!attacks) {
+          const verEsp = $$('button', box).find(b => /esp[eé]cie|species/i.test(b.textContent || ''));
+          if (verEsp) {
+            verEsp.click();
+            const hasTable = await waitForSelector('#ficha-corpo .fi-tabela', () => document, 1800);
+            if (hasTable) {
+              await sleep(150);
+              const parsed = parsePokedexSheetBody($('#ficha-corpo'), card.name);
+              if (parsed.attacks && parsed.attacks.length) attacks = parsed.attacks;
+              if (dexKey) {
+                dexCache[dexKey] = { ...parsed, ts: Date.now() };
+                saveDexCache();
+              }
+            }
+          }
+        }
+      }
+      await closeModal();
+    }
+
+    const profile = {
+      name: card.name || 'Ativo',
+      level: card.level || Math.max(1, trainerLevel()),
+      types: card.types.length ? card.types : myTypes(),
+      hpMax: sheet.hpMax || card.hpMax || 0,
+      atk: sheet.atk,
+      def: sheet.def,
+      spAtk: sheet.spAtk,
+      spDef: sheet.spDef,
+      baseSpd: sheet.baseSpd,
+      ivSpd: sheet.ivSpd,
+      attacks,
+    };
+    activeProfileCache = { key: cacheKey, profile };
+    return profile;
+  }
+
+  function readAutoContext(hpMax) {
+    const pChips = $$('#auto-potion-opts .auto-chip').map(b => ({
+      title: (b.title || '').split(' — ')[0],
+      stock: num(($('.q', b) || b).textContent),
+      on: b.classList.contains('on'),
+    }));
+    const bChips = $$('#auto-ball-opts .auto-chip').map(b => ({
+      title: (b.title || '').split(' — ')[0],
+      stock: num(($('.q', b) || b).textContent),
+      on: b.classList.contains('on'),
+    }));
+    const vipBallOn = $$('#auto-corpo input[type="checkbox"]').slice(0, 2).some(c => c.checked);
+    const capturing = !!(st.capture || st.eterna || vipBallOn);
+    const potion = PK_HUNT.resolvePotion({ activeChips: pChips, hpMax, preferredName: CFG.potType });
+    const ball = PK_HUNT.resolveBall({ activeChips: bChips, cfgBall: CFG.ball, capturing });
+    const trLv = trainerLevel();
+    const outlandTier = PK_HUNT.bestOutlandTierForLevel(trLv);
+    return { potion, ball, capturing, trLv, outlandTier };
+  }
+
+  // Lê todas as hunts liberadas pelo modo Lista (~2s), pré-filtra top candidatas, lê Analyser e Pokedex (com cache!)
+  async function scanHunts({ player = null, focus = CFG.huntFocus, curName = '', autoCtx = null } = {}) {
+    await closeModal();
+    const nav = navBtn('mapa');
+    if (!nav) throw new Error('botão do Mapa não encontrado');
+    nav.click();
+    await sleep(900);
+
+    const modoBts = $$('.mapa-modo-bt');
+    const wasMapMode = !!(modoBts[0] && modoBts[0].classList.contains('on'));
+    if (modoBts[1] && !modoBts[1].classList.contains('on')) {
+      modoBts[1].click();
+      await sleep(450);
+    }
+
+    const regions = regionBtns();
+    const all = {};
+    const byRegion = new Map();
+
+    // Estágio 1: coleta rápida no modo Lista de todas as regiões liberadas
     for (const rb of (regions.length ? regions : [null])) {
-      if (rb) { rb.click(); await sleep(700); }
-      for (const mk of $$('#mapa-tela .marcador').filter(x => x.dataset.travado === '0')) {
-        hover(mk); await sleep(120);
+      const regId = rb ? (rb.dataset.regiao || '') : '';
+      if (rb) { rb.click(); await sleep(420); }
+      if (regId === 'outland') { selectBestOutlandTier(); await sleep(150); }
+      const rows = $$('#mapa-lista .ml-linha, #mapa-lista [data-slug]');
+      for (const r of rows) {
+        const travado = r.dataset.travado === '1' || r.getAttribute('aria-disabled') === 'true'
+          || r.classList.contains('travada') || r.classList.contains('ml-travada');
+        if (travado) continue;
+        const slug = r.dataset.slug;
+        if (!slug) continue;
+        const nomeRaw = ($('.ml-nome', r)?.textContent || r.textContent || slug).trim();
+        const nome = PK_HUNT.normalizeHuntName(nomeRaw);
+        const level = PK_HUNT.parseIntStrict($('.ml-nv', r)?.textContent || '');
+        const types = $$('.tipo', r).map(t => t.textContent.trim().toUpperCase()).filter(Boolean);
+        const active = r.classList.contains('on') || r.classList.contains('ativa');
+        const cached = dexCache[normTxt(nome)] || null;
+        all[slug] = {
+          slug,
+          nome,
+          displayName: nomeRaw,
+          regiao: regId,
+          isOutland: regId === 'outland',
+          level,
+          types,
+          active,
+          xp: null,
+          gold: null,
+          ...(cached ? {
+            baseStats: cached.baseStats,
+            baseNpcPrice: cached.baseNpcPrice,
+            captureLevel: cached.captureLevel,
+            shinyChance: cached.shinyChance,
+            canShiny: regId === 'outland' ? false : (cached.shinyChance > 0 ? true : undefined),
+            balls: cached.balls,
+            stoneProbSum: cached.stoneProbSum,
+          } : {}),
+        };
+        if (!byRegion.has(regId)) byRegion.set(regId, []);
+        byRegion.get(regId).push(slug);
+      }
+    }
+
+    // Estágio 2: seleciona candidatas promissoras (+ atual) e lê Hunt Analyser real (com boosts da conta!)
+    const activeEntry = Object.entries(all).find(([, v]) => v.active);
+    const curSlug = activeEntry ? activeEntry[0] : null;
+    const candSlugs = player
+      ? PK_HUNT.selectCandidatesForDetail({
+          hunts: all,
+          player,
+          focus,
+          potion: autoCtx?.potion,
+          ball: autoCtx?.ball,
+          outlandMult: autoCtx?.outlandTier?.mult || 1,
+          capturing: !!autoCtx?.capturing,
+          curSlug,
+          curName,
+          maxCandidates: 16,
+        })
+      : Object.keys(all).slice(0, 20);
+    const candSet = new Set(candSlugs);
+
+    for (const rb of (regions.length ? regions : [null])) {
+      const regId = rb ? (rb.dataset.regiao || '') : '';
+      const regSlugs = (byRegion.get(regId) || []).filter(s => candSet.has(s));
+      if (!regSlugs.length) continue;
+      if (rb) { rb.click(); await sleep(380); }
+      for (const slug of regSlugs) {
+        const row = $(`#mapa-lista [data-slug="${CSS.escape(slug)}"]`);
+        if (!row) continue;
+        hover(row);
+        await sleep(95);
         const a = readAnalyser();
-        if (a.xp != null) {
-          all[mk.dataset.slug] = {
-            ...a,
-            nome: PK_HUNT.normalizeHuntName((mk.title || '').split(' — ')[0]),
-            active: mk.classList.contains('on'),
-          };
+        if (a.xp != null) all[slug].xp = a.xp;
+        if (a.gold != null) all[slug].gold = a.gold;
+        if (!all[slug].types.length && a.types.length) all[slug].types = a.types;
+      }
+    }
+
+    // Restaura modo Mapa se o usuário estava nele antes
+    const restoreBts = $$('.mapa-modo-bt');
+    if (wasMapMode && restoreBts[0] && !restoreBts[0].classList.contains('on')) {
+      restoreBts[0].click();
+      await sleep(250);
+    }
+    await closeModal();
+
+    // Estágio 3: enriquece na Pokedex (1 única abertura, em lote) apenas candidatas ausentes do cache permanente
+    const missingNames = [];
+    const seenMissing = new Set();
+    for (const slug of candSlugs) {
+      const h = all[slug];
+      if (!h || h.baseStats) continue;
+      const k = normTxt(h.nome);
+      if (seenMissing.has(k)) continue;
+      seenMissing.add(k);
+      missingNames.push({ key: k, query: h.displayName || h.nome });
+    }
+    if (missingNames.length) {
+      const fetched = await batchReadPokedexSpecies(missingNames);
+      for (const slug of candSlugs) {
+        const h = all[slug];
+        const k = normTxt(h.nome);
+        const info = fetched[k] || dexCache[k];
+        if (info) {
+          h.baseStats = info.baseStats;
+          h.baseNpcPrice = info.baseNpcPrice;
+          h.captureLevel = info.captureLevel;
+          h.shinyChance = info.shinyChance;
+          h.canShiny = h.isOutland ? false : (info.shinyChance > 0 ? true : undefined);
+          h.balls = info.balls;
+          h.stoneProbSum = info.stoneProbSum;
         }
       }
     }
-    return all;
+
+    // Retorna apenas o conjunto detalhado (ou tudo se vazio) para decisão exata
+    const detailed = {};
+    for (const slug of candSlugs) {
+      if (all[slug]) detailed[slug] = all[slug];
+    }
+    return { all, detailed, curSlug };
   }
-  async function findMarker(slug) {
+
+  async function findMarker(slug, regiao = '') {
+    if (regiao) {
+      const rb = regionBtns().find(b => b.dataset.regiao === regiao);
+      if (rb) {
+        if (!rb.classList.contains('on')) { rb.click(); await sleep(600); }
+        if (regiao === 'outland') { selectBestOutlandTier(); await sleep(200); }
+      }
+    }
     let mk = $$('#mapa-tela .marcador').find(x => x.dataset.slug === slug); if (mk) return mk;
-    for (const rb of regionBtns()) { rb.click(); await sleep(700); mk = $$('#mapa-tela .marcador').find(x => x.dataset.slug === slug); if (mk) return mk; }
+    for (const rb of regionBtns()) {
+      rb.click(); await sleep(600);
+      if (rb.dataset.regiao === 'outland') { selectBestOutlandTier(); await sleep(200); }
+      mk = $$('#mapa-tela .marcador').find(x => x.dataset.slug === slug);
+      if (mk) return mk;
+    }
   }
   // Sai da hunt respeitando o cooldown de 3s sem tomar/dar dano (nunca clica em "Desistir do Combate"),
   // vai ao Centro Pokémon e cura a equipe antes de entrar na nova hunt.
@@ -467,12 +774,12 @@
     return { ok: true };
   }
   // Entra na hunt alvo estando fora de combate (no Centro Pokémon), respeitando eventual cooldown de porta
-  async function enterHunt(slug, nome, { checkStop = () => false } = {}) {
+  async function enterHunt(slug, nome, { checkStop = () => false, regiao = '' } = {}) {
     const targetName = PK_HUNT.normalizeHuntName(nome || slug);
     for (let i = 0; i < 5; i++) {
       if (checkStop()) return false;
-      await openMap();
-      const mk = await findMarker(slug); if (!mk) { log('marcador não achado:', slug); return false; }
+      await openMap('mapa');
+      const mk = await findMarker(slug, regiao); if (!mk) { log('marcador não achado:', slug); return false; }
       mk.click(); await sleep(900);
       const toast = (($('#toast') || {}).innerText || '');
       const w = PK_HUNT.parseWaitToast(toast);
@@ -506,32 +813,171 @@
     }
     return enterHunt(slug, targetName, opts);
   }
-  async function huntTick() {
-    if (!st.hunt || busy || Date.now() < huntState.next) return;
-    busy = true; huntState.next = Date.now() + CFG.huntEvalMs;
+
+  function renderHunt(statusMsg) {
+    if (!huntOutEl || typeof PK_HUNT === 'undefined') return;
+    if (huntBtnEl) huntBtnEl.textContent = huntState.scanning ? 'Lendo...' : 'Analisar';
+    if (huntFocusEl && huntFocusEl.value !== CFG.huntFocus) huntFocusEl.value = CFG.huntFocus;
+    huntOutEl.textContent = '';
+    const mk = (tag, css, txt) => {
+      const el = document.createElement(tag);
+      if (css) el.style.cssText = css;
+      if (txt != null) el.textContent = txt;
+      return el;
+    };
+    if (statusMsg) {
+      huntOutEl.append(mk('div', 'color:#fd8', statusMsg));
+      return;
+    }
+    const last = huntState.last;
+    if (!last || !last.detailed || !Object.keys(last.detailed).length) {
+      huntOutEl.append(mk('div', 'color:#9ab', 'Clique "Analisar" ou ative o modo 4 para simular as melhores hunts (XP/h, lucro, abates e poções).'));
+      return;
+    }
+    // Recalcula instantaneamente ao trocar o seletor de foco!
+    const dec = PK_HUNT.pickBestHunt({
+      hunts: last.detailed,
+      player: last.player,
+      focus: CFG.huntFocus,
+      potion: last.potion,
+      ball: last.ball,
+      outlandMult: last.outlandMult || 1,
+      capturing: !!last.capturing,
+      curSlug: last.curSlug,
+      curName: last.curName,
+      inHunt: true,
+      huntGain: CFG.huntGain,
+    });
+    const top = (dec.ranked || []).slice(0, 4);
+    const ageMin = last.ts ? Math.max(0, Math.round((Date.now() - last.ts) / 60000)) : 0;
+    const pl = last.player || {};
+    huntOutEl.append(mk('div', 'color:#9be;font-size:9px;margin-bottom:2px',
+      `${pl.name || 'Ativo'} Nv${pl.level || '?'} (${(pl.types || []).join('/') || '?'}) · ${PK_HUNT.FOCUS_LABELS[CFG.huntFocus] || CFG.huntFocus} · há ${ageMin}m`));
+
+    if (dec.current && top.every(x => x.slug !== dec.current.slug)) {
+      const cs = dec.current.sim || {};
+      huntOutEl.append(mk('div', 'color:#faa;font-size:9px;margin-bottom:2px',
+        `Atual: ${dec.current.displayName || dec.current.nome} Nv${dec.current.level || '?'} · ${PK_HUNT.formatCompact(cs.xpH)} xp/h · ${PK_HUNT.formatCompact(cs.netGoldH)}/h · ${cs.kph || 0}/h · ${Math.round(cs.potionsH || 0)} pot/h`));
+    }
+
+    const fmt = PK_HUNT.formatCompact;
+    for (let i = 0; i < top.length; i++) {
+      const h = top[i];
+      const s = h.sim || {};
+      const isCur = !!(last.curSlug && h.slug === last.curSlug);
+      const row = mk('div', `display:flex;align-items:center;gap:4px;padding:2px 0;${i ? 'border-top:1px solid #fff1;' : ''}`);
+      const info = mk('div', 'flex:1;min-width:0');
+      const badge = h.isOutland ? ' [OUT]' : '';
+      const curTag = isCur ? ' ★' : '';
+      info.append(mk('div', `color:${i === 0 ? '#8f9' : '#dfe'};font-weight:${i === 0 ? 'bold' : 'normal'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
+        `${i + 1}. ${h.displayName || h.nome} Nv${h.level || '?'}${badge}${curTag}`));
+      const potTxt = (s.potionsH || 0) >= 1 ? ` · ${Math.round(s.potionsH)}pot` : '';
+      info.append(mk('div', 'color:#9ab;font-size:9px',
+        `${fmt(s.xpH)} xp · ${fmt(s.netGoldH)} líq · ${s.kph || 0}/h${potTxt}`));
+      row.append(info);
+      if (!isCur) {
+        const go = mk('button', 'all:unset;cursor:pointer;padding:1px 5px;border-radius:3px;background:#8f93;border:1px solid #8f96;font-size:9px;color:#fff;flex-shrink:0', 'Ir');
+        go.title = `Ir para ${h.displayName || h.nome} (passa no Centro Pokémon e cura)`;
+        go.onclick = async () => {
+          if (busy) { log('aguarde a ação atual terminar'); return; }
+          busy = true;
+          let voltarUltra = false;
+          try {
+            voltarUltra = await leaveUltra();
+            const ok = await switchTo(h.slug, h.nome, last.curSlug, { regiao: h.regiao });
+            if (ok && huntState.last) { huntState.last.curSlug = h.slug; huntState.last.curName = h.nome; saveHunt(); renderHunt(); }
+          } finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
+        };
+        row.append(go);
+      }
+      huntOutEl.append(row);
+    }
+  }
+
+  async function analyzeHunts({ autoSwitch = false } = {}) {
+    if (huntState.scanning) return null;
+    if (busy) { if (!autoSwitch) renderHunt('Aguarde a ação atual terminar e tente de novo.'); return null; }
+    huntState.scanning = true; busy = true;
+    renderHunt('Simulando hunts (ativo + Mapa + Pokedex)...');
     let voltarUltra = false;
     try {
       voltarUltra = await leaveUltra();
       const onHunt = inHunt(), onCenter = inCenter();
-      if (!onHunt && !onCenter) return log('hunt: fora de hunt/Centro (Safari/Boss/Casa) — aguardando');
-      const all = await scanHunts(); await closeModal();
-      const cur = currentHuntName(), mine = myTypes();
-      const activeEntry = Object.entries(all).find(([, v]) => v.active);
-      const curSlug = onHunt && activeEntry ? activeEntry[0] : null;
-      if (!mine.length) log('aviso: não li o tipo do pokemon em campo; ignorando tipos');
-      // O Analyser ignora o tipo (comprovado: Squirtle e Bulbasaur dão o mesmo xp/h p/ um Charmander).
-      // Então: desconta hunts desfavoráveis (ratio<1) e descarta as ruins (ratio<minRatio, ou golpe imune).
-      const dec = PK_HUNT.pickBestHunt({
-        hunts: all, myTypes: mine, curSlug, curName: cur, inHunt: onHunt,
-        minRatio: CFG.minRatio, huntGain: CFG.huntGain, matchupFn: PK_TYPES.matchup,
+      if (!onHunt && !onCenter) {
+        const msg = 'Fora de hunt/Centro (Safari/Boss/Casa) — aguardando.';
+        if (autoSwitch) log('hunt:', msg); else renderHunt(msg);
+        return null;
+      }
+      const player = await readActivePokemonProfile();
+      const autoCtx = readAutoContext(player.hpMax);
+      const cur = currentHuntName();
+      const { detailed, curSlug } = await scanHunts({
+        player,
+        focus: CFG.huntFocus,
+        curName: cur,
+        autoCtx,
       });
-      if (dec.action === 'none') { huntState.next = Date.now() + 30000; return log('analyser sem dados (tento em 30s)'); }
+      if (!Object.keys(detailed).length) {
+        huntState.next = Date.now() + 30000;
+        renderHunt('Nenhuma hunt liberada encontrada (tento em 30s).');
+        return null;
+      }
+      const effCurSlug = onHunt ? curSlug : null;
+      const dec = PK_HUNT.pickBestHunt({
+        hunts: detailed,
+        player,
+        focus: CFG.huntFocus,
+        potion: autoCtx.potion,
+        ball: autoCtx.ball,
+        outlandMult: autoCtx.outlandTier.mult,
+        capturing: autoCtx.capturing,
+        curSlug: effCurSlug,
+        curName: cur,
+        inHunt: onHunt,
+        huntGain: CFG.huntGain,
+      });
+      huntState.last = {
+        ts: Date.now(),
+        player,
+        potion: autoCtx.potion,
+        ball: autoCtx.ball,
+        capturing: autoCtx.capturing,
+        outlandMult: autoCtx.outlandTier.mult,
+        curSlug: effCurSlug,
+        curName: cur,
+        detailed,
+      };
+      saveHunt();
       const { best, current } = dec;
-      log('meus tipos:', mine.join('/') || '?', '| melhor:', best.nome, '(' + best.types.join('/') + ')', best.xp + ' xp/h ×' + best.m.ratio.toFixed(2),
-        '| atual:', onCenter ? 'Centro Pokemon' : (cur || '?'), current ? current.xp + ' xp/h ×' + current.m.ratio.toFixed(2) : '?');
-      if (dec.action === 'stay') return; // já está na melhor hunt ou sem ganho relevante
-      await switchTo(best.slug, best.nome, curSlug, { checkStop: () => !st.hunt });
-    } finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
+      const fmt = PK_HUNT.formatCompact;
+      if (best) {
+        const bs = best.sim || {}, cs = current?.sim || {};
+        log(`hunt[${CFG.huntFocus}] ${player.name} Nv${player.level} | melhor: ${best.displayName || best.nome} Nv${best.level} (${fmt(bs.xpH)} xp/h, ${fmt(bs.netGoldH)} líq/h, ${bs.kph}/h, ${Math.round(bs.potionsH || 0)} pot/h)`
+          + ` | atual: ${onCenter ? 'Centro' : (cur || '?')}${current ? ` (${fmt(cs.xpH)} xp/h, ${fmt(cs.netGoldH)} líq/h, ${cs.kph}/h)` : ''}`);
+      }
+      renderHunt();
+      if (autoSwitch && dec.action === 'switch' && best) {
+        const ok = await switchTo(best.slug, best.nome, effCurSlug, { checkStop: () => !st.hunt, regiao: best.regiao });
+        if (ok && huntState.last) { huntState.last.curSlug = best.slug; huntState.last.curName = best.nome; saveHunt(); renderHunt(); }
+      }
+      return dec;
+    } catch (e) {
+      log('hunt erro:', e.message);
+      renderHunt('Erro ao analisar hunts: ' + e.message);
+      return null;
+    } finally {
+      await closeModal();
+      if (voltarUltra) await reenterUltra();
+      huntState.scanning = false;
+      busy = false;
+      if (huntBtnEl) huntBtnEl.textContent = 'Analisar';
+    }
+  }
+
+  async function huntTick() {
+    if (!st.hunt || busy || Date.now() < huntState.next) return;
+    huntState.next = Date.now() + CFG.huntEvalMs;
+    await analyzeHunts({ autoSwitch: true });
   }
 
   // ---------- 5: Radar RMT (Ouro -> Gema, passivo + scan sob demanda com plano de ação) ----------
@@ -1143,31 +1589,7 @@
     return null;
   }
 
-  async function readPokedexSpecies(speciesName) {
-    await closeModal();
-    const nav = navBtn('pokedex');
-    if (!nav) throw new Error('botão da Pokedex não encontrado');
-    nav.click();
-    const inp = await waitForSelector('#f-dex', () => $('#modal-corpo'), 1800);
-    if (!inp) throw new Error('busca da Pokedex não abriu');
-    inp.value = speciesName;
-    inp.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(300);
-
-    const target = normTxt(speciesName);
-    const cards = $$('#modal-corpo .dex-card');
-    const cleanCardName = el => normTxt((el.textContent || '').replace(/^#\d+\s*/, ''));
-    const card = cards.find(c => cleanCardName(c) === target)
-      || cards.find(c => cleanCardName(c).includes(target))
-      || cards[0];
-    if (!card) throw new Error(`espécie "${speciesName}" não encontrada na Pokedex`);
-
-    card.click();
-    const hasTable = await waitForSelector('#ficha-corpo .fi-tabela', () => document, 1800);
-    if (!hasTable) throw new Error(`ficha de "${speciesName}" não carregou`);
-    await sleep(150);
-
-    const corpo = $('#ficha-corpo');
+  function parsePokedexSheetBody(corpo, fallbackName = '') {
     const placas = $$('.fi-placa', corpo).map(p => ({
       label: normTxt($('small', p)?.textContent || ''),
       val: ($('b', p)?.textContent || '').trim(),
@@ -1197,13 +1619,19 @@
     ];
     const validStats = baseStats.every(n => n > 0) ? baseStats : null;
 
-    // Tabelas da ficha: captura normal (5 colunas com Pokébolas + preço) e shiny (4 colunas)
+    // Tabelas da ficha: golpes, drops de pedras, captura normal e shiny
     const tables = $$('.fi-tabela', corpo).map(t =>
       $$('tr', t).map(tr => [...tr.children].map(td => td.textContent.trim()))
     );
     const ballTable = tables.find(rows => rows.some(r => r.length >= 5 && /poke\s*ball|great\s*ball|ultra\s*ball/i.test(r[0] || '')))
       || tables.find(rows => rows.some(r => r.length >= 4 && /poke\s*ball/i.test(r[0] || '')));
     const balls = PK_BALL.parsePokedexBallRows(ballTable || []);
+
+    const attackTable = tables.find(rows => rows !== ballTable && rows.some(r => r.length >= 5 && /esp|spec|fis|f[ií]s|phys/i.test(r[2] || '')));
+    const attacks = PK_HUNT.parsePokedexAttacks(attackTable || []);
+
+    const stoneTable = tables.find(rows => rows !== ballTable && rows !== attackTable && rows.some(r => r.length >= 2 && /stone|pedra/i.test(r[0] || '')));
+    const { stoneProbSum, stoneCount } = PK_HUNT.parsePokedexStones(stoneTable || []);
 
     // Fallback para chanceShiny via tabela "Captura do shiny" (4 colunas)
     if (!shinyChance) {
@@ -1218,9 +1646,89 @@
       }
     }
 
+    return {
+      name: $('#ficha-titulo')?.textContent?.trim() || fallbackName,
+      baseNpcPrice,
+      captureLevel,
+      baseStats: validStats,
+      shinyChance,
+      balls,
+      attacks,
+      stoneProbSum,
+      stoneCount,
+    };
+  }
+
+  async function batchReadPokedexSpecies(items) {
+    const out = {};
+    if (!items || !items.length) return out;
+    await closeModal();
+    const nav = navBtn('pokedex');
+    if (!nav) return out;
+    nav.click();
+    const inp = await waitForSelector('#f-dex', () => $('#modal-corpo'), 1800);
+    if (!inp) { await closeModal(); return out; }
+
+    for (const item of items) {
+      const key = item.key || normTxt(item.query);
+      if (dexCache[key] && dexCache[key].baseStats) { out[key] = dexCache[key]; continue; }
+      inp.value = item.query;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(240);
+      const target = normTxt(item.query);
+      const cards = $$('#modal-corpo .dex-card');
+      const cleanCardName = el => normTxt((el.textContent || '').replace(/^#\d+\s*/, ''));
+      const card = cards.find(c => cleanCardName(c) === target)
+        || cards.find(c => cleanCardName(c).includes(target))
+        || cards[0];
+      if (!card) continue;
+      card.click();
+      const hasTable = await waitForSelector('#ficha-corpo .fi-tabela', () => document, 1500);
+      if (hasTable) {
+        await sleep(120);
+        const parsed = parsePokedexSheetBody($('#ficha-corpo'), item.query);
+        dexCache[key] = { ...parsed, ts: Date.now() };
+        out[key] = dexCache[key];
+      }
+      const fichaClose = $('#ficha-fechar');
+      if (fichaClose && fichaClose.offsetParent) { fichaClose.click(); await sleep(140); }
+    }
+    saveDexCache();
+    await closeModal();
+    return out;
+  }
+
+  async function readPokedexSpecies(speciesName) {
+    await closeModal();
+    const nav = navBtn('pokedex');
+    if (!nav) throw new Error('botão da Pokedex não encontrado');
+    nav.click();
+    const inp = await waitForSelector('#f-dex', () => $('#modal-corpo'), 1800);
+    if (!inp) throw new Error('busca da Pokedex não abriu');
+    inp.value = speciesName;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(300);
+
+    const target = normTxt(speciesName);
+    const cards = $$('#modal-corpo .dex-card');
+    const cleanCardName = el => normTxt((el.textContent || '').replace(/^#\d+\s*/, ''));
+    const card = cards.find(c => cleanCardName(c) === target)
+      || cards.find(c => cleanCardName(c).includes(target))
+      || cards[0];
+    if (!card) throw new Error(`espécie "${speciesName}" não encontrada na Pokedex`);
+
+    card.click();
+    const hasTable = await waitForSelector('#ficha-corpo .fi-tabela', () => document, 1800);
+    if (!hasTable) throw new Error(`ficha de "${speciesName}" não carregou`);
+    await sleep(150);
+
+    const parsed = parsePokedexSheetBody($('#ficha-corpo'), speciesName);
+    const key = normTxt(speciesName);
+    if (key && parsed.baseStats) { dexCache[key] = { ...parsed, ts: Date.now() }; saveDexCache(); }
+
     const fichaClose = $('#ficha-fechar');
     if (fichaClose && fichaClose.offsetParent) { fichaClose.click(); await sleep(150); }
-    return { name: $('#ficha-titulo')?.textContent?.trim() || speciesName, baseNpcPrice, captureLevel, baseStats: validStats, shinyChance, balls };
+    return parsed;
   }
 
   async function analyzeCurrentHuntBalls() {
@@ -1390,15 +1898,22 @@
   addEventListener('pointerdown', () => { if (st.keepalive && (!audioCtx || audioCtx.state !== 'running')) startAudio(); }, true);
   function startTimer() {
     try {
-      const w = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(1),1000)'], { type: 'text/javascript' })));
-      w.onmessage = tick; log('timer: worker');
+      const code = 'setInterval(()=>postMessage({tick:1}),1000);onmessage=e=>{const d=e.data;if(d&&d.id)setTimeout(()=>postMessage({id:d.id}),d.ms);};';
+      const w = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+      w.onmessage = e => {
+        const d = e.data;
+        if (d && d.id) { const fn = _sleepPend.get(d.id); if (fn) { _sleepPend.delete(d.id); fn(); } return; }
+        tick();
+      };
+      _timerWorker = w;
+      log('timer: worker');
     } catch (e) { setInterval(tick, 1000); log('timer: setInterval (pode ser limitado em aba oculta)'); }
   }
 
   const rmtPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
     ? PK_RMT.buildActionPlan({ routes: rmtState.last.routes, gold: gold(), source: rmtState.last.source })
     : null;
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, rmtState, rmtPlan, scanRmt, ballState, analyzeCurrentHuntBalls, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, rmtState, rmtPlan, scanRmt, ballState, analyzeCurrentHuntBalls, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);

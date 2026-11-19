@@ -17,15 +17,19 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
 | 1 | Captura | Clica nos Pokémon de "Proximidade para Capturar" e para quando detectar uma captura. Mantém a Ultra Ball selecionada. |
 | 2 | Repor bolas/poções | Quando a Ultra Ball chega a 10 ou menos, compra 100 no Market. Repõe as poções em uso quando chegam a 10 ou menos, também 100 por vez. Confere o ouro antes de comprar. |
 | 3 | Captura eterna | Igual à captura, mas nunca para. |
-| 4 | Gerenciador de hunt | Escolhe a hunt com mais xp/h para o Pokémon em campo e troca quando compensa. |
+| 4 | Gerenciador de hunt | Simula combate e lucro real das hunts liberadas (4 focos) e troca quando compensa. |
 
-### Gerenciador de hunt
+### Gerenciador de hunt (v3 — simulador de combate e economia)
 
-- Lê o **Hunt Analyser** do próprio jogo (hover nos marcadores do Mapa) para obter xp/h e ouro/h de todas as hunts liberadas, em todas as regiões abertas.
-- O Analyser ignora o tipo, então o bot aplica a vantagem de tipo por conta própria (`types.js`). Usa os tipos do Pokémon em campo contra os da hunt, nos dois sentidos, com a amplificação da hunt descrita na Wiki: ×2 vira ×2,5, ×4 vira ×5,5, ×0,5 vira ×0,33 e ×0,25 vira ×0,17.
-- Hunts desfavoráveis têm o xp/h descontado, e as muito ruins (`minRatio`) são descartadas.
-- Nunca tenta trocar para o mapa em que você já está (identifica a hunt ativa pelo marcador `.on` + estado da cena), e só troca para outra se a melhor render mais de 10% acima da atual (`huntGain`). Reavalia a cada 10 minutos (`huntEvalMs`).
-- Ao trocar, aguarda a brecha de 3 s sem dar/tomar dano até o botão **Ir para o Centro Pokémon** (`#ir-centro` / `#eco-ir-centro`) ficar liberado, volta ao Centro Pokémon, cura a equipe (`#centro-curar` / `#eco-curar`) e só então entra na nova hunt. Nunca usa "Desistir do Combate" e não interfere em Safari, Arena de Boss/Místico ou Casa.
+- **Por que não confiar só no Hunt Analyser do jogo:** o Analyser assume sempre uma taxa fixa (~983 abates/h), ignorando nível/defesa/HP do mob, seus golpes reais e o gasto de poções — o que faz hunts lentas de nível alto parecerem melhores do que são.
+- **Simulação fiel à Wiki (`hunt.js`):** lê stats atuais, IV de Speed e lista real de golpes do seu Pokémon ativo (`#ativo-card` + ficha), escaneia rapidamente todas as regiões liberadas pelo modo **Lista** do Mapa (incluindo Outland), consulta o Hunt Analyser (com seus boosts ativos) e os stats-base / valor NPC / taxas de captura / pedras da Pokedex (salvos em cache local `pkbot-dex-cache`), e simula 5 min de combate real (rotação de golpes, cooldowns, Investida física no 1º tipo, HP ×5 e dano ×1,8 do selvagem, gasto de poções e pokébolas, retorno NPC das capturas, pedras de evolução, drops raros da Outland e Shiny).
+- **4 focos configuráveis no painel (`Equilibrado`, `XP`, `Lucro/Outland`, `Shiny/Caça`):**
+  - **Equilibrado (padrão):** combina XP/h real, lucro líquido/h (abate + venda NPC − poções − bolas), ritmo de abates/h, pedras e bônus de drops raros da Outland.
+  - **XP:** maximiza XP/h real em hunts sustentáveis (descarta hunts lentas ou que queimam poções).
+  - **Lucro/Outland:** maximiza lucro líquido/h + pedras + drops raros da Outland (selecionando automaticamente o maior tier de Outland liberado para o seu nível).
+  - **Shiny/Caça:** exclui a Outland (onde Shiny não rola) e prioriza velocidade de abates/capturas com bom lucro e XP.
+- **Botão `Analisar` + Top 4 com botão `Ir`:** mostra na hora a comparação da hunt atual vs Top 4 (`XP/h`, `Lucro líq/h`, `abates/h`, `poções/h`) e permite trocar com 1 clique ou deixar o modo 4 automático rodando (reavalia a cada 10 min com histerese de +10%).
+- **Troca segura:** nunca troca para o mapa atual; aguarda a brecha de 3 s fora de combate (`#ir-centro` / `#eco-ir-centro`), cura no Centro Pokémon e só então entra na nova hunt. Nunca usa "Desistir do Combate".
 
 ### Analisador Otimizado de Pokébola
 

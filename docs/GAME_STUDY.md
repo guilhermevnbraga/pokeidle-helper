@@ -51,7 +51,14 @@ Sempre separe **Confirmado no DOM** de **Hipótese / NÃO confirmado**.
   - Stats-base da espécie: `.fi-stat` (`HP, ATK, DEF, SP.ATK, SP.DEF, SPD`); boosts ativos do treinador no HUD em `#tr-ativos .tr-ativo`.
 
 ## Mecânicas confirmadas
-- **Hunt Analyser ignora tipos:** Squirtle e Bulbasaur mostram o mesmo xp/h para Charmander; amplificação da Wiki: `×2 → ×2,5`, `×4 → ×5,5`, `×0,5 → ×0,33`, `×0,25 → ×0,17`.
+- **Combate de Hunt, Hunt Analyser e Outland (confirmado em `hunt-analyser.mjs`, `pokepedia.mjs`, `shared/*.mjs` e DOM 2026-11-19):**
+  - **Hunt Analyser do jogo é cego ao combate real:** `killsPorHora` usa taxa fixa (~983 abates/h, `3,5 s/abate` + `2,6 s/onda`), ignorando tipos, nível, stats-base, golpes, poções e velocidade real de abate.
+  - **Fórmula real de dano na hunt:** `base = ((2 * lv / 5 + 2) * power * (atk / def)) / 50 + 2`; `final = base * STAB(1.5) * efetividadeAmplificada * rand(0.85..1.00)`. Amplificação: `×0→0`, `×0.25→0.167`, `×0.5→0.333`, `×1→1`, `×2→2.5`, `×4→5.5`.
+  - **Combate usa apenas o Pokémon ativo:** recarga só corre com o ativo em campo (suplente só entra se desmaiar sem Revive). Golpes recarregam conforme o poder (`30→14s` até `600→60s`), com desconto de até `7%` pelo Speed base + IV SPD. Nos gaps usa **Investida** (física, `power 30`, STAB `×1.5`, **sempre no 1º tipo**, só usa o 2º se imune; cooldown `2s - 0.01s * ivSpd`, GCD `0.9s - 0.01s * ivSpd`, piso `400ms`).
+  - **Selvagem na hunt:** `hpCombate = round(hp * 12) * 5` (HP ×5), dano `×1.8`, intervalo mínimo `1.4 s` entre golpes.
+  - **Outland (40 tiers, Nv 150..65.000):** mesmo mapa Nv 150, sem Shiny, mas única área com os 5 drops raros (Bronze Boss Token `1/10.000` e 4 fragmentos/osso `1/250.000` × multiplicador do tier `1×..20×`), pedras de evolução com chance de forma final (`0.5%` por tipo) e seletores em `.mapa-outland select`.
+  - **Modo Lista do Mapa (`#mapa-lista .ml-linha`):** lista todas as áreas da região com `data-slug`, `.ml-nome`, `.ml-nv` e `.tipo` sem esperar imagem do mapa.
+  - **Poções no Market:** Small (`+60 HP`, `50g`), Great (`+150`, `150g`), Ultra (`+400`, `400g`), Hyper (`+1.000`, `800g`), Ultimate (`+3.000`, `1.500g`), Golden (`50% HP máx`, `2.500g`).
 - **Captura, venda NPC, Potência, Nota e Shiny (confirmado em `shared/*.mjs` + Wiki 2026-11-19):**
   - Captura: 1 arremesso por Pokémon derrotado (`hpFrac = 0`); `chance = clamp(0.003, 0.10, 0.0075 * (catchRate / fator) * 1.4)` (`FATOR_CAPTURA_DO_DEGRAU = { 20: 2.8669, 40: 3.5745, 100: 4.4681 }`); bolas no Market NPC: Poke (`×1`, `5`), Great (`×2`, `20`), Super (`×3`, `50`), Ultra (`×4`, `130`); Beast (`×8`, só Diamante). Boost de Captura dobra a chance respeitando o teto de `10%`.
   - Venda NPC (`shared/sell-value.mjs`): `baseNpc * (1 + min(nivelCap, 100) / 50) * qualidade * (shiny ? 10 : 1)`; média exata de `BANDAS_QUALIDADE` = `1,17692`. Ouro por abate (`shared/recompensa-hunt.mjs`): `ouroPorKillDoNivel(n)` (`36` no Nv 1 → `6.000` no Nv 5.000, teto Nv 25.000) + `+15%` de loot base (+ bônus de loot/guild/evento).
@@ -64,5 +71,4 @@ Sempre separe **Confirmado no DOM** de **Hipótese / NÃO confirmado**.
 
 ## Perguntas em aberto (para investigar com `/study-game`)
 - **NÃO confirmado:** formato exato do toast/log ao capturar um Pokémon (PT e EN).
-- **NÃO confirmado:** se combate/hunt considera só o Pokémon ativo ou o time inteiro.
 - **NÃO confirmado:** demais telas/mecânicas do jogo (equipe, mochila, ginásios, raids, eventos, shinies, breeding, quests, etc.) ainda não mapeadas.
