@@ -1,6 +1,6 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-19. Versão da extensão: `0.7.1`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 38 passando (`types.js` + `hunt.js` + `rmt.js` + `ball.js`). Histórico em `docs/archive/` (só Grep).
+Atualizado: 2026-11-19. Versão da extensão: `0.7.1`. Último commit de código: `5264fc5`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 38 passando (`types.js` + `hunt.js` + `rmt.js` + `ball.js`). Histórico em `docs/archive/` (só Grep).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
