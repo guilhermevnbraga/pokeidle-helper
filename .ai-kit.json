@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "name": "pokeidle-helper",
+  "check": "node scripts/check.mjs",
+  "handoff": "docs/HANDOFF.md",
+  "progress": "docs/PROGRESS.md",
+  "archiveDir": "docs/archive",
+  "quirksDoc": "docs/BROWSER_QUIRKS.md",
+  "noFullRead": [
+    "docs/HANDOFF.md",
+    "docs/PROGRESS.md",
+    "docs/GAME_STUDY.md"
+  ],
+  "maxProgressLine": 190,
+  "maxHandoffKb": 6
+}

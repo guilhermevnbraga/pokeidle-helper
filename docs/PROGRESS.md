@@ -1,6 +1,6 @@
 # PROGRESS — PokeIdle Helper
 
-Regra: UMA linha por item (≤ 190 chars). Compacte com `node scripts/compact-progress.mjs --max 190 docs/PROGRESS.md`. Nunca marque `[x]` sem validação.
+Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` do `ai-kit`. Nunca marque `[x]` sem validação.
 
 ## Ambiente de desenvolvimento & IA
 - [x] Arquitetura Antigravity econômica: `AGENTS.md`, hook `SessionStart`, Git `pre-commit`, `scripts/check.mjs`, `compact-progress.mjs`, skills `/handoff`, `/study-game`, `/feature` e `docs…

@@ -36,7 +36,7 @@ function checkJson(rel) {
   }
 }
 
-// 1. manifest.json e JSONs do .agents/
+// 1. manifest.json, .ai-kit.json e JSONs do .agents/
 const manifest = checkJson('manifest.json');
 if (manifest) {
   if (manifest.manifest_version !== 3) errors.push('manifest.json: manifest_version deve ser 3');
@@ -52,7 +52,7 @@ if (manifest) {
 }
 
 for (const cfg of [
-  '.agents/hooks.json',
+  '.ai-kit.json',
   '.agents/plugins/chrome-browser/plugin.json',
   '.agents/plugins/chrome-browser/mcp_config.json',
 ]) {
