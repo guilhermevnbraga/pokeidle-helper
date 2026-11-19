@@ -36,9 +36,15 @@ Sempre separe **Confirmado no DOM** de **Hipótese / NÃO confirmado**.
   - Botão config: `#btn-config`; aba desempenho: `button` com `/desempenho|performance/i`; toggle ULTRA: `#cfg-ultra` (classe `.on`)
   - Estado atual no `<html>`: `modo-ultra`, `modo-economia`, ou normal (nenhuma)
   - Sair do ULTRA: `#ultra-sair`
+- **Mercado da Comunidade (RMT — confirmado no DOM em 2026-11-18):**
+  - Abrir modal: `button[data-modal="community"]`; moedas no HUD: `#tr-gold` (Coins/Ouro), `#tr-diamantes`, `#tr-gemas`.
+  - Controles no `#modal-corpo`: `#cm-anunciar`, `#cm-meus`, `#cm-historico`, `#cm-historico-compras`, `#cm-historico-global` (abre `.cm-folha` "Tabela de preços"), `#cm-deposito`, `#cm-withdraw`.
+  - Tabela de preços (`.cm-folha`): filtros `button.cm-filtro` (`Tudo|Pokemon|Itens|Depósitos|Saques` × `Todas|Coins|Gemas`), lista `.cm-hist-lista .cm-hist-linha`, paginação `.cm-hist-pags`, exportação CSV `#cm-hist-csv` (até 5.000 linhas recentes, limite 1/hora por conexão).
+  - Aba Itens: lista `.cmi-linha` (39 itens); painel direito `.cmi-painel` com seletor `.cmp-op` (`Coins` / `Gemas`).
 
 ## Mecânicas confirmadas
 - **Hunt Analyser ignora tipos:** Squirtle e Bulbasaur mostram o mesmo xp/h para Charmander; amplificação da Wiki: `×2 → ×2,5`, `×4 → ×5,5`, `×0,5 → ×0,33`, `×0,25 → ×0,17`.
+- **Mercado da Comunidade (RMT — Wiki + DOM 2026-11-18):** comissão de venda de itens em Gema é 15% fixa (arredondada para cima `Math.ceil`), paga pelo vendedor; Pokémon em Gema tem alíquota progressiva (`13% / 10% / 7,5%`) + pensão `100k Coins/dia`; retenção de `2 min` ao anunciar; 1 anúncio por item e `30 min` de cooldown após encerrar; preço mínimo `2` un. (Coins ou Gemas). Saque mínimo de Gemas: `1.000` (USDT Solana SPL, `US$ 0,009/Gema`).
 - **ULTRA Economia:** congela HUD (ouro/bolas/poções) e zera lista de captura/cena (0 ms/s JS), mas `#hud-log` continua recebendo eventos e a caixa ULTRA atualiza a cada 10 s. Market e Mapa não abrem no ULTRA.
 - **Modo Economia:** desliga a cena (captura não funciona), mas Market e Mapa abrem normalmente.
 

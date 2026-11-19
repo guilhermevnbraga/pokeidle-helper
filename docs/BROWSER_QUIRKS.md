@@ -20,3 +20,4 @@ Leia este arquivo **antes** de usar o MCP do navegador. Acrescente novas armadil
 - **Alvos fantasma na captura:** `#caidos-lista .caido` às vezes mantém Pokémon que já sumiu do chão; `content.js` ignora o `slot` por 60 s se nenhum arremesso gastar bola.
 - **ULTRA Economia:** Market e Mapa não abrem; HUD congela. Sempre restaurar o ULTRA se sair dele temporariamente.
 - **Em combate ao trocar hunt:** o jogo exibe toast `"Em combate — espere Xs"`; respeitar o cooldown, nunca clicar em "Desistir do Combate".
+- **RMT re-renderiza `#modal-corpo` ao clicar filtros:** botões `.cm-filtro`, `.cm-moeda` e `.cmp-op` recriam nós do DOM — sempre re-consultar elementos após cada clique e checar `.cm-preco.orb` (Gemas) vs sem `.orb` (Coins).

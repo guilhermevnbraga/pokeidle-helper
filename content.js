@@ -35,13 +35,17 @@
 
   // ---------- log + painel ----------
   const logLines = [];
-  let logEl;
+  let logEl, rmtOutEl, rmtBtnEl;
   const log = (...a) => {
     const l = new Date().toLocaleTimeString() + ' ' + a.join(' ');
     logLines.push(l); if (logLines.length > 60) logLines.shift();
     console.log('[pkbot]', l); if (logEl) logEl.textContent = logLines.slice(-12).join('\n');
   };
   const huntState = { next: 0 };
+  const RMT_KEY = 'pkbot-rmt';
+  const rmtState = { scanning: false, last: null };
+  try { rmtState.last = JSON.parse(localStorage.getItem(RMT_KEY) || 'null'); } catch (e) {}
+  const saveRmt = () => { try { localStorage.setItem(RMT_KEY, JSON.stringify(rmtState.last)); } catch (e) {} };
   const ui = { refresh() {} };
   const UI_KEY = 'pkbot-ui';
   const loadUI = () => { try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch (e) { return {}; } };
@@ -85,10 +89,32 @@
       cell('Bola'), sel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta'), nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
     const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2'], [0, 'sem limite']], 'fps', 'Quadros por segundo da cena do jogo. Menos quadros = bem menos CPU; a captura continua funcionando. Use "sem limite" se for jogar na mão.');
-    fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel);    body.append(box);
-    logEl =document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
+    fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel); body.append(box);
+    // Radar RMT (Ouro -> Gema): passivo ao abrir RMT->Itens ou scan sob demanda
+    const rmtBox = document.createElement('div');
+    rmtBox.id = 'pkbot-rmt-box';
+    rmtBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
+    const rmtHead = document.createElement('div');
+    rmtHead.style.cssText = 'display:flex;align-items:center;gap:6px';
+    const rmtTit = document.createElement('span');
+    rmtTit.textContent = 'Radar RMT (Ouro→Gema)';
+    rmtTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#fd8';
+    rmtBtnEl = document.createElement('button');
+    rmtBtnEl.id = 'pkbot-rmt-scan';
+    rmtBtnEl.textContent = 'Escanear';
+    rmtBtnEl.title = 'Lê os books livres dos 8 itens líquidos + Pokémon Sacrifício (sob demanda, só cliques de leitura)';
+    rmtBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#fd83;border:1px solid #fd86;font-size:10px;color:#fff';
+    rmtBtnEl.onclick = () => scanRmt();
+    rmtHead.append(rmtTit, rmtBtnEl);
+    rmtOutEl = document.createElement('pre');
+    rmtOutEl.id = 'pkbot-rmt-out';
+    rmtOutEl.style.cssText = 'margin:4px 0 0;white-space:pre-wrap;font-size:10px;line-height:1.35;color:#dfe;max-height:110px;overflow:auto;user-select:text';
+    rmtBox.append(rmtHead, rmtOutEl);
+    body.append(rmtBox);
+    logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
     p.append(head, body);
+    renderRmt();
 
     const place = () => { // mantém dentro da janela
       const r = p.getBoundingClientRect();
@@ -338,6 +364,247 @@
     } finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
   }
 
+  // ---------- 5: Radar RMT (Ouro -> Gema, passivo + scan sob demanda) ----------
+  function renderRmt(statusMsg) {
+    if (!rmtOutEl || typeof PK_RMT === 'undefined') return;
+    if (rmtBtnEl) rmtBtnEl.textContent = rmtState.scanning ? 'Lendo...' : 'Escanear';
+    if (statusMsg) { rmtOutEl.textContent = statusMsg; return; }
+    const d = rmtState.last;
+    if (!d || !d.routes || !d.routes.length) {
+      rmtOutEl.textContent = 'Abra RMT → Itens ou clique Escanear.';
+      return;
+    }
+    const ageMin = Math.max(0, Math.round((Date.now() - d.at) / 60000));
+    const tag = d.source === 'book' ? 'books livres' : '~estimado (lista)';
+    const best = d.routes[0];
+    const lines = [
+      `1.000G líq ≈ ${PK_RMT.formatCoins(best.coinsFor1000Gems)} (${tag}, ${ageMin}m)`,
+    ];
+    const curGold = gold();
+    const top = d.routes.slice(0, 4);
+    const bestAff = d.routes.find(r => curGold >= r.buyCoins);
+    if (bestAff && !top.some(r => r.id === bestAff.id)) top.push(bestAff);
+    for (const r of top) {
+      const ok = curGold >= r.buyCoins ? '✓' : '○';
+      const warn = r.warnings && r.warnings.length ? ' !' + r.warnings[0] : '';
+      lines.push(`${ok} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${warn}`);
+    }
+    rmtOutEl.textContent = lines.join('\n');
+  }
+
+  // Leitura passiva (0 cliques): só lê .cmi-linha já visíveis quando o usuário abre RMT → Itens
+  let lastPassiveRmt = 0;
+  function readRmtListPassive() {
+    if (typeof PK_RMT === 'undefined' || rmtState.scanning) return;
+    const now = Date.now();
+    if (now - lastPassiveRmt < 3000) return;
+    // Não sobrescrever um scan completo de book feito nos últimos 2 min
+    if (rmtState.last && rmtState.last.source === 'book' && now - rmtState.last.at < 120000) return;
+    const m = $('.modal-caixa[data-modal="community"]');
+    if (!m || !m.offsetParent) return;
+    const rows = $$('.cmi-linha', m);
+    if (!rows.length) return;
+    lastPassiveRmt = now;
+    const curGold = gold();
+    const routes = [];
+    for (const row of rows) {
+      const name = ($('.cmi-nome b', row) || {}).textContent?.trim();
+      const item = PK_RMT.matchLiquidItem(name);
+      if (!item) continue;
+      const prices = $$('.cmi-precos .cmi-de', row);
+      if (prices.length < 2) continue;
+      const cVal = prices[0].classList.contains('nada') ? null : PK_RMT.parseCompactNum(prices[0].textContent);
+      const gVal = prices[1].classList.contains('nada') ? null : PK_RMT.parseCompactNum(prices[1].textContent);
+      if (!cVal || !gVal) continue;
+      const r = PK_RMT.evaluateItemRoute({
+        item,
+        coinsOffer: { bestPrice: cVal, unitsAtBest: 0, totalFreeUnits: 0, skippedTroll: 0 },
+        gemasOffer: { bestPrice: gVal, unitsAtBest: 0, totalFreeUnits: 0 },
+        gold: curGold,
+        source: 'list',
+      });
+      if (r) routes.push(r);
+    }
+    const ranked = PK_RMT.rankRoutes(routes);
+    if (ranked.length) {
+      rmtState.last = { at: now, gold: curGold, source: 'list', routes: ranked };
+      saveRmt();
+      renderRmt();
+    }
+  }
+
+  function parseRmtItemBook(painel) {
+    if (!painel) return [];
+    // Só lê cards de oferta; jamais clica nos botões Comprar/Retido
+    const btns = $$('button', painel).filter(b => /comprar|retido|buy|held/i.test(b.textContent));
+    const seen = new Set(), out = [];
+    for (const b of btns) {
+      const card = b.closest('li, div[class]');
+      if (!card || seen.has(card)) continue;
+      seen.add(card);
+      const t = (card.innerText || card.textContent || '').replace(/\s+/g, ' ').trim();
+      const qm = t.match(/(\d+(?:\.\d+)*)\s*×\s*un\./i);
+      const qty = qm ? (PK_RMT.parseCompactNum(qm[1]) || 1) : 1;
+      const pm = t.match(/(\d+(?:\.\d+)*)\s*(?:por unidade|per unit|💬|comprar|retido|buy|held)/i);
+      const price = pm ? PK_RMT.parseCompactNum(pm[1]) : null;
+      const held = /retido|held/i.test(t);
+      if (price) out.push({ price, qty, held });
+    }
+    return out;
+  }
+
+  function parseRmtPokeCards(corpo, wantGems) {
+    const cards = $$('.cm-card', corpo).slice(0, 15);
+    const out = [];
+    for (const c of cards) {
+      const priceEl = $('.cm-preco', c);
+      if (priceEl) {
+        const isOrb = priceEl.classList.contains('orb');
+        if (typeof wantGems === 'boolean' && isOrb !== wantGems) continue;
+        const price = PK_RMT.parseCompactNum(priceEl.textContent);
+        const held = /retido|held/i.test(c.innerText || c.textContent || '');
+        if (price) out.push({ price, qty: 1, held });
+      }
+    }
+    return out;
+  }
+
+  async function waitForPokeCurrency(wantGems, maxMs = 2600) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < maxMs) {
+      const m = $('.modal-caixa[data-modal="community"]');
+      const corpo = m && ($('#modal-corpo', m) || m);
+      if (corpo) {
+        const list = parseRmtPokeCards(corpo, wantGems);
+        if (list.length) return list;
+      }
+      await sleep(250);
+    }
+    return [];
+  }
+
+  async function scanRmt() {
+    if (typeof PK_RMT === 'undefined') return log('RMT: módulo PK_RMT indisponível');
+    if (rmtState.scanning) return;
+    if (energyNow() === 'ultra') {
+      renderRmt('Saia do modo ULTRA para escanear o RMT.');
+      return log('RMT: em modo ULTRA (não sai sozinho)');
+    }
+    if (busy) { renderRmt('Aguarde: outra ação em andamento.'); return; }
+    busy = true; rmtState.scanning = true;
+    const wasOpen = !!($('.modal-caixa[data-modal="community"]') && $('.modal-caixa[data-modal="community"]').offsetParent);
+    const getCorpo = () => { const m = $('.modal-caixa[data-modal="community"]'); return (m && m.offsetParent) ? ($('#modal-corpo', m) || m) : null; };
+    renderRmt('Escaneando books livres do RMT...');
+    try {
+      if (!wasOpen) {
+        await closeModal();
+        const nav = navBtn('community');
+        if (!nav) { renderRmt('Botão RMT não encontrado.'); return; }
+        nav.click(); await sleep(1000);
+      }
+      let corpo = getCorpo();
+      if (!corpo) { renderRmt('Modal RMT não abriu.'); return; }
+      const closeLeaf = $('.cm-folha .cm-fechar'); closeLeaf && closeLeaf.click();
+      await sleep(300);
+
+      // 1) Aba Itens -> Categoria Todas (re-consultando nós a cada clique pois o modal re-renderiza)
+      const btnItens = $$('button.cm-filtro', corpo).find(b => /^(itens|items)$/i.test(b.textContent.trim()));
+      if (btnItens && !btnItens.classList.contains('on')) { btnItens.click(); await sleep(900); }
+      corpo = getCorpo(); if (!corpo) return;
+      const btnTodas = $$('button.cm-filtro', corpo).find(b => /^(todas|all)$/i.test(b.textContent.trim()));
+      if (btnTodas && !btnTodas.classList.contains('on')) { btnTodas.click(); await sleep(900); }
+
+      const curGold = gold();
+      const routes = [];
+      corpo = getCorpo(); if (!corpo) return;
+      const targetNames = $$('.cmi-linha', corpo)
+        .map(row => ($('.cmi-nome b', row) || {}).textContent?.trim())
+        .filter(name => PK_RMT.matchLiquidItem(name));
+
+      for (let i = 0; i < targetNames.length; i++) {
+        const name = targetNames[i];
+        const item = PK_RMT.matchLiquidItem(name);
+        corpo = getCorpo(); if (!corpo) break;
+        const row = $$('.cmi-linha', corpo).find(el => ($('.cmi-nome b', el) || {}).textContent?.trim() === name);
+        if (!row) continue;
+        renderRmt(`Lendo (${i + 1}/${targetNames.length + 1}): ${item.label}...`);
+        row.click(); await sleep(800);
+
+        let coinsOffer = null, gemasOffer = null;
+        corpo = getCorpo();
+        let painel = corpo && $('.cmi-painel', corpo);
+        const btnC = $$('button.cmp-op', painel || corpo || document).find(b => /coins/i.test(b.textContent));
+        if (btnC) {
+          btnC.click(); await sleep(650);
+          painel = $('.cmi-painel', getCorpo() || document);
+          coinsOffer = PK_RMT.pickBestFreeOffer(parseRmtItemBook(painel), item.minSanityCoins);
+        }
+        corpo = getCorpo();
+        painel = corpo && $('.cmi-painel', corpo);
+        const btnG = $$('button.cmp-op', painel || corpo || document).find(b => /gema|gem/i.test(b.textContent));
+        if (btnG) {
+          btnG.click(); await sleep(650);
+          painel = $('.cmi-painel', getCorpo() || document);
+          gemasOffer = PK_RMT.pickBestFreeOffer(parseRmtItemBook(painel), 2);
+        }
+        const r = PK_RMT.evaluateItemRoute({ item, coinsOffer, gemasOffer, gold: curGold, source: 'book' });
+        if (r) routes.push(r);
+      }
+
+      // 2) Aba Pokemon -> Piso de Sacrifício (N >= 3,5), re-consultando botões pois cada filtro re-renderiza
+      renderRmt(`Lendo (${targetNames.length + 1}/${targetNames.length + 1}): Poke Sacrifício...`);
+      corpo = getCorpo();
+      const btnPoke = corpo && $$('button.cm-filtro', corpo).find(b => /^pok[eé]mon$/i.test(b.textContent.trim()));
+      if (btnPoke) {
+        btnPoke.click(); await sleep(900);
+        corpo = getCorpo();
+        const limpar = corpo && $('#cm-limpar', corpo); limpar && limpar.click(); await sleep(650);
+        corpo = getCorpo();
+        const ordMenor = corpo && $$('button, option', corpo).find(el => /menor pre[çc]o|lowest price/i.test(el.textContent));
+        if (ordMenor && ordMenor.tagName === 'OPTION') {
+          const sel = ordMenor.closest('select');
+          if (sel) { sel.value = ordMenor.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+        } else if (ordMenor) ordMenor.click();
+        await sleep(800);
+
+        let pCoins = null, pGemas = null;
+        corpo = getCorpo();
+        const mCoins = corpo && $$('button.cm-moeda', corpo).find(b => /coins/i.test(b.textContent));
+        if (mCoins) {
+          mCoins.click();
+          const cList = await waitForPokeCurrency(false);
+          pCoins = PK_RMT.pickBestFreeOffer(cList, 5e6);
+        }
+        corpo = getCorpo();
+        const mGemas = corpo && $$('button.cm-moeda', corpo).find(b => /gema|gem/i.test(b.textContent));
+        if (mGemas) {
+          mGemas.click();
+          const gList = await waitForPokeCurrency(true);
+          pGemas = PK_RMT.pickBestFreeOffer(gList, 2);
+        }
+        const rSac = PK_RMT.evaluateSacrificeRoute({ coinsOffer: pCoins, gemasOffer: pGemas, gold: curGold });
+        if (rSac) routes.push(rSac);
+      }
+
+      const ranked = PK_RMT.rankRoutes(routes);
+      rmtState.last = { at: Date.now(), gold: curGold, source: 'book', routes: ranked };
+      saveRmt();
+      if (ranked.length) {
+        log('RMT melhor:', ranked[0].label, PK_RMT.formatCoins(ranked[0].coinsPerGem) + '/G', '| 1.000G ≈', PK_RMT.formatCoins(ranked[0].coinsFor1000Gems));
+      } else {
+        log('RMT: nenhuma rota válida lida');
+      }
+    } catch (e) {
+      log('RMT erro:', e.message);
+      renderRmt('Erro no scan RMT: ' + e.message);
+      return;
+    } finally {
+      if (!wasOpen) await closeModal();
+      rmtState.scanning = false; busy = false;
+      renderRmt();
+    }
+  }
+
   // ---------- loop (Worker evita throttle em aba em segundo plano) ----------
   let lastTick = Date.now(), lastSupply = 0, warnedCapture = false;
   async function tick() {
@@ -346,6 +613,7 @@
       const now = Date.now(), gap = now - lastTick; lastTick = now;
       if (gap > 8000) { log('relógio ficou parado', Math.round(gap / 1000) + 's (aba oculta/freada?) - checando estoque já'); lastSupply = 0; }
       captureTick();
+      readRmtListPassive();
       if (st.potions && !busy && now - lastSupply >= 5000) { lastSupply = now; energyNow() === 'ultra' ? ultraSupplyTick() : checkSupplies(); }
       if ((st.capture || st.eterna) && energyNow() !== 'normal' && !warnedCapture) { warnedCapture = true; log('aviso: captura não funciona em Economia/ULTRA (a lista de corpos não atualiza)'); }
       if (energyNow() === 'normal') warnedCapture = false;
@@ -381,7 +649,7 @@
     } catch (e) { setInterval(tick, 1000); log('timer: setInterval (pode ser limitado em aba oculta)'); }
   }
 
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, rmtState, scanRmt, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);

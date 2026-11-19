@@ -4,10 +4,11 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `node scripts/compact-pr
 
 ## Ambiente de desenvolvimento & IA
 - [x] Arquitetura Antigravity econômica: `AGENTS.md`, hook `SessionStart`, Git `pre-commit`, `scripts/check.mjs`, `compact-progress.mjs`, skills `/handoff`, `/study-game`, `/feature` e `docs…
-- [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js` (`tests/types.test.mjs`).
-- [ ] Conexão MCP `chrome-devtools` (`--auto-connect`) validada com `pokeidle.io/app` no Chrome Stable · NÃO validado: aguarda usuário ativar remote debugging e reiniciar sessão
+- [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js` e `rmt.js` (`tests/types.test.mjs`, `tests/rmt.test.mjs`).
+- [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
-## Extensão MV3 (estado atual v0.3.0)
+## Extensão MV3 (estado atual v0.4.0)
+- [x] Radar RMT (Ouro→Gema) em `rmt.js` + `content.js`: leitura passiva em `RMT → Itens` e scan sob demanda de books livres + Pokémon Sacrifício, validado em Node e no Chrome.
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.
 - [x] Modo 4 (Gerenciador de hunt): lê Hunt Analyser em todas as regiões liberadas, aplica vantagem de tipo (`types.js`) e aguarda combate sem desistir.

@@ -27,6 +27,12 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
 - Só troca se a melhor render mais de 10% acima da atual (`huntGain`). Reavalia a cada 10 minutos (`huntEvalMs`).
 - Se o jogo responder "Em combate — espere Xs", espera esse tempo e tenta de novo, até 8 vezes. Não usa "Desistir do Combate".
 
+### Radar RMT (Ouro → Gema)
+
+- Funciona **100% sob demanda ou passivamente** (não varre em segundo plano, não compra nem anuncia nada e não sai do modo ULTRA sozinho).
+- **Passivo:** ao abrir `RMT → Itens`, lê os preços da lista na hora e estima o custo por Gema líquida apenas para os itens com liquidez real comprovada (ignora Pedras/Stones, que não têm demanda orgânica em Gemas).
+- **Botão `Escanear`:** percorre suavemente os books dos 8 itens líquidos + piso de Pokémon de Sacrifício (`N ≥ 3,5`), descarta anúncios `Retido` e preços trolls, aplica a comissão oficial (`15%` com arredondamento para cima em itens; `13%` + pensão de `100k/dia` em Pokémon) e mostra as melhores rotas atuais + estimativa de Coins para **1.000 Gemas líquidas**, indicando o que cabe no seu saldo atual (`✓` / `○`).
+
 ## Painel
 
 - **Arrastar:** pelo cabeçalho. A posição fica salva.
