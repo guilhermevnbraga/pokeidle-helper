@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Hook Git pre-commit (configurado via: git config core.hooksPath .githooks)
+# Bloqueia commit se sintaxe JS, manifest MV3 ou testes unitários falharem.
+node scripts/check.mjs

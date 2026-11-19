@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--auto-connect",
+        "--categoryExtensions",
+        "--no-category-emulation",
+        "--no-category-performance",
+        "--no-category-memory",
+        "--no-usage-statistics",
+        "--no-source-maps",
+        "--redactNetworkHeaders",
+        "--screenshotFormat=webp",
+        "--screenshotQuality=75",
+        "--screenshotMaxWidth=1280"
+      ]
+    }
+  }
+}
