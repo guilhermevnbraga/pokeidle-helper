@@ -13,7 +13,8 @@ Sempre separe **Confirmado no DOM** de **Hipótese / NÃO confirmado**.
 - **Modais gerais:** `.modal-caixa` (visível quando `offsetParent` truthy); botão fechar = `button` com `innerText.trim() === '×'`; abertura via `button[data-modal="<key>"]` (`market`, `mapa`).
 - **HUD:**
   - Ouro: `#tr-gold`
-  - Hunt atual: `#hud-hunt` (nome antes de `·`)
+  - Hunt atual: `#hud-hunt` e `#eco-onde` (nome antes de `·`, ex.: `"Geodude · nível 1"`, `"Geodude · Outland 2 · nível 100"`)
+  - Estado da cena (`#palco` — confirmado no DOM em 2026-11-19): `.hunt-ativa` (em hunt ou safari), `.safari-ativo` (no Safari), `.centro-ativo` (Centro Pokémon ou Casa); botões de saída/cura sem `.hidden`: `#ir-centro` (`#ir-centro-conta`) / `#eco-ir-centro` (`#eco-ir-centro-conta`), `#centro-curar` / `#eco-curar` (praça do Centro Pokémon), `#casa-sair` (dentro da Casa), `#eco-abandonar` (Arena Boss). `#desistir-combate`/`#eco-desistir` nunca devem ser clicados.
   - Log de combate: `#hud-log` (mensagens com `+X xp pokemon`, `poção usada`/`potion used`, `derrotado!`, `escapou e sumiu`)
   - Toasts: `#toast` (e elementos dinâmicos no `document.body`)
   - Pokébolas (auto-chip): `#auto-ball-opts .auto-chip` (`title` começa com nome da bola, `.q` = quantidade)
@@ -30,7 +31,7 @@ Sempre separe **Confirmado no DOM** de **Hipótese / NÃO confirmado**.
 - **Mapa & Hunt Analyser (`data-modal="mapa"`):**
   - Modo de visualização: `.mapa-modo-bt` (índice `0` = visão de mapa)
   - Regiões: `button.mapa-reg-bt` (bloqueadas têm `.mapa-area-travada`)
-  - Marcadores: `#mapa-tela .marcador` (`dataset.travado === '0'`, `dataset.slug`, `title` = `"<nome> — ..."`)
+  - Marcadores: `#mapa-tela .marcador` (`dataset.travado === '0'`, `dataset.slug`, `title` = `"<nome> — ..."`, classe `.on` indica `h.slug === estado.eu.huntSlug` — confirmado no DOM em 2026-11-19)
   - Analyser (ao dar `mouseover`/`mouseenter` no marcador): `#hunt-analyser-corpo`; números folha em ordem = `[XP treinador/h, XP pokemon/h, Ouro/h]`; tipos do monstro = `.tipo` antes de `.ha-sec`
 - **Configurações / Modos de tela:**
   - Botão config: `#btn-config`; aba desempenho: `button` com `/desempenho|performance/i`; toggle ULTRA: `#cfg-ultra` (classe `.on`)
@@ -45,6 +46,7 @@ Sempre separe **Confirmado no DOM** de **Hipótese / NÃO confirmado**.
 
 ## Mecânicas confirmadas
 - **Hunt Analyser ignora tipos:** Squirtle e Bulbasaur mostram o mesmo xp/h para Charmander; amplificação da Wiki: `×2 → ×2,5`, `×4 → ×5,5`, `×0,5 → ×0,33`, `×0,25 → ×0,17`.
+- **Trava de 3 s em combate ao sair/trocar hunt (confirmado em `app.js` 2026-11-19):** todo golpe dado/recebido rearma `centroLivreEm = agora + 3000`. O jogo atualiza `#ir-centro.disabled` (normal) e `#eco-ir-centro.disabled` (economia) a cada 80 ms com `restaCombateHuntMs() > 0` (e contador em `#ir-centro-conta`/`#eco-ir-centro-conta`). Em modo normal, sem mob vivo na onda (`huntSemMobVivoNoCampo`) o botão também libera imediatamente entre ondas; em Economia (`semCena()`), depende só dos 3 s reais. No Centro Pokémon (`#centro-curar`/`#eco-curar` visíveis), não há combate e a troca pelo mapa fica livre (salvo cooldown de porta `trocaHuntLivreEm`).
 - **Mercado da Comunidade (RMT — Wiki + DOM 2026-11-18):** comissão de venda de itens em Gema é 15% fixa (arredondada para cima `Math.ceil`), paga pelo vendedor; Pokémon em Gema tem alíquota progressiva (`13% / 10% / 7,5%`) + pensão `100k Coins/dia`; retenção de `2 min` ao anunciar; 1 anúncio por item e `30 min` de cooldown após encerrar; preço mínimo `2` un. (Coins ou Gemas). Saque mínimo de Gemas: `1.000` (USDT Solana SPL, `US$ 0,009/Gema`).
 - **ULTRA Economia:** congela HUD (ouro/bolas/poções) e zera lista de captura/cena (0 ms/s JS), mas `#hud-log` continua recebendo eventos e a caixa ULTRA atualiza a cada 10 s. Market e Mapa não abrem no ULTRA.
 - **Modo Economia:** desliga a cena (captura não funciona), mas Market e Mapa abrem normalmente.

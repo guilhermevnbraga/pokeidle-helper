@@ -9,6 +9,8 @@
     buyCooldownMs: 60000,    // não tenta comprar o mesmo item de novo antes disso
     ultraCheckMs: 3 * 60000, // no ULTRA, de quanto em quanto tempo sai para atualizar os estoques
     huntEvalMs: 10 * 60000,  // reavalia a cada 10 min (a leitura do Hunt Analyser é instantânea)
+    huntRetryMs: 2 * 60000,  // se não houve brecha de 3s fora de combate, tenta de novo mais cedo
+    combatWaitMs: 45000,     // tempo máximo esperando a brecha de 3s sem dano p/ ir ao Centro Pokémon
     huntGain: 1.10,          // só troca de hunt se a melhor render >10% mais que a atual
     minRatio: 0.5,           // descarta hunts em que (ataque amplificado / dano recebido amplificado) < 0.5
     captureRe: /captur(ou|ad[oa]|a!|ed)|caught|gotcha/i,
@@ -336,7 +338,14 @@
     if (!els.length) return [];
     return [...new Set($$('.tipo', els[0].parentElement).map(t => t.textContent.trim().toUpperCase()))];
   };
-  const currentHuntName = () => ((($('#hud-hunt') || {}).innerText || '').split('·')[0] || '').trim().toLowerCase();
+  const currentHuntName = () => PK_HUNT.normalizeHuntName((($('#hud-hunt') || $('#eco-onde') || {}).innerText) || '');
+  const inSafari = () => !!($('#palco') && $('#palco').classList.contains('safari-ativo'));
+  const inHunt = () => !!($('#palco') && $('#palco').classList.contains('hunt-ativa')) && !inSafari();
+  const inCenter = () => [$('#centro-curar'), $('#eco-curar')].some(b => b && !b.classList.contains('hidden'));
+  const centerGoBtn = () => energyNow() === 'economia'
+    ? { btn: $('#eco-ir-centro'), conta: $('#eco-ir-centro-conta') }
+    : { btn: $('#ir-centro'), conta: $('#ir-centro-conta') };
+  const centerHealBtn = () => (energyNow() === 'economia' ? $('#eco-curar') : $('#centro-curar'));
   const regionBtns = () => $$('button.mapa-reg-bt', modalVisible()).filter(b => !b.classList.contains('mapa-area-travada'));
   async function openMap() {
     await closeModal(); const nav = navBtn('mapa'); if (!nav) throw new Error('botão do Mapa não encontrado'); nav.click(); await sleep(1000);
@@ -350,7 +359,14 @@
       if (rb) { rb.click(); await sleep(700); }
       for (const mk of $$('#mapa-tela .marcador').filter(x => x.dataset.travado === '0')) {
         hover(mk); await sleep(120);
-        const a = readAnalyser(); if (a.xp != null) all[mk.dataset.slug] = { ...a, nome: (mk.title || '').split(' — ')[0].toLowerCase() };
+        const a = readAnalyser();
+        if (a.xp != null) {
+          all[mk.dataset.slug] = {
+            ...a,
+            nome: PK_HUNT.normalizeHuntName((mk.title || '').split(' — ')[0]),
+            active: mk.classList.contains('on'),
+          };
+        }
       }
     }
     return all;
@@ -359,21 +375,93 @@
     let mk = $$('#mapa-tela .marcador').find(x => x.dataset.slug === slug); if (mk) return mk;
     for (const rb of regionBtns()) { rb.click(); await sleep(700); mk = $$('#mapa-tela .marcador').find(x => x.dataset.slug === slug); if (mk) return mk; }
   }
-  // troca de hunt respeitando "Em combate — espere Xs sem tomar nem dar dano"
-  async function switchTo(slug, nome) {
-    for (let i = 0; i < 8; i++) {
+  // Sai da hunt respeitando o cooldown de 3s sem tomar/dar dano (nunca clica em "Desistir do Combate"),
+  // vai ao Centro Pokémon e cura a equipe antes de entrar na nova hunt.
+  async function goToCenterAndHeal({ checkStop = () => false } = {}) {
+    await closeModal();
+    if (!inCenter()) {
+      if (!inHunt()) return { ok: false, reason: 'not-in-hunt' };
+      const deadline = Date.now() + CFG.combatWaitMs;
+      let loggedWait = false;
+      while (Date.now() < deadline) {
+        if (checkStop()) return { ok: false, reason: 'cancelled' };
+        if (inCenter()) break;
+        const { btn, conta } = centerGoBtn();
+        const ready = PK_HUNT.isCenterButtonReady({
+          exists: !!btn,
+          hidden: !btn || !!btn.closest('.hidden'),
+          disabled: !btn || btn.disabled,
+          countdownText: conta ? conta.textContent : '',
+        });
+        if (ready) {
+          log('saindo da hunt -> Centro Pokemon');
+          btn.click();
+          const confirmUntil = Date.now() + 1600;
+          while (Date.now() < confirmUntil) {
+            if (inCenter()) break;
+            await sleep(150);
+          }
+          if (inCenter()) break;
+          loggedWait = false; // outro mob atacou no instante do clique; aguarda próxima brecha
+        } else if (!loggedWait) {
+          const sec = PK_HUNT.parseCenterCountdownSec(conta ? conta.textContent : '');
+          log('em combate, aguardando 3s sem dano p/ ir ao Centro Pokemon' + (sec > 0 ? ' (' + sec.toFixed(1) + 's)' : ''));
+          loggedWait = true;
+        }
+        await sleep(100);
+      }
+      if (!inCenter()) {
+        log('sem brecha de 3s fora de combate p/ ir ao Centro Pokemon; tento novamente em breve');
+        return { ok: false, reason: 'combat-timeout' };
+      }
+    }
+    const heal = centerHealBtn();
+    if (heal && !heal.classList.contains('hidden')) {
+      log('curando equipe no Centro Pokemon');
+      heal.click();
+      await sleep(900);
+    }
+    return { ok: true };
+  }
+  // Entra na hunt alvo estando fora de combate (no Centro Pokémon), respeitando eventual cooldown de porta
+  async function enterHunt(slug, nome, { checkStop = () => false } = {}) {
+    const targetName = PK_HUNT.normalizeHuntName(nome || slug);
+    for (let i = 0; i < 5; i++) {
+      if (checkStop()) return false;
       await openMap();
-      const mk = await findMarker(slug); if (!mk) return log('marcador não achado:', slug);
-      if (CFG.dry) return log('[dry] trocaria p/', slug);
+      const mk = await findMarker(slug); if (!mk) { log('marcador não achado:', slug); return false; }
       mk.click(); await sleep(900);
       const toast = (($('#toast') || {}).innerText || '');
-      const w = toast.match(/(?:em combate|in combat).*?(?:espere|wait)\s*([\d.,]+)\s*s/i);
-      if (w) { const s = parseFloat(w[1].replace(',', '.')) + 0.6; log('em combate, aguardando', s.toFixed(1) + 's'); await closeModal(); await sleep(s * 1000); continue; }
+      const w = PK_HUNT.parseWaitToast(toast);
+      if (w) {
+        const s = w.sec + 0.6;
+        log(w.kind === 'combat' ? 'em combate, aguardando' : 'cooldown de troca, aguardando', s.toFixed(1) + 's');
+        await closeModal(); await sleep(s * 1000); continue;
+      }
       await closeModal(); await sleep(500);
-      if (currentHuntName().startsWith(nome)) return log('hunt ->', nome);
-      log('troca não confirmada (tentativa', i + 1 + ')'); await sleep(2000);
+      if (inHunt() && PK_HUNT.isSameHunt({ inHunt: true, curSlug: null, curName: currentHuntName(), targetSlug: slug, targetName })) {
+        log('hunt ->', targetName);
+        return true;
+      }
+      log('entrada na hunt não confirmada (tentativa', i + 1 + ')'); await sleep(1500);
     }
-    log('desisti de trocar p/', slug, '- tento no próximo ciclo');
+    log('desisti de entrar em', slug, '- tento no próximo ciclo');
+    return false;
+  }
+  // Troca de hunt com segurança: nunca troca p/ o mapa atual; volta ao Centro Pokémon, cura e entra no novo mapa.
+  async function switchTo(slug, nome, curSlug = null, opts = {}) {
+    const targetName = PK_HUNT.normalizeHuntName(nome || slug);
+    if (PK_HUNT.isSameHunt({ inHunt: inHunt(), curSlug, curName: currentHuntName(), targetSlug: slug, targetName })) {
+      log('já estou na hunt', targetName, '- sem troca');
+      return true;
+    }
+    if (CFG.dry) { log('[dry] iria ao Centro Pokemon, curaria e trocaria p/', slug); return true; }
+    const cp = await goToCenterAndHeal(opts);
+    if (!cp.ok) {
+      if (cp.reason === 'combat-timeout') huntState.next = Date.now() + Math.min(CFG.huntEvalMs, CFG.huntRetryMs);
+      return false;
+    }
+    return enterHunt(slug, targetName, opts);
   }
   async function huntTick() {
     if (!st.hunt || busy || Date.now() < huntState.next) return;
@@ -381,21 +469,25 @@
     let voltarUltra = false;
     try {
       voltarUltra = await leaveUltra();
+      const onHunt = inHunt(), onCenter = inCenter();
+      if (!onHunt && !onCenter) return log('hunt: fora de hunt/Centro (Safari/Boss/Casa) — aguardando');
       const all = await scanHunts(); await closeModal();
-      const list = Object.entries(all); if (!list.length) return log('analyser sem dados');
       const cur = currentHuntName(), mine = myTypes();
+      const activeEntry = Object.entries(all).find(([, v]) => v.active);
+      const curSlug = onHunt && activeEntry ? activeEntry[0] : null;
+      if (!mine.length) log('aviso: não li o tipo do pokemon em campo; ignorando tipos');
       // O Analyser ignora o tipo (comprovado: Squirtle e Bulbasaur dão o mesmo xp/h p/ um Charmander).
       // Então: desconta hunts desfavoráveis (ratio<1) e descarta as ruins (ratio<minRatio, ou golpe imune).
-      for (const [, v] of list) { v.m = PK_TYPES.matchup(mine, v.types); v.score = v.xp * Math.min(1, v.m.ratio); v.ok = v.m.off > 0 && v.m.ratio >= CFG.minRatio; }
-      if (!mine.length) log('aviso: não li o tipo do pokemon em campo; ignorando tipos');
-      const curE = list.find(([, v]) => v.nome === cur);
-      const pool = list.some(([, v]) => v.ok) ? list.filter(([, v]) => v.ok) : list;
-      pool.sort((a, b) => (b[1].score - a[1].score) || (b[1].m.ratio - a[1].m.ratio) || (b[1].gold - a[1].gold) || ((b[1].nome === cur) - (a[1].nome === cur)));
-      const [slug, best] = pool[0];
+      const dec = PK_HUNT.pickBestHunt({
+        hunts: all, myTypes: mine, curSlug, curName: cur, inHunt: onHunt,
+        minRatio: CFG.minRatio, huntGain: CFG.huntGain, matchupFn: PK_TYPES.matchup,
+      });
+      if (dec.action === 'none') { huntState.next = Date.now() + 30000; return log('analyser sem dados (tento em 30s)'); }
+      const { best, current } = dec;
       log('meus tipos:', mine.join('/') || '?', '| melhor:', best.nome, '(' + best.types.join('/') + ')', best.xp + ' xp/h ×' + best.m.ratio.toFixed(2),
-        '| atual:', cur, curE ? curE[1].xp + ' xp/h ×' + curE[1].m.ratio.toFixed(2) : '?');
-      if (curE && curE[1].ok && best.score <= curE[1].score * CFG.huntGain) return; // sem ganho relevante: fica onde está
-      await switchTo(slug, best.nome);
+        '| atual:', onCenter ? 'Centro Pokemon' : (cur || '?'), current ? current.xp + ' xp/h ×' + current.m.ratio.toFixed(2) : '?');
+      if (dec.action === 'stay') return; // já está na melhor hunt ou sem ganho relevante
+      await switchTo(best.slug, best.nome, curSlug, { checkStop: () => !st.hunt });
     } finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
   }
 

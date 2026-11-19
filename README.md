@@ -24,8 +24,8 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
 - Lê o **Hunt Analyser** do próprio jogo (hover nos marcadores do Mapa) para obter xp/h e ouro/h de todas as hunts liberadas, em todas as regiões abertas.
 - O Analyser ignora o tipo, então o bot aplica a vantagem de tipo por conta própria (`types.js`). Usa os tipos do Pokémon em campo contra os da hunt, nos dois sentidos, com a amplificação da hunt descrita na Wiki: ×2 vira ×2,5, ×4 vira ×5,5, ×0,5 vira ×0,33 e ×0,25 vira ×0,17.
 - Hunts desfavoráveis têm o xp/h descontado, e as muito ruins (`minRatio`) são descartadas.
-- Só troca se a melhor render mais de 10% acima da atual (`huntGain`). Reavalia a cada 10 minutos (`huntEvalMs`).
-- Se o jogo responder "Em combate — espere Xs", espera esse tempo e tenta de novo, até 8 vezes. Não usa "Desistir do Combate".
+- Nunca tenta trocar para o mapa em que você já está (identifica a hunt ativa pelo marcador `.on` + estado da cena), e só troca para outra se a melhor render mais de 10% acima da atual (`huntGain`). Reavalia a cada 10 minutos (`huntEvalMs`).
+- Ao trocar, aguarda a brecha de 3 s sem dar/tomar dano até o botão **Ir para o Centro Pokémon** (`#ir-centro` / `#eco-ir-centro`) ficar liberado, volta ao Centro Pokémon, cura a equipe (`#centro-curar` / `#eco-curar`) e só então entra na nova hunt. Nunca usa "Desistir do Combate" e não interfere em Safari, Arena de Boss/Místico ou Casa.
 
 ### Radar RMT (Ouro → Gema)
 

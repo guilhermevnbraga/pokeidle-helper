@@ -4,7 +4,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 
 ## Ambiente de desenvolvimento & IA
 - [x] Arquitetura Antigravity econômica: `AGENTS.md`, hook `SessionStart`, Git `pre-commit`, `scripts/check.mjs`, `compact-progress.mjs`, skills `/handoff`, `/study-game`, `/feature` e `docs…
-- [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js` e `rmt.js` (`tests/types.test.mjs`, `tests/rmt.test.mjs`).
+- [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js`, `hunt.js` e `rmt.js` (`tests/*.test.mjs`).
 - [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
 ## Extensão MV3 (estado atual v0.5.0)
@@ -13,7 +13,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.
 - [ ] Hardening Market/multi-conta (`content.js`): aba Comprar, card fresco, compra parcial, fila, aviso bola 0 e `cena` só no console · NÃO validado: compra real pós-fix no perfil 2
-- [x] Modo 4 (Gerenciador de hunt): lê Hunt Analyser em todas as regiões liberadas, aplica vantagem de tipo (`types.js`) e aguarda combate sem desistir.
+- [ ] Modo 4 (Gerenciador de hunt v2, `hunt.js` + `content.js`): espera 3s em combate, volta ao Centro Pokémon… · NÃO validado: troca ao vivo pós-reload nos perfis secundários e modo Economia
 - [x] Limitador de FPS (`fps.js`, `world: MAIN`) e timers do jogo espelhados em Worker para captura continuar em aba oculta.
 - [x] Alarme de reserva de 30 s no service worker (`background.js`) e bloqueio de descarte da aba (`autoDiscardable: false`).
 - [ ] Modo 1 (Captura com parada automática): regex `captureRe` sobre toasts/log · NÃO confirmado com uma captura real

@@ -15,7 +15,7 @@
     },
     {
       "matches": ["https://pokeidle.io/app*"],
-      "js": ["types.js", "rmt.js", "content.js"],
+      "js": ["types.js", "hunt.js", "rmt.js", "content.js"],
       "run_at": "document_idle"
     }
   ]

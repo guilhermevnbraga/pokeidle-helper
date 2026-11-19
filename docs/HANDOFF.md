@@ -1,6 +1,6 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-18 (Radar RMT v0.5.0 com plano de ação acionável). Versão da extensão: `0.5.0`. Último commit de código: `e41a772`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 18 passando (`types.js` + `rmt.js`). Histórico em `docs/archive/` (só Grep).
+Atualizado: 2026-11-19 (Gerenciador de hunt com Centro Pokémon + cura + trava 3s + proteção contra troca para o mapa atual). Versão da extensão: `0.5.0`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 24 passando (`types.js` + `hunt.js` + `rmt.js`). Histórico em `docs/archive/` (só Grep).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
