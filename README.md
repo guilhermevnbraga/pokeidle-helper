@@ -28,7 +28,7 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
   - **XP:** maximiza XP/h real em hunts sustentáveis (descarta hunts lentas ou que queimam poções).
   - **Lucro/Outland:** maximiza lucro líquido/h + pedras + drops raros da Outland (selecionando automaticamente o maior tier de Outland liberado para o seu nível).
   - **Shiny/Caça:** exclui a Outland (onde Shiny não rola) e prioriza velocidade de abates/capturas com bom lucro e XP.
-- **Botão `Analisar` + Top 4 com botão `Ir`:** mostra na hora a comparação da hunt atual vs Top 4 (`XP/h`, `Lucro líq/h`, `abates/h`, `poções/h`) e permite trocar com 1 clique ou deixar o modo 4 automático rodando (reavalia a cada 10 min com histerese de +10%).
+- **100% automático (sem botão manual):** basta marcar **4 Gerenciador de hunt** e escolher o foco na mesma linha. Ele avalia na hora, troca para a melhor hunt sozinho e reavalia automaticamente sempre que você troca de foco, troca ou evolui o Pokémon ativo, cruza um novo patamar de nível / tier de Outland, acorda no Centro Pokémon, ou a cada 10 min (com histerese de +10%). Um resumo discreto abaixo do checkbox mostra a hunt escolhida (`XP/h`, `Lucro líq/h`, `abates/h`, `poções/h`) e as alternativas.
 - **Troca segura:** nunca troca para o mapa atual; aguarda a brecha de 3 s fora de combate (`#ir-centro` / `#eco-ir-centro`), cura no Centro Pokémon e só então entra na nova hunt. Nunca usa "Desistir do Combate".
 
 ### Analisador Otimizado de Pokébola

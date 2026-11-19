@@ -772,6 +772,33 @@ const PK_HUNT = (() => {
     return sign + Math.round(abs);
   }
 
+  // Decide se o Gerenciador de Hunt automático deve reavaliar imediatamente (sem esperar os 10 min):
+  // - mudou espécie ou tipos do Pokémon ativo (troca de ativo ou evolução)
+  // - treinador cruzou novo patamar de nível (destrava novas hunts/regiões/tiers de Outland)
+  // - jogador está parado no Centro Pokémon
+  function shouldAutoReeval({ prev, cur, inCenter = false }) {
+    if (inCenter) return { reeval: true, reason: 'center' };
+    if (!prev || !cur) return { reeval: false, reason: 'no-baseline' };
+    const pName = String(prev.name || '').trim().toLowerCase();
+    const cName = String(cur.name || '').trim().toLowerCase();
+    if (pName && cName && pName !== cName) return { reeval: true, reason: 'active-changed' };
+    const pTypes = (prev.types || []).join('/');
+    const cTypes = (cur.types || []).join('/');
+    if (pTypes && cTypes && pTypes !== cTypes) return { reeval: true, reason: 'types-changed' };
+    const pTr = Number(prev.trainerLevel) || 0;
+    const cTr = Number(cur.trainerLevel) || 0;
+    if (pTr > 0 && cTr > pTr) {
+      if (bestOutlandTierForLevel(cTr).numero !== bestOutlandTierForLevel(pTr).numero) {
+        return { reeval: true, reason: 'outland-tier-up' };
+      }
+      const step = cTr < 100 ? 5 : (cTr < 500 ? 15 : 50);
+      if (Math.floor(cTr / step) > Math.floor(pTr / step)) {
+        return { reeval: true, reason: 'trainer-level-up' };
+      }
+    }
+    return { reeval: false, reason: 'unchanged' };
+  }
+
   return {
     ANALYSER_KPH,
     POTION_CATALOG,
@@ -799,6 +826,7 @@ const PK_HUNT = (() => {
     isCenterButtonReady,
     parseWaitToast,
     formatCompact,
+    shouldAutoReeval,
   };
 })();
 if (typeof module !== 'undefined') module.exports = PK_HUNT;

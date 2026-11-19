@@ -369,3 +369,12 @@ test('parsers puros de DOM e utilitários (ativo, ficha, golpes, pedras, poção
   assert.equal(PK_HUNT.bestOutlandTierForLevel(500).mult, 1.1);
   assert.equal(PK_HUNT.bestOutlandTierForLevel(65000).numero, 40);
 });
+
+test('shouldAutoReeval dispara reavaliação automática ao trocar ativo, evoluir, cruzar patamar ou ir ao Centro', () => {
+  const base = { name: 'Charizard', types: ['FIRE', 'FLYING'], trainerLevel: 421 };
+  assert.equal(PK_HUNT.shouldAutoReeval({ prev: base, cur: { ...base, trainerLevel: 422 }, inCenter: false }).reeval, false);
+  assert.equal(PK_HUNT.shouldAutoReeval({ prev: base, cur: { ...base, name: 'Blastoise', types: ['WATER'] }, inCenter: false }).reason, 'active-changed');
+  assert.equal(PK_HUNT.shouldAutoReeval({ prev: base, cur: { ...base, trainerLevel: 500 }, inCenter: false }).reason, 'outland-tier-up');
+  assert.equal(PK_HUNT.shouldAutoReeval({ prev: { name: 'Squirtle', types: ['WATER'], trainerLevel: 19 }, cur: { name: 'Squirtle', types: ['WATER'], trainerLevel: 20 }, inCenter: false }).reason, 'trainer-level-up');
+  assert.equal(PK_HUNT.shouldAutoReeval({ prev: base, cur: base, inCenter: true }).reason, 'center');
+});

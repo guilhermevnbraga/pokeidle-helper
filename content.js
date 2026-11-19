@@ -48,7 +48,7 @@
 
   // ---------- log + painel ----------
   const logLines = [];
-  let logEl, rmtOutEl, rmtBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, huntOutEl, huntBtnEl, huntFocusEl;
+  let logEl, rmtOutEl, rmtBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, huntOutEl, huntFocusEl;
   const log = (...a) => {
     const l = new Date().toLocaleTimeString() + ' ' + a.join(' ');
     logLines.push(l); if (logLines.length > 60) logLines.shift();
@@ -116,7 +116,35 @@
     mk('capture', '1 Captura (para ao capturar)');
     mk('potions', '2 Repor bolas/poções');
     mk('eterna', '3 Captura eterna');
-    mk('hunt', '4 Gerenciador de hunt');
+    // Linha do Modo 4: checkbox + seletor de foco na mesma linha (100% automático ao ligar ou trocar foco)
+    const huntRow = document.createElement('div');
+    huntRow.style.cssText = 'display:flex;align-items:center;gap:4px';
+    const huntLbl = document.createElement('label');
+    huntLbl.style.cssText = 'flex:1;cursor:pointer;white-space:nowrap';
+    const huntChk = document.createElement('input');
+    huntChk.type = 'checkbox'; huntChk.checked = !!st.hunt; huntChk.id = 'pkbot-hunt';
+    huntChk.onchange = () => { st.hunt = huntChk.checked; save(); log('4 Gerenciador de hunt', huntChk.checked ? 'ON' : 'OFF'); if (huntChk.checked) huntState.next = 0; renderHunt(); ui.refresh(); };
+    huntLbl.append(huntChk, ' 4 Gerenciador de hunt');
+    huntFocusEl = document.createElement('select');
+    huntFocusEl.id = 'pkbot-hunt-focus';
+    huntFocusEl.title = 'Foco automático do Gerenciador de Hunt: Equilibrado (XP + Lucro + Abates/Outland), XP, Lucro/Outland ou Shiny';
+    huntFocusEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
+    [['balanced', 'Equilibrado'], ['xp', 'XP'], ['lucro', 'Lucro/Out'], ['shiny', 'Shiny']].forEach(([v, t]) => {
+      const o = document.createElement('option'); o.value = v; o.textContent = t; huntFocusEl.append(o);
+    });
+    huntFocusEl.value = CFG.huntFocus;
+    huntFocusEl.onchange = () => {
+      CFG.huntFocus = huntFocusEl.value; saveCfg();
+      log('hunt foco =', CFG.huntFocus);
+      if (st.hunt) huntState.next = 0; // reavalia e troca automaticamente na hora
+      renderHunt();
+    };
+    huntRow.append(huntLbl, huntFocusEl);
+    body.append(huntRow);
+    huntOutEl = document.createElement('div');
+    huntOutEl.id = 'pkbot-hunt-out';
+    huntOutEl.style.cssText = 'margin:2px 0 4px 16px;font-size:10px;line-height:1.35;color:#9ab;user-select:text';
+    body.append(huntOutEl);
     mk('keepalive', 'Manter ativo em 2º plano');
     // compras: tipo, mínimo para repor e quantidade por refill (bolas e poções)
     const box = document.createElement('div'); box.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3;display:grid;grid-template-columns:auto 1fr 52px 52px;gap:3px 5px;align-items:center';
@@ -132,36 +160,6 @@
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
     const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2'], [0, 'sem limite']], 'fps', 'Quadros por segundo da cena do jogo. Menos quadros = bem menos CPU; a captura continua funcionando. Use "sem limite" se for jogar na mão.');
     fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel); body.append(box);
-    // Gerenciador de Hunt v3 (simulação de combate/economia: XP/h real, lucro líquido, abates/h, poções, Outland e Shiny)
-    const huntBox = document.createElement('div');
-    huntBox.id = 'pkbot-hunt-box';
-    huntBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
-    const huntHead = document.createElement('div');
-    huntHead.style.cssText = 'display:flex;align-items:center;gap:4px';
-    const huntTit = document.createElement('span');
-    huntTit.textContent = 'Gerenciador Hunt';
-    huntTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#8f9';
-    huntFocusEl = document.createElement('select');
-    huntFocusEl.id = 'pkbot-hunt-focus';
-    huntFocusEl.title = 'Foco do Gerenciador de Hunt: Equilibrado (XP + Lucro + Abates/Outland), XP, Lucro/Outland ou Shiny/Caça';
-    huntFocusEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
-    [['balanced', 'Equilibrado'], ['xp', 'XP'], ['lucro', 'Lucro/Out'], ['shiny', 'Shiny']].forEach(([v, t]) => {
-      const o = document.createElement('option'); o.value = v; o.textContent = t; huntFocusEl.append(o);
-    });
-    huntFocusEl.value = CFG.huntFocus;
-    huntFocusEl.onchange = () => { CFG.huntFocus = huntFocusEl.value; saveCfg(); huntState.next = 0; log('hunt foco =', CFG.huntFocus); renderHunt(); };
-    huntBtnEl = document.createElement('button');
-    huntBtnEl.id = 'pkbot-hunt-scan';
-    huntBtnEl.textContent = 'Analisar';
-    huntBtnEl.title = 'Simula combate e lucro real das hunts liberadas (Kanto, Outland, Johto...) e mostra o Top 4';
-    huntBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#8f93;border:1px solid #8f96;font-size:10px;color:#fff';
-    huntBtnEl.onclick = () => analyzeHunts({ autoSwitch: false });
-    huntHead.append(huntTit, huntFocusEl, huntBtnEl);
-    huntOutEl = document.createElement('div');
-    huntOutEl.id = 'pkbot-hunt-out';
-    huntOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:210px;overflow:auto;user-select:text';
-    huntBox.append(huntHead, huntOutEl);
-    body.append(huntBox);
     // Analisador Otimizado de Pokébola (hunt atual: NPC + RMT + Shiny + ouro/h + taxa/preço)
     const ballBox = document.createElement('div');
     ballBox.id = 'pkbot-ball-box';
@@ -816,7 +814,6 @@
 
   function renderHunt(statusMsg) {
     if (!huntOutEl || typeof PK_HUNT === 'undefined') return;
-    if (huntBtnEl) huntBtnEl.textContent = huntState.scanning ? 'Lendo...' : 'Analisar';
     if (huntFocusEl && huntFocusEl.value !== CFG.huntFocus) huntFocusEl.value = CFG.huntFocus;
     huntOutEl.textContent = '';
     const mk = (tag, css, txt) => {
@@ -826,15 +823,20 @@
       return el;
     };
     if (statusMsg) {
+      huntOutEl.style.display = '';
       huntOutEl.append(mk('div', 'color:#fd8', statusMsg));
       return;
     }
     const last = huntState.last;
-    if (!last || !last.detailed || !Object.keys(last.detailed).length) {
-      huntOutEl.append(mk('div', 'color:#9ab', 'Clique "Analisar" ou ative o modo 4 para simular as melhores hunts (XP/h, lucro, abates e poções).'));
+    if (!st.hunt && (!last || !last.detailed)) {
+      huntOutEl.style.display = 'none';
       return;
     }
-    // Recalcula instantaneamente ao trocar o seletor de foco!
+    huntOutEl.style.display = '';
+    if (!last || !last.detailed || !Object.keys(last.detailed).length) {
+      huntOutEl.append(mk('div', 'color:#9ab', 'Aguardando avaliação automática...'));
+      return;
+    }
     const dec = PK_HUNT.pickBestHunt({
       hunts: last.detailed,
       player: last.player,
@@ -848,64 +850,36 @@
       inHunt: true,
       huntGain: CFG.huntGain,
     });
-    const top = (dec.ranked || []).slice(0, 4);
-    const ageMin = last.ts ? Math.max(0, Math.round((Date.now() - last.ts) / 60000)) : 0;
-    const pl = last.player || {};
-    huntOutEl.append(mk('div', 'color:#9be;font-size:9px;margin-bottom:2px',
-      `${pl.name || 'Ativo'} Nv${pl.level || '?'} (${(pl.types || []).join('/') || '?'}) · ${PK_HUNT.FOCUS_LABELS[CFG.huntFocus] || CFG.huntFocus} · há ${ageMin}m`));
-
-    if (dec.current && top.every(x => x.slug !== dec.current.slug)) {
-      const cs = dec.current.sim || {};
-      huntOutEl.append(mk('div', 'color:#faa;font-size:9px;margin-bottom:2px',
-        `Atual: ${dec.current.displayName || dec.current.nome} Nv${dec.current.level || '?'} · ${PK_HUNT.formatCompact(cs.xpH)} xp/h · ${PK_HUNT.formatCompact(cs.netGoldH)}/h · ${cs.kph || 0}/h · ${Math.round(cs.potionsH || 0)} pot/h`));
-    }
-
+    const top = (dec.ranked || []).slice(0, 3);
+    const best = top[0];
+    if (!best) return;
     const fmt = PK_HUNT.formatCompact;
-    for (let i = 0; i < top.length; i++) {
-      const h = top[i];
-      const s = h.sim || {};
-      const isCur = !!(last.curSlug && h.slug === last.curSlug);
-      const row = mk('div', `display:flex;align-items:center;gap:4px;padding:2px 0;${i ? 'border-top:1px solid #fff1;' : ''}`);
-      const info = mk('div', 'flex:1;min-width:0');
-      const badge = h.isOutland ? ' [OUT]' : '';
-      const curTag = isCur ? ' ★' : '';
-      info.append(mk('div', `color:${i === 0 ? '#8f9' : '#dfe'};font-weight:${i === 0 ? 'bold' : 'normal'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
-        `${i + 1}. ${h.displayName || h.nome} Nv${h.level || '?'}${badge}${curTag}`));
-      const potTxt = (s.potionsH || 0) >= 1 ? ` · ${Math.round(s.potionsH)}pot` : '';
-      info.append(mk('div', 'color:#9ab;font-size:9px',
-        `${fmt(s.xpH)} xp · ${fmt(s.netGoldH)} líq · ${s.kph || 0}/h${potTxt}`));
-      row.append(info);
-      if (!isCur) {
-        const go = mk('button', 'all:unset;cursor:pointer;padding:1px 5px;border-radius:3px;background:#8f93;border:1px solid #8f96;font-size:9px;color:#fff;flex-shrink:0', 'Ir');
-        go.title = `Ir para ${h.displayName || h.nome} (passa no Centro Pokémon e cura)`;
-        go.onclick = async () => {
-          if (busy) { log('aguarde a ação atual terminar'); return; }
-          busy = true;
-          let voltarUltra = false;
-          try {
-            voltarUltra = await leaveUltra();
-            const ok = await switchTo(h.slug, h.nome, last.curSlug, { regiao: h.regiao });
-            if (ok && huntState.last) { huntState.last.curSlug = h.slug; huntState.last.curName = h.nome; saveHunt(); renderHunt(); }
-          } finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
-        };
-        row.append(go);
-      }
-      huntOutEl.append(row);
+    const bs = best.sim || {};
+    const badge = best.isOutland ? ' [OUT]' : '';
+    const potTxt = (bs.potionsH || 0) >= 1 ? ` · ${Math.round(bs.potionsH)}pot` : '';
+    huntOutEl.append(mk('div', 'color:#8f9',
+      `${st.hunt ? 'Auto' : 'Melhor'}: ${best.displayName || best.nome} Nv${best.level || '?'}${badge}`));
+    huntOutEl.append(mk('div', 'color:#bcd;font-size:9px',
+      `${fmt(bs.xpH)} xp/h · ${fmt(bs.netGoldH)} líq/h · ${bs.kph || 0}/h${potTxt}`));
+    if (top.length > 1) {
+      const alts = top.slice(1).map(h => `${h.displayName || h.nome} (${fmt(h.sim?.xpH)} xp, ${fmt(h.sim?.netGoldH)} líq)`).join(' · ');
+      huntOutEl.append(mk('div', 'color:#89a;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis', `Alt: ${alts}`));
     }
   }
 
-  async function analyzeHunts({ autoSwitch = false } = {}) {
+  async function analyzeHunts({ autoSwitch = true } = {}) {
     if (huntState.scanning) return null;
-    if (busy) { if (!autoSwitch) renderHunt('Aguarde a ação atual terminar e tente de novo.'); return null; }
+    if (busy) return null;
     huntState.scanning = true; busy = true;
-    renderHunt('Simulando hunts (ativo + Mapa + Pokedex)...');
+    renderHunt('Avaliando hunts automaticamente...');
     let voltarUltra = false;
     try {
       voltarUltra = await leaveUltra();
       const onHunt = inHunt(), onCenter = inCenter();
       if (!onHunt && !onCenter) {
-        const msg = 'Fora de hunt/Centro (Safari/Boss/Casa) — aguardando.';
-        if (autoSwitch) log('hunt:', msg); else renderHunt(msg);
+        huntState.next = Date.now() + 15000; // jogo ainda conectando ou em Safari/Boss/Casa: recheca em 15s
+        log('hunt: fora de hunt/Centro (Safari/Boss/Casa) — aguardando');
+        renderHunt();
         return null;
       }
       const player = await readActivePokemonProfile();
@@ -919,7 +893,7 @@
       });
       if (!Object.keys(detailed).length) {
         huntState.next = Date.now() + 30000;
-        renderHunt('Nenhuma hunt liberada encontrada (tento em 30s).');
+        renderHunt('Sem dados do Mapa (tento em 30s).');
         return null;
       }
       const effCurSlug = onHunt ? curSlug : null;
@@ -939,6 +913,7 @@
       huntState.last = {
         ts: Date.now(),
         player,
+        trainerLevel: autoCtx.trLv,
         potion: autoCtx.potion,
         ball: autoCtx.ball,
         capturing: autoCtx.capturing,
@@ -963,19 +938,35 @@
       return dec;
     } catch (e) {
       log('hunt erro:', e.message);
-      renderHunt('Erro ao analisar hunts: ' + e.message);
+      renderHunt('Erro na avaliação: ' + e.message);
       return null;
     } finally {
       await closeModal();
       if (voltarUltra) await reenterUltra();
       huntState.scanning = false;
       busy = false;
-      if (huntBtnEl) huntBtnEl.textContent = 'Analisar';
     }
   }
 
   async function huntTick() {
-    if (!st.hunt || busy || Date.now() < huntState.next) return;
+    if (!st.hunt || busy) return;
+    // Monitor passivo (custo zero): dispara reavaliação imediata se trocou ativo, evoluiu, subiu patamar ou está no Centro
+    if (Date.now() < huntState.next && huntState.last && energyNow() !== 'ultra') {
+      const cardEl = $('#ativo-card');
+      const card = PK_HUNT.parseActiveCard({ text: cardEl ? (cardEl.innerText || '') : '', types: myTypes() });
+      const prev = {
+        name: huntState.last.player?.name || '',
+        types: huntState.last.player?.types || [],
+        trainerLevel: huntState.last.trainerLevel || 0,
+      };
+      const cur = { name: card.name, types: card.types, trainerLevel: trainerLevel() };
+      const check = PK_HUNT.shouldAutoReeval({ prev, cur, inCenter: inCenter() });
+      if (check.reeval) {
+        log('hunt auto-reavaliação:', check.reason);
+        huntState.next = 0;
+      }
+    }
+    if (Date.now() < huntState.next) return;
     huntState.next = Date.now() + CFG.huntEvalMs;
     await analyzeHunts({ autoSwitch: true });
   }
