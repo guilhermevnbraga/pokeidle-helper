@@ -7,8 +7,8 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `node scripts/compact-pr
 - [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js` e `rmt.js` (`tests/types.test.mjs`, `tests/rmt.test.mjs`).
 - [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
-## Extensão MV3 (estado atual v0.4.0)
-- [x] Radar RMT (Ouro→Gema) em `rmt.js` + `content.js`: leitura passiva em `RMT → Itens` e scan sob demanda de books livres + Pokémon Sacrifício, validado em Node e no Chrome (PT).
+## Extensão MV3 (estado atual v0.5.0)
+- [x] Radar RMT v0.5.0 (`rmt.js` + `content.js`): plano de ação ONDE/COMPRAR/VENDER (veredito comprar vs juntar + Pokémon exato em Sacrifício/P5/Mega/Shiny), validado em Node e Chrome.
 - [ ] Radar RMT: arredondamento (`ceil` vs `round`) no input de anúncio de Pokémon e seletores em idioma EN · NÃO validado: conta sem Pokémon N 3,5+ no Depot e jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.

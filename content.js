@@ -56,7 +56,7 @@
     const saveUI = () => { try { localStorage.setItem(UI_KEY, JSON.stringify(u)); } catch (e) {} };
     const p = document.createElement('div');
     p.id = 'pkbot-panel';
-    p.style.cssText = 'position:fixed;z-index:2147483647;background:#1b1f2acc;color:#fff;font:12px/1.35 monospace;border:1px solid #fff3;border-radius:8px;width:290px;box-shadow:0 2px 10px #0008;opacity:.5;transition:opacity .15s;user-select:none';
+    p.style.cssText = 'position:fixed;z-index:2147483647;background:#1b1f2acc;color:#fff;font:12px/1.35 monospace;border:1px solid #fff3;border-radius:8px;width:316px;box-shadow:0 2px 10px #0008;opacity:.5;transition:opacity .15s;user-select:none';
     p.onmouseenter = () => p.style.opacity = '1'; p.onmouseleave = () => p.style.opacity = '.5';
 
     const head = document.createElement('div');
@@ -102,13 +102,13 @@
     rmtBtnEl = document.createElement('button');
     rmtBtnEl.id = 'pkbot-rmt-scan';
     rmtBtnEl.textContent = 'Escanear';
-    rmtBtnEl.title = 'Lê os books livres dos 8 itens líquidos + Pokémon Sacrifício (sob demanda, só cliques de leitura)';
+    rmtBtnEl.title = 'Lê books livres dos 8 itens líquidos + Pokémon (Sacrifício, P5, Mega, Shiny) e gera instruções do que comprar e vender';
     rmtBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#fd83;border:1px solid #fd86;font-size:10px;color:#fff';
     rmtBtnEl.onclick = () => scanRmt();
     rmtHead.append(rmtTit, rmtBtnEl);
-    rmtOutEl = document.createElement('pre');
+    rmtOutEl = document.createElement('div');
     rmtOutEl.id = 'pkbot-rmt-out';
-    rmtOutEl.style.cssText = 'margin:4px 0 0;white-space:pre-wrap;font-size:10px;line-height:1.35;color:#dfe;max-height:110px;overflow:auto;user-select:text';
+    rmtOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:220px;overflow:auto;user-select:text';
     rmtBox.append(rmtHead, rmtOutEl);
     body.append(rmtBox);
     logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
@@ -364,32 +364,110 @@
     } finally { await closeModal(); if (voltarUltra) await reenterUltra(); busy = false; }
   }
 
-  // ---------- 5: Radar RMT (Ouro -> Gema, passivo + scan sob demanda) ----------
+  // ---------- 5: Radar RMT (Ouro -> Gema, passivo + scan sob demanda com plano de ação) ----------
+  let lastRmtGold = -1;
+  let rmtRankingOpen = false;
   function renderRmt(statusMsg) {
     if (!rmtOutEl || typeof PK_RMT === 'undefined') return;
     if (rmtBtnEl) rmtBtnEl.textContent = rmtState.scanning ? 'Lendo...' : 'Escanear';
-    if (statusMsg) { rmtOutEl.textContent = statusMsg; return; }
+    rmtOutEl.textContent = '';
+    const mk = (tag, css, txt) => {
+      const el = document.createElement(tag);
+      if (css) el.style.cssText = css;
+      if (txt != null) el.textContent = txt;
+      return el;
+    };
+    if (statusMsg) {
+      rmtOutEl.append(mk('div', 'color:#fd8', statusMsg));
+      return;
+    }
     const d = rmtState.last;
     if (!d || !d.routes || !d.routes.length) {
-      rmtOutEl.textContent = 'Abra RMT → Itens ou clique Escanear.';
+      rmtOutEl.append(mk('div', 'color:#aab', 'Clique em Escanear para receber instruções do que comprar e vender (itens + Pokémon).'));
+      return;
+    }
+    const curGold = gold();
+    lastRmtGold = curGold;
+    const plan = PK_RMT.buildActionPlan({ routes: d.routes, gold: curGold, source: d.source });
+    if (!plan) {
+      rmtOutEl.append(mk('div', 'color:#aab', 'Sem rotas válidas no último scan.'));
       return;
     }
     const ageMin = Math.max(0, Math.round((Date.now() - d.at) / 60000));
-    const tag = d.source === 'book' ? 'books livres' : '~estimado (lista)';
-    const best = d.routes[0];
-    const lines = [
-      `1.000G líq ≈ ${PK_RMT.formatCoins(best.coinsFor1000Gems)} (${tag}, ${ageMin}m)`,
-    ];
-    const curGold = gold();
-    const top = d.routes.slice(0, 4);
-    const bestAff = d.routes.find(r => curGold >= r.buyCoins);
-    if (bestAff && !top.some(r => r.id === bestAff.id)) top.push(bestAff);
-    for (const r of top) {
-      const ok = curGold >= r.buyCoins ? '✓' : '○';
-      const warn = r.warnings && r.warnings.length ? ' !' + r.warnings[0] : '';
-      lines.push(`${ok} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${warn}`);
+    const tag = d.source === 'book' ? 'books livres' : '~estimado (clique Escanear)';
+
+    const renderStepCard = (title, inst, accent, bg) => {
+      const box = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
+      box.append(mk('div', `font-weight:bold;color:${accent};margin-bottom:2px`, title));
+      const row = (lbl, val, valCss = 'color:#fff') => {
+        const line = mk('div', 'margin-top:1px;word-break:break-word');
+        line.append(mk('span', 'color:#aab;font-weight:bold', lbl + ' '), mk('span', valCss, val));
+        return line;
+      };
+      box.append(row('ONDE:', inst.where, 'color:#bde'));
+      box.append(row('COMPRAR:', inst.buyText, 'color:#fff'));
+      box.append(row('VENDER:', inst.sellText, 'color:#bfa'));
+      if (inst.note) box.append(mk('div', 'margin-top:2px;color:#fc9;font-size:9px', '⚠ ' + inst.note));
+      return box;
+    };
+
+    const headColor = plan.verdict === 'BUY_NOW' ? '#6f9' : '#fd8';
+    rmtOutEl.append(mk('div', `font-weight:bold;color:${headColor}`, plan.headline));
+    rmtOutEl.append(mk('div', 'color:#bcd;font-size:9.5px', `${plan.summary} · ${tag}, ${ageMin}m`));
+
+    if (plan.verdict === 'BUY_NOW' && plan.primary) {
+      rmtOutEl.append(renderStepCard(`PLANO COM SEUS ${PK_RMT.formatCoins(curGold)}`, plan.primary, '#6f9', '#16332288'));
+      if (plan.goal) {
+        rmtOutEl.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+          `Topo absoluto: ${plan.goal.label} (${PK_RMT.formatCoins(plan.goal.coinsPerGem)}/G · falta ${PK_RMT.formatCoins(plan.goal.missingCoins)})`));
+      }
+    } else if (plan.verdict === 'SAVE_OR_BUY') {
+      if (plan.primary) {
+        rmtOutEl.append(renderStepCard(
+          `META RECOMENDADA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
+          plan.primary, '#fd8', '#332b1488'
+        ));
+      }
+      if (plan.bestOverall) {
+        rmtOutEl.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+          `Topo absoluto: ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
+      }
+      if (plan.fallback) {
+        rmtOutEl.append(renderStepCard(
+          `SE QUISER CONVERTER JÁ (${PK_RMT.formatCoins(curGold)} · -${plan.lossPct}% gemas)`,
+          plan.fallback, '#7cf', '#14263688'
+        ));
+      }
+    } else if (plan.verdict === 'SAVE_ONLY') {
+      if (plan.fallback) {
+        rmtOutEl.append(renderStepCard(
+          `1ª ENTRADA (falta +${PK_RMT.formatCoins(plan.fallback.missingCoins)})`,
+          plan.fallback, '#7cf', '#14263688'
+        ));
+      }
+      if (plan.primary) {
+        rmtOutEl.append(renderStepCard(
+          `META ÓTIMA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
+          plan.primary, '#fd8', '#332b1488'
+        ));
+      }
     }
-    rmtOutEl.textContent = lines.join('\n');
+
+    // Ranking completo dobrável (itens + categorias de Pokémon)
+    const det = document.createElement('details');
+    det.open = rmtRankingOpen;
+    det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
+    det.ontoggle = () => { rmtRankingOpen = det.open; };
+    const sum = mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Ver ranking completo (${plan.ranked.length} rotas)`);
+    det.append(sum);
+    for (const r of plan.ranked) {
+      const ok = curGold >= r.buyCoins ? '✓' : '○';
+      const extra = r.kind === 'pokemon' && r.bestPoke?.name ? ` [${r.bestPoke.name}]` : '';
+      const warn = r.warnings && r.warnings.length ? ' !' + r.warnings[0] : '';
+      det.append(mk('div', `color:${ok === '✓' ? '#cfd' : '#9aa'};font-size:9.5px;margin-top:1px`,
+        `${ok} ${r.label}${extra}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${warn}`));
+    }
+    rmtOutEl.append(det);
   }
 
   // Leitura passiva (0 cliques): só lê .cmi-linha já visíveis quando o usuário abre RMT → Itens
@@ -436,21 +514,45 @@
   function parseRmtItemBook(painel) {
     if (!painel) return [];
     // Só lê cards de oferta; jamais clica nos botões Comprar/Retido
-    const btns = $$('button', painel).filter(b => /comprar|retido|buy|held/i.test(b.textContent));
+    const btns = $$('button', painel).filter(b => /^(comprar|buy|retido|held)/i.test(b.textContent.trim()));
     const seen = new Set(), out = [];
     for (const b of btns) {
       const card = b.closest('li, div[class]');
-      if (!card || seen.has(card)) continue;
+      if (!card || seen.has(card) || $('.cmi-linha', card)) continue;
       seen.add(card);
       const t = (card.innerText || card.textContent || '').replace(/\s+/g, ' ').trim();
       const qm = t.match(/(\d+(?:\.\d+)*)\s*×\s*un\./i);
       const qty = qm ? (PK_RMT.parseCompactNum(qm[1]) || 1) : 1;
       const pm = t.match(/(\d+(?:\.\d+)*)\s*(?:por unidade|per unit|💬|comprar|retido|buy|held)/i);
       const price = pm ? PK_RMT.parseCompactNum(pm[1]) : null;
+      const sm = t.match(/^([^\s#][^#]{0,28}?)\s*#\d+/);
+      const seller = sm ? sm[1].trim() : '';
       const held = /retido|held/i.test(t);
-      if (price) out.push({ price, qty, held });
+      if (price) out.push({ price, qty, held, seller });
     }
     return out;
+  }
+
+  async function waitForItemBook(wantGems, prevSig, maxMs = 2400) {
+    const t0 = Date.now();
+    const wantRe = wantGems ? /gema|gem/i : /coins/i;
+    const sigOf = arr => arr.slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join('|');
+    while (Date.now() - t0 < maxMs) {
+      const m = $('.modal-caixa[data-modal="community"]');
+      const corpo = m && ($('#modal-corpo', m) || m);
+      const painel = corpo && $('.cmi-painel', corpo);
+      if (painel) {
+        const opOn = $$('button.cmp-op.on', painel).some(b => wantRe.test(b.textContent));
+        const list = parseRmtItemBook(painel);
+        const sig = sigOf(list);
+        if (opOn && list.length && (!prevSig || sig !== prevSig || Date.now() - t0 >= 850)) return list;
+        if (opOn && list.length === 0 && !/carregando|loading/i.test(painel.textContent || '') && Date.now() - t0 >= 900) return [];
+      }
+      await sleep(200);
+    }
+    const m = $('.modal-caixa[data-modal="community"]');
+    const painel = m && $('.cmi-painel', $('#modal-corpo', m) || m);
+    return parseRmtItemBook(painel);
   }
 
   function parseRmtPokeCards(corpo, wantGems) {
@@ -458,29 +560,51 @@
     const out = [];
     for (const c of cards) {
       const priceEl = $('.cm-preco', c);
-      if (priceEl) {
-        const isOrb = priceEl.classList.contains('orb');
-        if (typeof wantGems === 'boolean' && isOrb !== wantGems) continue;
-        const price = PK_RMT.parseCompactNum(priceEl.textContent);
-        const held = /retido|held/i.test(c.innerText || c.textContent || '');
-        if (price) out.push({ price, qty: 1, held });
-      }
+      if (!priceEl) continue;
+      const isOrb = priceEl.classList.contains('orb');
+      if (typeof wantGems === 'boolean' && isOrb !== wantGems) continue;
+      const rawPrice = priceEl.getAttribute('title') || priceEl.textContent;
+      const price = PK_RMT.parseCompactNum(rawPrice);
+      const held = /retido|held/i.test(c.innerText || c.textContent || '');
+      const name = ($('.cm-nome-txt', c) || $('.cm-nome', c))?.textContent?.trim() || '';
+      const level = $('.cm-sub', c)?.textContent?.trim() || '';
+      const pot = $('.cm-pot', c)?.textContent?.trim() || '';
+      const nota = $('.pk-selo-n', c)?.textContent?.trim() || '';
+      const seller = $('.cm-vend b', c)?.textContent?.trim() || '';
+      const favId = $('.cm-fav[data-fav]', c)?.getAttribute('data-fav') || '';
+      if (price) out.push({ price, qty: 1, held, name, level, pot, nota, seller, favId });
     }
     return out;
   }
 
-  async function waitForPokeCurrency(wantGems, maxMs = 2600) {
+  function pokeCardsSignature(corpo) {
+    if (!corpo) return '';
+    return $$('.cm-card', corpo).slice(0, 4).map(c => {
+      const id = $('.cm-fav[data-fav]', c)?.getAttribute('data-fav') || '';
+      const p = $('.cm-preco', c);
+      return `${id}:${p?.classList.contains('orb') ? 'G' : 'C'}:${p?.getAttribute('title') || p?.textContent?.trim() || ''}`;
+    }).join('|');
+  }
+
+  async function waitForPokeResults(wantGems, prevSig, maxMs = 2600) {
     const t0 = Date.now();
+    const wantRe = wantGems ? /gema|gem/i : /coins/i;
     while (Date.now() - t0 < maxMs) {
       const m = $('.modal-caixa[data-modal="community"]');
       const corpo = m && ($('#modal-corpo', m) || m);
       if (corpo) {
+        const moedaOn = $$('button.cm-moeda.on', corpo).some(b => wantRe.test(b.textContent));
+        const allCards = $$('.cm-card', corpo);
         const list = parseRmtPokeCards(corpo, wantGems);
-        if (list.length) return list;
+        const sig = pokeCardsSignature(corpo);
+        if (list.length && (!prevSig || sig !== prevSig || Date.now() - t0 >= 900)) return list;
+        if (moedaOn && allCards.length === 0 && Date.now() - t0 >= 750) return [];
       }
-      await sleep(250);
+      await sleep(220);
     }
-    return [];
+    const m = $('.modal-caixa[data-modal="community"]');
+    const corpo = m && ($('#modal-corpo', m) || m);
+    return corpo ? parseRmtPokeCards(corpo, wantGems) : [];
   }
 
   async function scanRmt() {
@@ -521,76 +645,144 @@
         .map(row => ($('.cmi-nome b', row) || {}).textContent?.trim())
         .filter(name => PK_RMT.matchLiquidItem(name));
 
+      const pokeCats = PK_RMT.POKE_CATEGORIES || [];
+      const totalSteps = targetNames.length + pokeCats.length;
+
       for (let i = 0; i < targetNames.length; i++) {
         const name = targetNames[i];
         const item = PK_RMT.matchLiquidItem(name);
         corpo = getCorpo(); if (!corpo) break;
         const row = $$('.cmi-linha', corpo).find(el => ($('.cmi-nome b', el) || {}).textContent?.trim() === name);
         if (!row) continue;
-        renderRmt(`Lendo (${i + 1}/${targetNames.length + 1}): ${item.label}...`);
-        row.click(); await sleep(800);
+        renderRmt(`Lendo (${i + 1}/${totalSteps}): ${item.label}...`);
+        const beforeItemSig = parseRmtItemBook($('.cmi-painel', corpo)).slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join('|');
+        row.click(); await sleep(700);
 
         let coinsOffer = null, gemasOffer = null;
         corpo = getCorpo();
         let painel = corpo && $('.cmi-painel', corpo);
         const btnC = $$('button.cmp-op', painel || corpo || document).find(b => /coins/i.test(b.textContent));
-        if (btnC) {
-          btnC.click(); await sleep(650);
-          painel = $('.cmi-painel', getCorpo() || document);
-          coinsOffer = PK_RMT.pickBestFreeOffer(parseRmtItemBook(painel), item.minSanityCoins);
-        }
-        corpo = getCorpo();
-        painel = corpo && $('.cmi-painel', corpo);
         const btnG = $$('button.cmp-op', painel || corpo || document).find(b => /gema|gem/i.test(b.textContent));
-        if (btnG) {
-          btnG.click(); await sleep(650);
-          painel = $('.cmi-painel', getCorpo() || document);
-          gemasOffer = PK_RMT.pickBestFreeOffer(parseRmtItemBook(painel), 2);
+        const gemsFirst = !!(btnG && btnG.classList.contains('on'));
+
+        if (gemsFirst) {
+          const gList = await waitForItemBook(true, beforeItemSig);
+          gemasOffer = PK_RMT.pickBestFreeOffer(gList, 2);
+          const gSig = gList.slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join('|');
+          const bC2 = $$('button.cmp-op', $('.cmi-painel', getCorpo() || document) || document).find(b => /coins/i.test(b.textContent));
+          if (bC2) {
+            bC2.click();
+            const cList = await waitForItemBook(false, gSig);
+            coinsOffer = PK_RMT.pickBestFreeOffer(cList, item.minSanityCoins);
+          }
+        } else {
+          if (btnC) {
+            if (!btnC.classList.contains('on')) btnC.click();
+            const cList = await waitForItemBook(false, beforeItemSig);
+            coinsOffer = PK_RMT.pickBestFreeOffer(cList, item.minSanityCoins);
+            const cSig = cList.slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join('|');
+            const bG2 = $$('button.cmp-op', $('.cmi-painel', getCorpo() || document) || document).find(b => /gema|gem/i.test(b.textContent));
+            if (bG2) {
+              bG2.click();
+              const gList = await waitForItemBook(true, cSig);
+              gemasOffer = PK_RMT.pickBestFreeOffer(gList, 2);
+            }
+          }
         }
         const r = PK_RMT.evaluateItemRoute({ item, coinsOffer, gemasOffer, gold: curGold, source: 'book' });
         if (r) routes.push(r);
       }
 
-      // 2) Aba Pokemon -> Piso de Sacrifício (N >= 3,5), re-consultando botões pois cada filtro re-renderiza
-      renderRmt(`Lendo (${targetNames.length + 1}/${targetNames.length + 1}): Poke Sacrifício...`);
+      // 2) Aba Pokémon -> Categorias com liquidez real (Sacrifício, P5, Mega, Shiny)
       corpo = getCorpo();
       const btnPoke = corpo && $$('button.cm-filtro', corpo).find(b => /^pok[eé]mon$/i.test(b.textContent.trim()));
       if (btnPoke) {
         btnPoke.click(); await sleep(900);
-        corpo = getCorpo();
-        const limpar = corpo && $('#cm-limpar', corpo); limpar && limpar.click(); await sleep(650);
-        corpo = getCorpo();
-        const ordMenor = corpo && $$('button, option', corpo).find(el => /menor pre[çc]o|lowest price/i.test(el.textContent));
-        if (ordMenor && ordMenor.tagName === 'OPTION') {
-          const sel = ordMenor.closest('select');
-          if (sel) { sel.value = ordMenor.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
-        } else if (ordMenor) ordMenor.click();
-        await sleep(800);
 
-        let pCoins = null, pGemas = null;
-        corpo = getCorpo();
-        const mCoins = corpo && $$('button.cm-moeda', corpo).find(b => /coins/i.test(b.textContent));
-        if (mCoins) {
-          mCoins.click();
-          const cList = await waitForPokeCurrency(false);
-          pCoins = PK_RMT.pickBestFreeOffer(cList, 5e6);
+        const setLowestOrder = async () => {
+          const c = getCorpo();
+          const sel = c && $('#cm-ordem', c);
+          if (sel) {
+            const opt = [...sel.options].find(o => o.value === 'baratos' || /menor pre[çc]o|lowest price/i.test(o.textContent));
+            if (opt && sel.value !== opt.value) {
+              sel.value = opt.value;
+              sel.dispatchEvent(new Event('change', { bubbles: true }));
+              await sleep(850);
+            }
+            return;
+          }
+          const ordMenor = c && $$('button, option', c).find(el => /menor pre[çc]o|lowest price/i.test(el.textContent));
+          if (ordMenor) { ordMenor.click(); await sleep(850); }
+        };
+
+        for (let k = 0; k < pokeCats.length; k++) {
+          const cat = pokeCats[k];
+          renderRmt(`Lendo (${targetNames.length + k + 1}/${totalSteps}): ${cat.label}...`);
+          corpo = getCorpo(); if (!corpo) break;
+
+          const limpar = $('#cm-limpar', corpo);
+          if (limpar) { limpar.click(); await sleep(600); }
+          await setLowestOrder();
+
+          corpo = getCorpo(); if (!corpo) break;
+          if (cat.filterId) {
+            const flt = $(cat.filterId, corpo);
+            if (!flt) continue;
+            const beforeSig = pokeCardsSignature(corpo);
+            if (!flt.classList.contains('on')) { flt.click(); await sleep(800); }
+            // Garante moeda Coins após ativar filtro
+            corpo = getCorpo(); if (!corpo) break;
+            const mCoins = $$('button.cm-moeda', corpo).find(b => /coins/i.test(b.textContent));
+            if (mCoins && !mCoins.classList.contains('on')) mCoins.click();
+            const cList = await waitForPokeResults(false, beforeSig);
+            const pCoins = PK_RMT.pickBestFreeOffer(cList, cat.minSanityCoins);
+            // Só consulta Gemas se houver ao menos 1 Pokémon livre em Coins nesta categoria
+            if (!pCoins.bestPrice) continue;
+
+            corpo = getCorpo(); if (!corpo) break;
+            const sigCoins = pokeCardsSignature(corpo);
+            const mGemas = $$('button.cm-moeda', corpo).find(b => /gema|gem/i.test(b.textContent));
+            let pGemas = null;
+            if (mGemas) {
+              mGemas.click();
+              const gList = await waitForPokeResults(true, sigCoins);
+              pGemas = PK_RMT.pickBestFreeOffer(gList, 2);
+            }
+            const rPoke = PK_RMT.evaluatePokeRoute({ category: cat, coinsOffer: pCoins, gemasOffer: pGemas, gold: curGold });
+            if (rPoke) routes.push(rPoke);
+          } else {
+            // Sacrifício (sem filtro)
+            const sigBefore = pokeCardsSignature(corpo);
+            const mCoins = $$('button.cm-moeda', corpo).find(b => /coins/i.test(b.textContent));
+            if (mCoins && !mCoins.classList.contains('on')) mCoins.click();
+            const cList = await waitForPokeResults(false, sigBefore);
+            const pCoins = PK_RMT.pickBestFreeOffer(cList, cat.minSanityCoins);
+            if (!pCoins.bestPrice) continue;
+
+            corpo = getCorpo(); if (!corpo) break;
+            const sigCoins = pokeCardsSignature(corpo);
+            const mGemas = $$('button.cm-moeda', corpo).find(b => /gema|gem/i.test(b.textContent));
+            let pGemas = null;
+            if (mGemas) {
+              mGemas.click();
+              const gList = await waitForPokeResults(true, sigCoins);
+              pGemas = PK_RMT.pickBestFreeOffer(gList, 2);
+            }
+            const rPoke = PK_RMT.evaluatePokeRoute({ category: cat, coinsOffer: pCoins, gemasOffer: pGemas, gold: curGold });
+            if (rPoke) routes.push(rPoke);
+          }
         }
-        corpo = getCorpo();
-        const mGemas = corpo && $$('button.cm-moeda', corpo).find(b => /gema|gem/i.test(b.textContent));
-        if (mGemas) {
-          mGemas.click();
-          const gList = await waitForPokeCurrency(true);
-          pGemas = PK_RMT.pickBestFreeOffer(gList, 2);
-        }
-        const rSac = PK_RMT.evaluateSacrificeRoute({ coinsOffer: pCoins, gemasOffer: pGemas, gold: curGold });
-        if (rSac) routes.push(rSac);
+        // Limpa filtros ao finalizar aba Pokémon
+        const limparFim = getCorpo() && $('#cm-limpar', getCorpo());
+        limparFim && limparFim.click();
       }
 
       const ranked = PK_RMT.rankRoutes(routes);
       rmtState.last = { at: Date.now(), gold: curGold, source: 'book', routes: ranked };
       saveRmt();
       if (ranked.length) {
-        log('RMT melhor:', ranked[0].label, PK_RMT.formatCoins(ranked[0].coinsPerGem) + '/G', '| 1.000G ≈', PK_RMT.formatCoins(ranked[0].coinsFor1000Gems));
+        const plan = PK_RMT.buildActionPlan({ routes: ranked, gold: curGold, source: 'book' });
+        log('RMT:', plan.headline, '|', plan.primary?.buyText || ranked[0].label);
       } else {
         log('RMT: nenhuma rota válida lida');
       }
@@ -614,6 +806,7 @@
       if (gap > 8000) { log('relógio ficou parado', Math.round(gap / 1000) + 's (aba oculta/freada?) - checando estoque já'); lastSupply = 0; }
       captureTick();
       readRmtListPassive();
+      if (!rmtState.scanning && rmtState.last && Math.abs(gold() - lastRmtGold) >= Math.max(1e6, lastRmtGold * 0.01)) renderRmt();
       if (st.potions && !busy && now - lastSupply >= 5000) { lastSupply = now; energyNow() === 'ultra' ? ultraSupplyTick() : checkSupplies(); }
       if ((st.capture || st.eterna) && energyNow() !== 'normal' && !warnedCapture) { warnedCapture = true; log('aviso: captura não funciona em Economia/ULTRA (a lista de corpos não atualiza)'); }
       if (energyNow() === 'normal') warnedCapture = false;
@@ -649,7 +842,10 @@
     } catch (e) { setInterval(tick, 1000); log('timer: setInterval (pode ser limitado em aba oculta)'); }
   }
 
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, rmtState, scanRmt, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
+  const rmtPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
+    ? PK_RMT.buildActionPlan({ routes: rmtState.last.routes, gold: gold(), source: rmtState.last.source })
+    : null;
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, rmtState, rmtPlan, scanRmt, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);

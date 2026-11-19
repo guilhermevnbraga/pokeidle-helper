@@ -1,13 +1,13 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-18 (Radar RMT v0.4.0 + estudo do Mercado da Comunidade). Versão da extensão: `0.4.0`. Último commit de código: `146fb3e`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 11 passando (`types.js` + `rmt.js`). Histórico em `docs/archive/` (só Grep).
+Atualizado: 2026-11-18 (Radar RMT v0.5.0 com plano de ação completo). Versão da extensão: `0.5.0`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 18 passando (`types.js` + `rmt.js`). Histórico em `docs/archive/` (só Grep).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
 Vivem no `AGENTS.md` (não repetir aqui). Respeitar Termos §5 do PokeIdle (só cliques no DOM, sem API direta, sem mexer em login/anti-robô).
 
 ## Estado (2026-11-18)
-- Extensão MV3 funcional (`0.4.0`): 4 modos (Captura, Repor bolas/poções, Captura eterna, Gerenciador de hunt via Hunt Analyser + `types.js`) + **Radar RMT (Ouro → Gema)** (`rmt.js` + painel `#pkbot-rmt-box`, leitura passiva e scan sob demanda de books livres).
+- Extensão MV3 funcional (`0.5.0`): 4 modos (Captura, Repor bolas/poções, Captura eterna, Gerenciador de hunt via Hunt Analyser + `types.js`) + **Radar RMT (Ouro → Gema)** (`rmt.js` + painel `#pkbot-rmt-box`) com **plano de ação pronto** (veredito comprar vs juntar, instruções ONDE/COMPRAR/VENDER com quantidade real no book ou Pokémon exato + vendedor em Sacrifício/P5/Mega/Shiny, e ranking dobrável).
 - Suporte a segundo plano (Worker para timers do jogo em `fps.js`, Worker de loop em `content.js`, alarme de 30 s + `autoDiscardable: false` em `background.js`, keep-alive opcional).
 - Limite de FPS configurável (`fps.js`, padrão 10 fps) e saída periódica do ULTRA Economia para atualizar estoques (`ultraSupplyTick`).
 - Deploy 24/7 Docker + Selkies pronto em `deploy/` (Proxmox).

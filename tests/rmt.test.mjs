@@ -132,3 +132,148 @@ test('Bronze Boss Token faz undercut conservador em ask >= 5G mas preserva piso 
   assert.equal(at5.sellGems, 4);
   assert.equal(at4.sellGems, 4);
 });
+
+test('pickBestFreeOffer preserva níveis livres e metadados exatos do Pokémon mais barato', () => {
+  const res = PK_RMT.pickBestFreeOffer([
+    { price: 40e6, qty: 1, held: true, name: 'Ancient Pupitar', level: 'Nv 100', pot: 'P2', nota: 'N 3,511', seller: 'rafaelmdrs' },
+    { price: 40e6, qty: 1, held: false, name: 'Psy Jynx', level: 'Nv 100', pot: 'P2', nota: 'N 3,554', seller: 'icebergue' },
+    { price: 43e6, qty: 1, held: false, name: 'Furious Scizor', level: 'Nv 100', pot: 'P2', nota: 'N 3,548', seller: 'ThirLeozin' },
+  ], 5e6);
+  assert.equal(res.bestOffer.name, 'Psy Jynx');
+  assert.equal(res.bestOffer.seller, 'icebergue');
+  assert.equal(res.bestOffer.nota, 'N 3,554');
+  assert.equal(res.topOffers.length, 2);
+  assert.equal(res.levels.length, 2);
+});
+
+test('evaluatePokeRoute avalia categorias P5/Mega/Shiny e carrega qual Pokémon comprar', () => {
+  const catP5 = PK_RMT.POKE_CATEGORIES.find(c => c.id === 'poke-p5');
+  const coinsOffer = PK_RMT.pickBestFreeOffer([
+    { price: 80e6, qty: 1, held: false, name: 'Enraged Typhlosion', level: 'Nv 100', pot: 'P5', nota: 'N 3,884', seller: 'Kzalt' },
+  ], catP5.minSanityCoins);
+  const gemasOffer = PK_RMT.pickBestFreeOffer([
+    { price: 20, qty: 1, held: false, name: 'Enraged Typhlosion', nota: 'N 4,079', seller: 'ghxstdio2' },
+  ], 2);
+
+  const route = PK_RMT.evaluatePokeRoute({ category: catP5, coinsOffer, gemasOffer, gold: 100e6 });
+  assert.equal(route.id, 'poke-p5');
+  assert.equal(route.sellGems, 19);
+  assert.equal(route.netGemsUnit, 16); // 19 - ceil(2.47=3) = 16
+  assert.equal(route.bestPoke.name, 'Enraged Typhlosion');
+  assert.equal(route.bestPoke.seller, 'Kzalt');
+  assert.ok(route.coinsPerGem > 5e6 && route.coinsPerGem < 5.1e6);
+});
+
+test('planBuyFromLevels respeita degraus de book e teto de preço com ouro disponível', () => {
+  const levels = [
+    { price: 700e6, qty: 2, seller: 'alice' },
+    { price: 710e6, qty: 3, seller: 'bob' },
+    { price: 900e6, qty: 5, seller: 'cara' }, // acima do teto
+  ];
+  const plan = PK_RMT.planBuyFromLevels(levels, 2.2e9, 728e6);
+  assert.equal(plan.qty, 3); // 2 a 700M (1.4B) + 1 a 710M (2.11B)
+  assert.equal(plan.totalCoins, 2110e6);
+  assert.equal(plan.maxPricePaid, 710e6);
+  assert.deepEqual(plan.sellers, ['alice', 'bob']);
+});
+
+test('buildActionPlan decide BUY_NOW com instruções de compra/venda quando melhor rota cabe no ouro', () => {
+  const bike = PK_RMT.matchLiquidItem('Fragmento de Bicicleta');
+  const rBike = PK_RMT.evaluateItemRoute({
+    item: bike,
+    coinsOffer: PK_RMT.pickBestFreeOffer([
+      { price: 700e6, qty: 2, held: false, seller: 'alice' },
+      { price: 705e6, qty: 2, held: false, seller: 'bob' },
+    ], bike.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 155, qty: 5, held: false }], 2),
+    gold: 2.2e9,
+  });
+  const plan = PK_RMT.buildActionPlan({ routes: [rBike], gold: 2.2e9, source: 'book' });
+  assert.equal(plan.verdict, 'BUY_NOW');
+  assert.equal(plan.primary.qty, 3);
+  assert.match(plan.primary.buyText, /3× Fragmento de Bicicleta/);
+  assert.match(plan.primary.sellText, /Anuncie 3× por 154 Gemas\/un/);
+  assert.match(PK_RMT.formatActionPlanText(plan), /1\. COMPRAR/);
+});
+
+test('buildActionPlan decide SAVE_OR_BUY e indica qual Pokémon comprar se quiser converter já', () => {
+  const mshiny = PK_RMT.matchLiquidItem('Fragmento de MEGA Shiny Stone');
+  const shiny = PK_RMT.matchLiquidItem('Fragmento de Shiny Stone');
+  const rMShiny = PK_RMT.evaluateItemRoute({
+    item: mshiny,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 1660e6, qty: 3, held: false }], mshiny.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 367, qty: 3, held: false }], 2),
+    gold: 53e6,
+  });
+  const rShiny = PK_RMT.evaluateItemRoute({
+    item: shiny,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 425e6, qty: 5, held: false }], shiny.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 89, qty: 5, held: false }], 2),
+    gold: 53e6,
+  });
+  const rSac = PK_RMT.evaluatePokeRoute({
+    category: PK_RMT.POKE_CATEGORIES[0],
+    coinsOffer: PK_RMT.pickBestFreeOffer([
+      { price: 40e6, qty: 1, held: false, name: 'Psy Jynx', level: 'Nv 100', pot: 'P2', nota: 'N 3,554', seller: 'icebergue' },
+    ], 5e6),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 8, qty: 1, held: false, name: 'Furious Scizor' }], 2),
+    gold: 53e6,
+  });
+
+  const plan = PK_RMT.buildActionPlan({ routes: [rMShiny, rShiny, rSac], gold: 53e6, source: 'book' });
+  assert.equal(plan.verdict, 'SAVE_OR_BUY');
+  // Meta recomendada deve ser Frag. Shiny Stone (425M, dentro de 10% do topo de 1,66B!)
+  assert.equal(plan.primary.routeId, 'shiny-frag');
+  assert.equal(plan.bestOverall.routeId, 'mshiny-frag');
+  // Fallback imediato deve dizer o Pokémon exato + vendedor
+  assert.equal(plan.fallback.routeId, 'poke-sacrifice');
+  assert.match(plan.fallback.buyText, /Psy Jynx \(Nv 100 · P2 · N 3,554\) de icebergue por 40,0M/);
+  assert.match(plan.fallback.sellText, /Anuncie por 7 Gemas.*recebe 6G líq\./);
+  assert.ok(plan.lossPct >= 15);
+});
+
+test('buildActionPlan decide SAVE_ONLY quando ouro não compra nenhuma rota', () => {
+  const rSac = PK_RMT.evaluatePokeRoute({
+    category: PK_RMT.POKE_CATEGORIES[0],
+    coinsOffer: PK_RMT.pickBestFreeOffer([
+      { price: 40e6, qty: 1, held: false, name: 'Psy Jynx', level: 'Nv 100', pot: 'P2', nota: 'N 3,554', seller: 'icebergue' },
+    ], 5e6),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 8, qty: 1, held: false }], 2),
+    gold: 10e6,
+  });
+  const plan = PK_RMT.buildActionPlan({ routes: [rSac], gold: 10e6, source: 'book' });
+  assert.equal(plan.verdict, 'SAVE_ONLY');
+  assert.ok(plan.primary.missingCoins > 30e6 && plan.primary.missingCoins < 30.2e6);
+});
+
+test('buildActionPlan escolhe melhor rota acessível pelo Coins/Gema REAL do ouro atual (evita armadilha de 25% de taxa)', () => {
+  const token = PK_RMT.matchLiquidItem('Bronze Boss Token');
+  const bike = PK_RMT.matchLiquidItem('Fragmento de Bicicleta');
+  const rBike = PK_RMT.evaluateItemRoute({
+    item: bike,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 702e6, qty: 3, held: false }], bike.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 159, qty: 3, held: false }], 2),
+    gold: 53.4e6,
+  });
+  const rToken = PK_RMT.evaluateItemRoute({
+    item: token,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 25.5e6, qty: 20, held: false }], token.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 4, qty: 50, held: false }], 2),
+    gold: 53.4e6,
+  });
+  const rSac = PK_RMT.evaluatePokeRoute({
+    category: PK_RMT.POKE_CATEGORIES[0],
+    coinsOffer: PK_RMT.pickBestFreeOffer([
+      { price: 45e6, qty: 1, held: false, name: 'Ancient Dragonite', level: 'Nv 100', pot: 'P2', nota: 'N 3,617', seller: 'Filipepdg1' },
+    ], 5e6),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 8, qty: 1, held: false }], 2),
+    gold: 53.4e6,
+  });
+
+  // No ranking teórico de lote 10x, rToken (7,50M/G) parece melhor que rSac (7,52M/G),
+  // mas com 53,4M o jogador só compra 2x (51M -> 6G = 8,50M/G), perdendo para Ancient Dragonite (45,1M -> 6G = 7,52M/G)!
+  const plan = PK_RMT.buildActionPlan({ routes: [rBike, rToken, rSac], gold: 53.4e6, source: 'book' });
+  assert.equal(plan.verdict, 'SAVE_OR_BUY');
+  assert.equal(plan.fallback.routeId, 'poke-sacrifice');
+  assert.match(plan.fallback.buyText, /Ancient Dragonite/);
+});

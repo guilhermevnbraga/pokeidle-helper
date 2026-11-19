@@ -41,6 +41,7 @@ Sempre separe **Confirmado no DOM** de **Hipótese / NÃO confirmado**.
   - Controles no `#modal-corpo`: `#cm-anunciar`, `#cm-meus`, `#cm-historico`, `#cm-historico-compras`, `#cm-historico-global` (abre `.cm-folha` "Tabela de preços"), `#cm-deposito`, `#cm-withdraw`.
   - Tabela de preços (`.cm-folha`): filtros `button.cm-filtro` (`Tudo|Pokemon|Itens|Depósitos|Saques` × `Todas|Coins|Gemas`), lista `.cm-hist-lista .cm-hist-linha`, paginação `.cm-hist-pags`, exportação CSV `#cm-hist-csv` (até 5.000 linhas recentes, limite 1/hora por conexão).
   - Aba Itens: lista `.cmi-linha` (39 itens); painel direito `.cmi-painel` com seletor `.cmp-op` (`Coins` / `Gemas`).
+  - Aba Pokémon: filtros `#cm-shiny`, `#cm-p5`, `#cm-mega`, `#cm-lendario`, `#cm-tm-elemental`, `#cm-tm-aoe`, `#cm-limpar`, ordenação `select#cm-ordem` (`recentes|baratos|caros`), moeda `button.cm-moeda`; cards `.cm-card` com `.cm-nome-txt`, `.cm-sub` (Nv), `.cm-pot` (P1-P5), `.pk-selo-n` (Nota), `.cm-preco[title]` (valor exato sem abreviação; `.orb` = Gemas), `.cm-vend b` (vendedor), `.cm-fav[data-fav]` (ID).
 
 ## Mecânicas confirmadas
 - **Hunt Analyser ignora tipos:** Squirtle e Bulbasaur mostram o mesmo xp/h para Charmander; amplificação da Wiki: `×2 → ×2,5`, `×4 → ×5,5`, `×0,5 → ×0,33`, `×0,25 → ×0,17`.
