@@ -13,7 +13,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.
 - [ ] Hardening Market/multi-conta (`content.js`): aba Comprar, card fresco, compra parcial, fila, aviso bola 0 e `cena` só no console · NÃO validado: compra real pós-fix no perfil 2
-- [ ] Modo 4 (Gerenciador de hunt v2, `hunt.js` + `content.js`): espera 3s em combate, volta ao Centro Pokémon… · NÃO validado: troca ao vivo pós-reload nos perfis secundários e modo Economia
+- [ ] Modo 4 (`hunt.js`+`content.js`): 3s combate, Centro Pokémon, cura e não troca p/ mapa atual · NÃO validado: troca ao vivo nos perfis secundários e modo Economia
 - [x] Limitador de FPS (`fps.js`, `world: MAIN`) e timers do jogo espelhados em Worker para captura continuar em aba oculta.
 - [x] Alarme de reserva de 30 s no service worker (`background.js`) e bloqueio de descarte da aba (`autoDiscardable: false`).
 - [ ] Modo 1 (Captura com parada automática): regex `captureRe` sobre toasts/log · NÃO confirmado com uma captura real
