@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PokeIdle Helper",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "Captura, reposição de bolas/poções, gerenciador de hunt, radar RMT (Ouro→Gema) e analisador otimizado de pokébola para o pokeidle.io (só cliques no DOM).",
   "permissions": ["alarms"],
   "host_permissions": ["https://pokeidle.io/*"],

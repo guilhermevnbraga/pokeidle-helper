@@ -217,3 +217,26 @@ test('boosts de Captura (×2 com teto 10%) e Shiny Secret Lure (×2) alteram cha
   assert.ok(boosted.value.evShiny > base.value.evShiny * 1.9);
   assert.ok(boosted.options[1].shiniesPerHour > base.options[1].shiniesPerHour * 3);
 });
+
+test('buildBallRestockConfig sempre aplica mínimo 10 e reposição 100 p/ bola comprável e ignora Nenhuma/diamante', () => {
+  assert.equal(PK_BALL.DEFAULT_RESTOCK_MIN, 10);
+  assert.equal(PK_BALL.DEFAULT_RESTOCK_BUY, 100);
+
+  // Objeto recomendado válido
+  assert.deepEqual(
+    PK_BALL.buildBallRestockConfig({ id: 'great-ball', name: 'Great Ball', purchasable: true, diamondOnly: false }),
+    { ball: 'Great Ball', ballMin: 10, ballBuy: 100 }
+  );
+
+  // String case-insensitive normalizada para nome canônico
+  assert.deepEqual(
+    PK_BALL.buildBallRestockConfig('super ball'),
+    { ball: 'Super Ball', ballMin: 10, ballBuy: 100 }
+  );
+
+  // Rejeita "Nenhuma (só ouro)", Beast Ball (diamondOnly) e valores inválidos
+  assert.equal(PK_BALL.buildBallRestockConfig({ id: 'none', name: 'Nenhuma (só ouro)', purchasable: true }), null);
+  assert.equal(PK_BALL.buildBallRestockConfig({ id: 'beast-ball', name: 'Beast Ball', purchasable: false, diamondOnly: true }), null);
+  assert.equal(PK_BALL.buildBallRestockConfig('Master Ball'), null);
+  assert.equal(PK_BALL.buildBallRestockConfig(null), null);
+});

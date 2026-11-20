@@ -55,6 +55,31 @@ const PK_BALL = (() => {
     'super ball': 50,
     'ultra ball': 130,
   };
+  const DEFAULT_ALLOWED_BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
+  const DEFAULT_RESTOCK_MIN = 10;
+  const DEFAULT_RESTOCK_BUY = 100;
+
+  // Monta atualização de reposição de Pokébola (sempre 10 de mínimo e 100 de reposição, sobrescrevendo valores anteriores)
+  function buildBallRestockConfig(recommended, allowedBalls = DEFAULT_ALLOWED_BALLS) {
+    if (!recommended) return null;
+    const list = Array.isArray(allowedBalls) ? allowedBalls : DEFAULT_ALLOWED_BALLS;
+    let name = '';
+    if (typeof recommended === 'string') {
+      name = recommended.trim();
+    } else if (typeof recommended === 'object') {
+      if (recommended.id === 'none' || recommended.diamondOnly || recommended.purchasable === false) return null;
+      name = String(recommended.name || '').trim();
+    }
+    if (!name) return null;
+    const targetLower = name.toLowerCase();
+    const canonical = list.find(b => String(b).toLowerCase() === targetLower);
+    if (!canonical) return null;
+    return {
+      ball: canonical,
+      ballMin: DEFAULT_RESTOCK_MIN,
+      ballBuy: DEFAULT_RESTOCK_BUY,
+    };
+  }
 
   // Distribuição exata de soma de 6 IVs independentes em {1..32} (valores 6..192)
   const IV_TAIL_PROB = (() => {
@@ -619,6 +644,9 @@ const PK_BALL = (() => {
     RMT_MIN_LEVEL,
     RMT_MIN_NOTA,
     RMT_PENSION_COINS,
+    DEFAULT_RESTOCK_MIN,
+    DEFAULT_RESTOCK_BUY,
+    buildBallRestockConfig,
     calcStrongNoteProb,
     xpPerKillForLevel,
     goldKillBaseForLevel,

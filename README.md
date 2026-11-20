@@ -28,18 +28,18 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
   - **XP:** maximiza XP/h real em hunts sustentáveis (descarta hunts lentas ou que queimam poções).
   - **Lucro/Outland:** maximiza lucro líquido/h + pedras + drops raros da Outland (selecionando automaticamente o maior tier de Outland liberado para o seu nível).
   - **Shiny/Caça:** exclui a Outland (onde Shiny não rola) e prioriza velocidade de abates/capturas com bom lucro e XP.
-- **100% automático (sem botão manual):** basta marcar **4 Gerenciador de hunt** e escolher o foco na mesma linha. Ele avalia na hora, troca para a melhor hunt sozinho e reavalia automaticamente sempre que você troca de foco, troca ou evolui o Pokémon ativo, cruza um novo patamar de nível / tier de Outland, acorda no Centro Pokémon, ou a cada 10 min (com histerese de +10%). Um resumo discreto abaixo do checkbox mostra a hunt escolhida (`XP/h`, `Lucro líq/h`, `abates/h`, `poções/h`) e as alternativas.
+- **Automático + verificação manual (`Verificar`):** marque **4 Gerenc. hunt** e escolha o foco para avaliação automática (ao ligar, trocar foco, trocar/evoluir ativo, cruzar patamar/Outland, acordar no Centro ou a cada 10 min, com histerese de +10%), ou clique em **`Verificar`** para disparar a checagem manualmente na hora. Toda verificação do Gerenciador de Hunt (automática ou manual) encadeia automaticamente **Hunt → Radar RMT → Analisador de Pokébola** na mesma janela (com saída/retorno único do modo ULTRA). Um resumo discreto abaixo do checkbox mostra a hunt escolhida (`XP/h`, `Lucro líq/h`, `abates/h`, `poções/h`) e as alternativas.
 - **Troca segura:** nunca troca para o mapa atual; aguarda a brecha de 3 s fora de combate (`#ir-centro` / `#eco-ir-centro`), cura no Centro Pokémon e só então entra na nova hunt. Nunca usa "Desistir do Combate".
 
 ### Analisador Otimizado de Pokébola
 
-- Botão **`Analisar`** no painel (100% sob demanda): lê a hunt atual no **Mapa / Hunt Analyser** (`ouro/h`, `xp/h`, nível e espécies) e a ficha da(s) espécie(s) na **Pokedex** (preço base do NPC, nível ao capturar, stats-base, chance de Shiny e tabela oficial de taxa/preço de cada Pokébola).
+- Botão **`Analisar`** no painel (sob demanda ou disparado automaticamente ao final de cada verificação do Gerenciador de Hunt): lê a hunt atual no **Mapa / Hunt Analyser** (`ouro/h`, `xp/h`, nível e espécies) e a ficha da(s) espécie(s) na **Pokedex** (preço base do NPC, nível ao capturar, stats-base, chance de Shiny e tabela oficial de taxa/preço de cada Pokébola).
 - Reaproveita automaticamente os pisos de Pokémon e a cotação Coins/Gema do **Radar RMT** (Sacrifício `N ≥ 3,5`, `P5` e `Shiny` já descontando comissões progressivas e pensão de `100k/dia`) e detecta boosts ativos no HUD (**Boost de Captura ×2** e **Shiny Secret Lure ×2**).
 - Calcula o valor esperado por captura (`EV/captura = NPC + RMT N≥3,5 + P5 + Shiny`) usando a distribuição oficial de qualidade, potência (`P1..P5`) e nota (`ball.js`), e compara todas as bolas (incluindo *Nenhuma* e *Beast Ball* informativa) em 3 focos:
   - **Equilibrado** (padrão — Dinheiro + Raro/Shiny): escolhe a bola de maior taxa de captura que ainda dá lucro líquido na captura (ou, quando o EV é baixo, limita o investimento a uma fração segura do ouro dos abates).
   - **Dinheiro:** maximiza o lucro líquido total/hora (incluindo *Nenhuma* se capturar der prejuízo).
   - **Raro/Shiny:** maximiza a taxa de captura (e chances de Forte/P5/Shiny) mantendo a hunt sustentável.
-- Botão **`Usar`** aplica a Pokébola recomendada direto na configuração da extensão (`CFG.ball`) com 1 clique.
+- **Aplicação automática na reposição:** toda vez que o analisador roda (ou ao clicar em **`Usar`**), atualiza automaticamente a Pokébola da reposição (`CFG.ball`) com **mínimo `10`** e **reposição `100`**, sobrescrevendo os valores anteriores.
 
 ### Radar RMT (Ouro → Gema)
 

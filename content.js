@@ -56,7 +56,7 @@
 
   // ---------- log + painel ----------
   const logLines = [];
-  let logEl, rmtOutEl, rmtBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, huntOutEl, huntFocusEl;
+  let logEl, rmtOutEl, rmtBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, ballMinEl, ballBuyEl, huntOutEl, huntFocusEl, huntBtnEl;
   const log = (...a) => {
     const l = new Date().toLocaleTimeString() + ' ' + a.join(' ');
     logLines.push(l); if (logLines.length > 60) logLines.shift();
@@ -124,19 +124,20 @@
     mk('capture', '1 Captura (para ao capturar)');
     mk('potions', '2 Repor bolas/poções');
     mk('eterna', '3 Captura eterna');
-    // Linha do Modo 4: checkbox + seletor de foco na mesma linha (100% automático ao ligar ou trocar foco)
+    // Linha do Modo 4: checkbox + seletor de foco + botão de verificação manual (encadeia Hunt -> RMT -> Pokébola)
     const huntRow = document.createElement('div');
     huntRow.style.cssText = 'display:flex;align-items:center;gap:4px';
     const huntLbl = document.createElement('label');
-    huntLbl.style.cssText = 'flex:1;cursor:pointer;white-space:nowrap';
+    huntLbl.style.cssText = 'flex:1;min-width:0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    huntLbl.title = '4 Gerenciador de hunt (automático a cada 10 min; cada verificação também roda RMT e Analisador de Pokébola)';
     const huntChk = document.createElement('input');
     huntChk.type = 'checkbox'; huntChk.checked = !!st.hunt; huntChk.id = 'pkbot-hunt';
     huntChk.onchange = () => { st.hunt = huntChk.checked; save(); log('4 Gerenciador de hunt', huntChk.checked ? 'ON' : 'OFF'); if (huntChk.checked) huntState.next = 0; renderHunt(); ui.refresh(); };
-    huntLbl.append(huntChk, ' 4 Gerenciador de hunt');
+    huntLbl.append(huntChk, ' 4 Gerenc. hunt');
     huntFocusEl = document.createElement('select');
     huntFocusEl.id = 'pkbot-hunt-focus';
     huntFocusEl.title = 'Foco automático do Gerenciador de Hunt: Equilibrado (XP + Lucro + Abates/Outland), XP, Lucro/Outland ou Shiny';
-    huntFocusEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
+    huntFocusEl.style.cssText = 'flex-shrink:0;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
     [['balanced', 'Equilibrado'], ['xp', 'XP'], ['lucro', 'Lucro/Out'], ['shiny', 'Shiny']].forEach(([v, t]) => {
       const o = document.createElement('option'); o.value = v; o.textContent = t; huntFocusEl.append(o);
     });
@@ -147,7 +148,13 @@
       if (st.hunt) huntState.next = 0; // reavalia e troca automaticamente na hora
       renderHunt();
     };
-    huntRow.append(huntLbl, huntFocusEl);
+    huntBtnEl = document.createElement('button');
+    huntBtnEl.id = 'pkbot-hunt-scan';
+    huntBtnEl.textContent = 'Verificar';
+    huntBtnEl.title = 'Roda verificação manual do Gerenciador de Hunt agora (+ Radar RMT e Analisador de Pokébola)';
+    huntBtnEl.style.cssText = 'all:unset;flex-shrink:0;cursor:pointer;padding:1px 6px;border-radius:4px;background:#8f93;border:1px solid #8f96;font-size:10px;color:#fff';
+    huntBtnEl.onclick = () => runHuntCheck({ manual: true });
+    huntRow.append(huntLbl, huntFocusEl, huntBtnEl);
     body.append(huntRow);
     huntOutEl = document.createElement('div');
     huntOutEl.id = 'pkbot-hunt-out';
@@ -162,14 +169,18 @@
     // compras: tipo, mínimo para repor e quantidade por refill (bolas e poções)
     const box = document.createElement('div'); box.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3;display:grid;grid-template-columns:auto 1fr 52px 52px;gap:3px 5px;align-items:center';
     const fld = (el, key, tip) => { el.title = tip; el.style.cssText = 'width:100%;box-sizing:border-box;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:11px monospace;padding:1px 2px'; el.value = CFG[key];
-      el.onchange = () => { let v = el.value; if (el.type === 'number') { v = Math.max(el.min ? +el.min : 0, Math.min(+el.max || 9999, Math.floor(+v) || 0)); el.value = v; } CFG[key] = v; saveCfg(); log('config', key, '=', v); if (key === 'fps') applyFps(); }; return el; };
+      el.onchange = () => { let v = el.value; if (el.type === 'number') { v = Math.max(el.min ? +el.min : 0, Math.min(+el.max || 9999, Math.floor(+v) || 0)); el.value = v; } CFG[key] = v; saveCfg(); log('config', key, '=', v); if (key === 'fps') applyFps(); if ((key === 'ball' || key === 'ballMin' || key === 'ballBuy') && ballState.last) renderBall(); }; return el; };
     const sel = (opts, key, tip) => { const s = document.createElement('select'); opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); return fld(s, key, tip); };
     const nbr = (key, tip, min, max) => { const i = document.createElement('input'); i.type = 'number'; i.min = min; i.max = max; return fld(i, key, tip); };
     const cell = t => { const d = document.createElement('div'); d.textContent = t; d.style.cssText = 'font-size:10px;color:#aab'; return d; };
     ballSelEl = sel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta');
     ballSelEl.id = 'pkbot-ball-sel';
+    ballMinEl = nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999);
+    ballMinEl.id = 'pkbot-ball-min';
+    ballBuyEl = nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999);
+    ballBuyEl.id = 'pkbot-ball-buy';
     box.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
-      cell('Bola'), ballSelEl, nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
+      cell('Bola'), ballSelEl, ballMinEl, ballBuyEl,
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
     const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2 (leve)'], [1, '1 (servidor)'], [0.2, '0.2 (mapa quase parado · captura ON)'], [0, 'sem limite']], 'fps', 'Limita apenas o desenho do mapa (canvas). A interface, cliques, combate, XP e captura ficam sempre em velocidade normal (60 FPS).');
     fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel); body.append(box);
@@ -828,6 +839,7 @@
   function renderHunt(statusMsg) {
     if (!huntOutEl || typeof PK_HUNT === 'undefined') return;
     if (huntFocusEl && huntFocusEl.value !== CFG.huntFocus) huntFocusEl.value = CFG.huntFocus;
+    if (huntBtnEl) huntBtnEl.textContent = huntState.scanning ? 'Lendo...' : 'Verificar';
     huntOutEl.textContent = '';
     const mk = (tag, css, txt) => {
       const el = document.createElement(tag);
@@ -880,11 +892,14 @@
     }
   }
 
-  async function analyzeHunts({ autoSwitch = true } = {}) {
+  async function analyzeHunts({ autoSwitch = true, manual = false, includeFollowUps = true } = {}) {
     if (huntState.scanning) return null;
-    if (busy) return null;
+    if (busy) {
+      if (manual) renderHunt('Aguarde: outra ação em andamento.');
+      return null;
+    }
     huntState.scanning = true; busy = true;
-    renderHunt('Avaliando hunts automaticamente...');
+    renderHunt(manual ? 'Verificando hunts manualmente...' : 'Avaliando hunts automaticamente...');
     let voltarUltra = false;
     try {
       voltarUltra = await leaveUltra();
@@ -945,8 +960,18 @@
       }
       renderHunt();
       if (autoSwitch && dec.action === 'switch' && best) {
-        const ok = await switchTo(best.slug, best.nome, effCurSlug, { checkStop: () => !st.hunt, regiao: best.regiao });
+        const ok = await switchTo(best.slug, best.nome, effCurSlug, { checkStop: () => !manual && !st.hunt, regiao: best.regiao });
         if (ok && huntState.last) { huntState.last.curSlug = best.slug; huntState.last.curName = best.nome; saveHunt(); renderHunt(); }
+      }
+      if (includeFollowUps) {
+        renderHunt('Atualizando Radar RMT...');
+        await scanRmt({ nested: true });
+        if (inHunt()) {
+          renderHunt('Analisando Pokébola da hunt...');
+          await analyzeCurrentHuntBalls({ nested: true });
+        } else {
+          log('analisador: pulado pós-hunt (fora de hunt ativa)');
+        }
       }
       return dec;
     } catch (e) {
@@ -958,7 +983,15 @@
       if (voltarUltra) await reenterUltra();
       huntState.scanning = false;
       busy = false;
+      renderHunt();
+      renderRmt();
+      renderBall();
     }
+  }
+
+  async function runHuntCheck({ manual = true, autoSwitch = true } = {}) {
+    if (st.hunt) huntState.next = Date.now() + CFG.huntEvalMs;
+    return analyzeHunts({ autoSwitch, manual, includeFollowUps: true });
   }
 
   async function huntTick() {
@@ -981,7 +1014,7 @@
     }
     if (Date.now() < huntState.next) return;
     huntState.next = Date.now() + CFG.huntEvalMs;
-    await analyzeHunts({ autoSwitch: true });
+    await analyzeHunts({ autoSwitch: true, manual: false, includeFollowUps: true });
   }
 
   // ---------- 5: Radar RMT (Ouro -> Gema, passivo + scan sob demanda com plano de ação) ----------
@@ -1178,15 +1211,16 @@
     return parseRmtItemBook(painel);
   }
 
-  async function scanRmt() {
+  async function scanRmt({ nested = false } = {}) {
     if (typeof PK_RMT === 'undefined') return log('RMT: módulo PK_RMT indisponível');
     if (rmtState.scanning) return;
-    if (energyNow() === 'ultra') {
+    if (!nested && energyNow() === 'ultra') {
       renderRmt('Saia do modo ULTRA para escanear o RMT.');
       return log('RMT: em modo ULTRA (não sai sozinho)');
     }
-    if (busy) { renderRmt('Aguarde: outra ação em andamento.'); return; }
-    busy = true; rmtState.scanning = true;
+    if (!nested && busy) { renderRmt('Aguarde: outra ação em andamento.'); return; }
+    if (!nested) busy = true;
+    rmtState.scanning = true;
     const wasOpen = !!($('.modal-caixa[data-modal="community"]') && $('.modal-caixa[data-modal="community"]').offsetParent);
     const getCorpo = () => { const m = $('.modal-caixa[data-modal="community"]'); return (m && m.offsetParent) ? ($('#modal-corpo', m) || m) : null; };
     renderRmt('Escaneando books livres do RMT...');
@@ -1278,7 +1312,8 @@
       return;
     } finally {
       if (!wasOpen) await closeModal();
-      rmtState.scanning = false; busy = false;
+      rmtState.scanning = false;
+      if (!nested) busy = false;
       renderRmt();
       if (ballState.last) renderBall();
     }
@@ -1299,13 +1334,20 @@
     return { catchBoostActive, shinyLureActive };
   }
 
-  function applyRecommendedBall(ballName) {
-    if (!BALLS.includes(ballName)) return;
-    CFG.ball = ballName;
-    if (ballSelEl) ballSelEl.value = ballName;
+  function applyRecommendedBall(ballOrRec, { silentRender = false } = {}) {
+    if (typeof PK_BALL === 'undefined') return null;
+    const upd = PK_BALL.buildBallRestockConfig(ballOrRec, BALLS);
+    if (!upd) return null;
+    CFG.ball = upd.ball;
+    CFG.ballMin = upd.ballMin;
+    CFG.ballBuy = upd.ballBuy;
+    if (ballSelEl) ballSelEl.value = upd.ball;
+    if (ballMinEl) ballMinEl.value = upd.ballMin;
+    if (ballBuyEl) ballBuyEl.value = upd.ballBuy;
     saveCfg();
-    log('analisador: bola configurada para', ballName);
-    renderBall();
+    log('analisador: reposição atualizada p/', upd.ball, `(mín. ${upd.ballMin}, repor ${upd.ballBuy})`);
+    if (!silentRender) renderBall();
+    return upd;
   }
 
   function renderBall(statusMsg) {
@@ -1375,12 +1417,12 @@
     const titleEl = mk('div', `flex:1;font-weight:bold;color:${accent}`, `MELHOR: ${rec.name}`);
     topRow.append(titleEl);
     if (BALLS.includes(rec.name)) {
-      const already = CFG.ball === rec.name;
+      const already = CFG.ball === rec.name && CFG.ballMin === PK_BALL.DEFAULT_RESTOCK_MIN && CFG.ballBuy === PK_BALL.DEFAULT_RESTOCK_BUY;
       const useBtn = mk('button',
         `all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:9.5px;border:1px solid ${accent}88;background:${already ? '#fff2' : accent + '33'};color:#fff`,
         already ? 'Em uso' : 'Usar');
-      useBtn.title = `Configurar ${rec.name} como Pokébola padrão do bot`;
-      useBtn.onclick = () => applyRecommendedBall(rec.name);
+      useBtn.title = `Configurar ${rec.name} (mín. ${PK_BALL.DEFAULT_RESTOCK_MIN}, repor ${PK_BALL.DEFAULT_RESTOCK_BUY}) como Pokébola padrão do bot`;
+      useBtn.onclick = () => applyRecommendedBall(rec);
       topRow.append(useBtn);
     }
     card.append(topRow);
@@ -1601,14 +1643,15 @@
     return parsed;
   }
 
-  async function analyzeCurrentHuntBalls() {
+  async function analyzeCurrentHuntBalls({ nested = false } = {}) {
     if (typeof PK_BALL === 'undefined') return;
     if (ballState.scanning) return;
-    if (busy) { renderBall('Aguarde a ação atual terminar e tente de novo.'); return; }
+    if (!nested && busy) { renderBall('Aguarde a ação atual terminar e tente de novo.'); return; }
     if (!inHunt()) { renderBall('Entre em uma hunt ativa primeiro (não funciona no Centro/Safari).'); return; }
 
-    ballState.scanning = true; busy = true;
-    const wasUltra = energyNow() === 'ultra';
+    ballState.scanning = true;
+    if (!nested) busy = true;
+    const wasUltra = !nested && energyNow() === 'ultra';
     const wasOpen = !!modalVisible();
     try {
       const boosts = detectActiveBoosts();
@@ -1716,6 +1759,7 @@
       const rmtMarket = PK_BALL.extractRmtMarketData(rmtState.last?.routes || []);
       const res = PK_BALL.analyzeHuntBalls({ ...ballState.last, rmtMarket, focus: ballState.focus });
       log('analisador:', `${huntName} Nv${huntLevel} -> melhor (${ballState.focus}): ${res.recommended.name} (${PK_BALL.formatCoins(res.recommended.totalProfitPerHour)}/h)`);
+      applyRecommendedBall(res.recommended, { silentRender: true });
     } catch (e) {
       log('analisador erro:', e.message);
       renderBall('Erro: ' + e.message);
@@ -1723,7 +1767,8 @@
     } finally {
       if (!wasOpen) await closeModal();
       if (wasUltra) await reenterUltra();
-      ballState.scanning = false; busy = false;
+      ballState.scanning = false;
+      if (!nested) busy = false;
       renderBall();
     }
   }
@@ -1782,7 +1827,7 @@
   const rmtPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
     ? PK_RMT.buildActionPlan({ routes: rmtState.last.routes, gold: gold(), source: rmtState.last.source })
     : null;
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, rmtState, rmtPlan, scanRmt, ballState, analyzeCurrentHuntBalls, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, scanRmt, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);

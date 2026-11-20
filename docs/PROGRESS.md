@@ -8,8 +8,8 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
 ## Extensão MV3 (estado atual v0.7.2+)
-- [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`): 100% auto, rebalanceado p/ Auto-Potion e XP pré-Outland (`9f03bda`) · NÃO validado: ao vivo pós-fix, modo Economia e ULTRA Economia
-- [ ] Analisador de Pokébola (`ball.js`+`content.js`): valida hunt atual (NPC, RMT, Shiny, abates/h) e aplica… · NÃO validado: hunt mista (>1 espécie), com Shiny/Lure e após scan RMT completo
+- [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`): auto + botão `Verificar` encadeando `Hunt->RMT->Pokébola` (v0.7.6) · NÃO validado: troca real, Economia e ULTRA Economia
+- [ ] Analisador de Pokébola (`ball.js`+`content.js`): auto-aplica bola recomendada + mín. 10 / repor 100 (v0.7.6) · NÃO validado: hunt mista (>1 espécie) e com Shiny/Lure
 - [x] Radar RMT v0.7.5 (`rmt.js`+`content.js`): 100% itens fungíveis (remove Pokémon), META ÓTIMA no topo em SAVE_ONLY, validado em Node e Chrome (9,8 s).
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
