@@ -378,3 +378,83 @@ test('shouldAutoReeval dispara reavaliação automática ao trocar ativo, evolui
   assert.equal(PK_HUNT.shouldAutoReeval({ prev: { name: 'Squirtle', types: ['WATER'], trainerLevel: 19 }, cur: { name: 'Squirtle', types: ['WATER'], trainerLevel: 20 }, inCenter: false }).reason, 'trainer-level-up');
   assert.equal(PK_HUNT.shouldAutoReeval({ prev: base, cur: base, inCenter: true }).reason, 'center');
 });
+
+test('pickBestHunt v3 (regressão Shaolas Nv 34): prefere Rhyhorn Nv 30 sobre Diglett Nv 10 em Equilibrado e XP, e Diglett em Lucro', () => {
+  const squirtle34 = {
+    name: 'Squirtle',
+    level: 34,
+    types: ['WATER'],
+    hpMax: 660,
+    atk: 55, def: 65, spAtk: 57, spDef: 64,
+    baseSpd: 43, ivSpd: 27,
+    attacks: [
+      { name: 'Bubble', type: 'WATER', cat: 'SPECIAL', power: 40, cd: 16 },
+      { name: 'Water Gun', type: 'WATER', cat: 'SPECIAL', power: 40, cd: 16 },
+      { name: 'Water Pulse', type: 'WATER', cat: 'SPECIAL', power: 60, cd: 21 },
+      { name: 'Bubble Beam', type: 'WATER', cat: 'SPECIAL', power: 65, cd: 22 },
+      { name: 'Aqua Tail', type: 'WATER', cat: 'PHYSICAL', power: 90, cd: 28 },
+      { name: 'Hydro Pump', type: 'WATER', cat: 'SPECIAL', power: 110, cd: 30 },
+    ],
+  };
+  const huntsKanto34 = {
+    geodude: { nome: 'Geodude', regiao: 'kanto', level: 1, types: ['ROCK', 'GROUND'], baseStats: [40, 80, 100, 30, 30, 20] },
+    diglett: { nome: 'Diglett', regiao: 'kanto', level: 10, types: ['GROUND'], baseStats: [10, 55, 25, 35, 45, 95], xp: 86 * PK_HUNT.ANALYSER_KPH, gold: 169 * PK_HUNT.ANALYSER_KPH },
+    charmander: { nome: 'Charmander', regiao: 'kanto', level: 20, types: ['FIRE'], baseStats: [39, 52, 43, 60, 50, 65] },
+    rhyhorn: { nome: 'Rhyhorn', regiao: 'kanto', level: 30, types: ['GROUND', 'ROCK'], baseStats: [80, 85, 95, 30, 30, 25], xp: 696 * PK_HUNT.ANALYSER_KPH, gold: 326 * PK_HUNT.ANALYSER_KPH },
+    onix: { nome: 'Onix', regiao: 'kanto', level: 50, types: ['ROCK', 'GROUND'], baseStats: [35, 45, 160, 30, 45, 70] },
+    golem: { nome: 'Golem', regiao: 'kanto', level: 80, types: ['ROCK', 'GROUND'], baseStats: [80, 120, 130, 55, 65, 45] },
+  };
+  const potion = { name: 'Small Potion', heal: 60, price: 50 };
+  const ball = { name: 'Great Ball', price: 20, active: true };
+  const baseArgs = {
+    hunts: huntsKanto34,
+    player: squirtle34,
+    potion,
+    ball,
+    capturing: true,
+    curSlug: 'diglett',
+    curName: 'Diglett · nível 10',
+    inHunt: true,
+    huntGain: 1.1,
+  };
+
+  // Equilibrado: tira de Diglett Nv 10 e vai para Rhyhorn Nv 30 (lucrativo e ~2x mais XP/h)
+  const bal = PK_HUNT.pickBestHunt({ ...baseArgs, focus: 'balanced' });
+  assert.equal(bal.action, 'switch');
+  assert.equal(bal.best.slug, 'rhyhorn');
+  assert.equal(bal.best.ok, true);
+  assert.equal(bal.best.sim.dangerous, false);
+  assert.ok(bal.best.sim.netGoldH > 0, `esperava lucro líquido positivo no Rhyhorn, veio ${bal.best.sim.netGoldH}`);
+
+  // XP: também troca para Rhyhorn Nv 30 com folga
+  const xp = PK_HUNT.pickBestHunt({ ...baseArgs, focus: 'xp' });
+  assert.equal(xp.action, 'switch');
+  assert.equal(xp.best.slug, 'rhyhorn');
+
+  // Lucro: Diglett Nv 10 continua vencendo (maior lucro líquido/h)
+  const lucro = PK_HUNT.pickBestHunt({ ...baseArgs, focus: 'lucro' });
+  assert.equal(lucro.action, 'stay');
+  assert.equal(lucro.best.slug, 'diglett');
+
+  // Hunts deficitárias/perigosas continuam rejeitadas
+  const onix = PK_HUNT.simulateHunt({ player: squirtle34, hunt: huntsKanto34.onix, potion, ball, capturing: true });
+  const golem = PK_HUNT.simulateHunt({ player: squirtle34, hunt: huntsKanto34.golem, potion, ball, capturing: true });
+  assert.equal(onix.dangerous, true);
+  assert.equal(golem.dangerous, true);
+});
+
+test('scoreSimulatedPool (balanced) protege contra hunts deficitárias e premia sustentabilidade com Auto-Potion', () => {
+  const deficitPool = [
+    {
+      slug: 'lucrativa', nome: 'lucrativa',
+      sim: { kph: 350, xpH: 180000, netGoldH: 50000, stonesH: 1.5, outlandScore: 0, shinyScore: 5, isOutland: false, canShiny: true, safetyMult: 1, dangerous: false },
+    },
+    {
+      slug: 'deficitaria', nome: 'deficitaria',
+      sim: { kph: 200, xpH: 200000, netGoldH: -80000, stonesH: 0.8, outlandScore: 0, shinyScore: 3, isOutland: false, canShiny: true, safetyMult: 0.7, dangerous: false },
+    },
+  ];
+  const scored = PK_HUNT.scoreSimulatedPool(deficitPool, 'balanced').sort((a, b) => b.score - a.score);
+  assert.equal(scored[0].slug, 'lucrativa');
+  assert.ok(scored[0].score > scored[1].score * 1.5);
+});

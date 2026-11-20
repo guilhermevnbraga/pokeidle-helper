@@ -496,7 +496,7 @@ const PK_HUNT = (() => {
     const shinyRate = hunt.shinyChance > 0 ? hunt.shinyChance : (canShiny ? 1 / 24000 : 0);
     const shinyScore = canShiny ? kph * (catchChance > 0 ? catchChance : 0.015) * (shinyRate * 24000) : 0;
 
-    // Fator de segurança / sustentabilidade
+    // Fator de segurança / sustentabilidade (respeita Auto-Potion e evita dupla penalidade do custo de poção)
     const grossIncomeH = Math.max(1, goldH + npcCaptureH);
     const potionRatio = potionCostH / grossIncomeH;
     let safetyMult = 1;
@@ -506,19 +506,24 @@ const PK_HUNT = (() => {
       safetyMult = 0;
       dangerous = true;
     } else {
-      // Penaliza hunts lentas (poucos abates/h -> menos drops, capturas, pedras, shinies)
-      if (kph < 240) safetyMult *= Math.max(0.15, (kph / 240) ** 0.75);
-      // Penaliza gasto excessivo de poção em relação ao ganho bruto
-      if (potionRatio > 0.25) {
-        safetyMult *= Math.max(0.20, 1 - (potionRatio - 0.25) * 1.1);
+      // Penaliza apenas hunts muito lentas/travadas (>30s por mob); XP/h e Gold/h já embutem kph
+      if (kph < 120) safetyMult *= Math.max(0.20, (kph / 120) ** 0.75);
+      // Custo de poção já é descontado em netGoldH; penaliza safety apenas quando ameaça dar prejuízo (>85% do bruto)
+      if (potionRatio > 0.85) {
+        safetyMult *= Math.max(0.20, 1 - (potionRatio - 0.85) * 0.9);
       }
-      // Risco de morte / desmaio (toma >75% do HP em 1 único mob ou morre em <=3 hits durante a luta)
+      // Risco real de morte com Auto-Potion: burst (<=2,5 hits ou >=45% HP/golpe) ou DPS maior que a cura sustentável
       const hitsToDie = me.hpMax / Math.max(1, mobHitDmg);
-      if (dmgPerKill > me.hpMax * 0.75 || (hitsToDie <= 3.2 && ttkSec > 3.5)) {
+      const mobDps = mobHitDmg / MOB_ATK_INTERVAL;
+      const potHealPerSec = pot.heal > 0 ? (pot.heal / 1.5) : 0;
+      const netDrainPerKill = pot.heal > 0
+        ? Math.max(0, mobDps - potHealPerSec) * ttkSec
+        : dmgPerKill;
+      if (mobHitDmg >= me.hpMax * 0.45 || (hitsToDie <= 2.5 && ttkSec > 2.5) || netDrainPerKill > me.hpMax * 0.75) {
         safetyMult *= 0.25;
         dangerous = true;
       }
-      if (potionRatio > 0.85 || kph < 90) dangerous = true;
+      if (potionRatio > 1.25 || kph < 60) dangerous = true;
     }
 
     const matchup = typesApi ? typesApi.matchup(me.types, mobTypes) : { off: 1, def: 1, ratio: 1, known: false };
@@ -558,6 +563,7 @@ const PK_HUNT = (() => {
     const maxStones = Math.max(0.01, ...poolForMax.map(it => it.sim.stonesH));
     const maxOutland = Math.max(1, ...poolForMax.map(it => it.sim.outlandScore));
     const maxShiny = Math.max(0.001, ...poolForMax.map(it => it.sim.shinyScore));
+    const hasOutland = poolForMax.some(it => it.sim.isOutland);
 
     return items.map(it => {
       const s = it.sim;
@@ -565,7 +571,7 @@ const PK_HUNT = (() => {
       const nXp = Math.min(1.25, s.xpH / maxXp);
       const nNet = s.netGoldH >= 0
         ? Math.min(1.25, s.netGoldH / maxNet)
-        : Math.max(-0.6, s.netGoldH / maxNet);
+        : Math.max(-0.8, s.netGoldH / maxNet);
       const nKph = Math.min(1.2, s.kph / maxKph);
       const nStones = Math.min(1.2, s.stonesH / maxStones);
       const nOutland = s.isOutland ? Math.min(1.3, s.outlandScore / maxOutland) : 0;
@@ -573,14 +579,18 @@ const PK_HUNT = (() => {
 
       let raw = 0;
       if (f === 'xp') {
-        raw = 0.78 * nXp + 0.12 * nNet + 0.10 * nKph;
+        raw = 0.85 * nXp + 0.10 * nNet + 0.05 * nKph;
       } else if (f === 'lucro') {
         raw = 0.54 * nNet + 0.18 * nKph + 0.10 * nStones + 0.12 * nOutland + 0.06 * nXp;
       } else if (f === 'shiny') {
         raw = s.canShiny ? (0.48 * nShiny + 0.25 * nKph + 0.17 * nNet + 0.10 * nXp) : 0;
       } else {
-        // balanced (padrão): equilíbrio entre XP/h real, Lucro líquido/h, abates/h, pedras e bônus de drops Outland
-        raw = 0.38 * nXp + 0.35 * nNet + 0.15 * nKph + 0.06 * nStones + 0.06 * nOutland;
+        // balanced (padrão): prioriza XP/h real em hunts sustentáveis (utilidade côncava no lucro positivo evita travar em 1-hit low-level)
+        // Sem Outland liberada no pool, redireciona o peso de Outland para XP/h (progressão até Nv 150)
+        const nNetBal = s.netGoldH >= 0 ? Math.sqrt(nNet) : nNet;
+        raw = hasOutland
+          ? (0.54 * nXp + 0.23 * nNetBal + 0.04 * nKph + 0.06 * nStones + 0.13 * nOutland)
+          : (0.70 * nXp + 0.20 * nNetBal + 0.04 * nKph + 0.06 * nStones);
       }
 
       const score = Math.max(0, +(raw * s.safetyMult).toFixed(4));
