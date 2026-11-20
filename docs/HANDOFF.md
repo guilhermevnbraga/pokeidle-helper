@@ -1,13 +1,14 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-20. Versão da extensão: `0.7.6`. Último commit de código: `fa7365c`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 37 passando (`types.js` + `hunt.js` + `rmt.js` + `ball.js`). Histórico em `docs/archive/` (só Grep).
+Atualizado: 2026-11-20. Versão da extensão: `0.7.7`. Último commit de código: `fa7365c`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 44 passando (`types.js` + `hunt.js` + `rmt.js` + `stones.js` + `ball.js`). Histórico em `docs/archive/` (só Grep).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
 Vivem no `AGENTS.md` (não repetir aqui). Respeitar Termos §5 do PokeIdle (só cliques no DOM, sem API direta, sem mexer em login/anti-robô).
 
 ## Estado atual (2026-11-20)
-- Extensão MV3 (`0.7.6`) com 4 modos (Captura, Repor bolas/poções, Captura eterna, **Gerenciador de hunt v3** automático + botão manual `Verificar`) + **Analisador de Pokébola** (`ball.js`) + **Radar RMT** (`rmt.js`).
+- Extensão MV3 (`0.7.7`) com 4 modos (Captura, Repor bolas/poções, Captura eterna, **Gerenciador de hunt v3** automático + botão manual `Verificar`) + **Analisador de Pokébola** (`ball.js`) + **Radar RMT** (`rmt.js`) + **Venda de Pedras** (`stones.js`).
+- **Venda de Pedras em Coins (`stones.js` + `content.js`, `v0.7.7`):** seção `Venda de Pedras (Coins)` no painel com botões `Simular` e `Vender`. Lê inventário de pedras em `+ Anunciar → Um item`, vendas recentes comprovadas na Tabela de Preços (`Itens` + `Coins`, filtrando P2P) e book livre + média 7d de cada pedra; ignora anúncios `Retido` e micro-iscas e precifica em `min(menorLivre - 1, max(média7d, máxVendaComprovada))` com proteção anti-dump e 15% de comissão. Validado em Node (44/44) e simulação real no Chrome (6 s, 3/3 pedras, 4,25M líq.); publicação real (`#cm-publicar`) deixada p/ o usuário.
 - **Verificação manual + cadeia `Hunt → RMT → Pokébola` + auto-reposição `10/100` (`fa7365c`, `v0.7.6`):** botão `#pkbot-hunt-scan` (`Verificar`) no Modo 4; toda verificação (automática ou manual) sai do ULTRA uma única vez e encadeia `Hunt → RMT → Pokébola`; `PK_BALL.buildBallRestockConfig` sobrescreve `ballMin = 10` e `ballBuy = 100` em toda execução do analisador. Validado em Node (37/37) e ao vivo no Chrome (ciclo automático e manual sobrescrevendo `1/1` e `77/333` → `Ultra Ball 10/100`).
 - **Radar RMT 100% itens fungíveis (`f56c5c8`, `v0.7.5`):** removidas rotas/varreduras de Pokémon; scan em ~8–10 s (8 itens líquidos); em `SAVE_ONLY`, **META ÓTIMA** aparece antes da **1ª ENTRADA**.
 - **FPS seletivo + Modo servidor (`7633b2b`, `v0.7.4`):** `fps.js` limita apenas `Campo.loop` (UI em 60 FPS nativos), pausa minimizado, opção `0.2` + **Modo servidor (sem animações)** + Worker 100 ms e `background.js` 30 s.

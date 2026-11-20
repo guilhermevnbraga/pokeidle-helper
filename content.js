@@ -56,7 +56,7 @@
 
   // ---------- log + painel ----------
   const logLines = [];
-  let logEl, rmtOutEl, rmtBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, ballMinEl, ballBuyEl, huntOutEl, huntFocusEl, huntBtnEl;
+  let logEl, rmtOutEl, rmtBtnEl, stonesOutEl, stonesPlanBtnEl, stonesSellBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, ballMinEl, ballBuyEl, huntOutEl, huntFocusEl, huntBtnEl;
   const log = (...a) => {
     const l = new Date().toLocaleTimeString() + ' ' + a.join(' ');
     logLines.push(l); if (logLines.length > 60) logLines.shift();
@@ -84,6 +84,10 @@
   const rmtState = { scanning: false, last: null };
   try { rmtState.last = JSON.parse(localStorage.getItem(RMT_KEY) || 'null'); } catch (e) {}
   const saveRmt = () => { try { localStorage.setItem(RMT_KEY, JSON.stringify(rmtState.last)); } catch (e) {} };
+  const STONES_KEY = 'pkbot-stones';
+  const stoneState = { running: false, last: null };
+  try { stoneState.last = JSON.parse(localStorage.getItem(STONES_KEY) || 'null'); } catch (e) {}
+  const saveStones = () => { try { localStorage.setItem(STONES_KEY, JSON.stringify(stoneState.last)); } catch (e) {} };
   const BALL_KEY = 'pkbot-ball';
   const ballState = { scanning: false, focus: 'balanced', last: null };
   try {
@@ -235,12 +239,40 @@
     rmtOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:220px;overflow:auto;user-select:text';
     rmtBox.append(rmtHead, rmtOutEl);
     body.append(rmtBox);
+    // Venda de Pedras (RMT — Coins): simula ou anuncia todas as pedras do inventário pelo máximo comprovado
+    const stonesBox = document.createElement('div');
+    stonesBox.id = 'pkbot-stones-box';
+    stonesBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
+    const stonesHead = document.createElement('div');
+    stonesHead.style.cssText = 'display:flex;align-items:center;gap:4px';
+    const stonesTit = document.createElement('span');
+    stonesTit.textContent = 'Venda de Pedras (Coins)';
+    stonesTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#8ef';
+    stonesPlanBtnEl = document.createElement('button');
+    stonesPlanBtnEl.id = 'pkbot-stones-plan';
+    stonesPlanBtnEl.textContent = 'Simular';
+    stonesPlanBtnEl.title = 'Lê suas pedras, o book livre e o histórico de vendas comprovadas sem anunciar';
+    stonesPlanBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#8ef3;border:1px solid #8ef6;font-size:10px;color:#fff';
+    stonesPlanBtnEl.onclick = () => sellAllStones({ dryRun: true });
+    stonesSellBtnEl = document.createElement('button');
+    stonesSellBtnEl.id = 'pkbot-stones-sell';
+    stonesSellBtnEl.textContent = 'Vender';
+    stonesSellBtnEl.title = 'Anuncia todas as pedras do inventário em Coins pelo melhor preço comprovado no mercado';
+    stonesSellBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#6f93;border:1px solid #6f96;font-size:10px;color:#fff';
+    stonesSellBtnEl.onclick = () => sellAllStones({ dryRun: false });
+    stonesHead.append(stonesTit, stonesPlanBtnEl, stonesSellBtnEl);
+    stonesOutEl = document.createElement('div');
+    stonesOutEl.id = 'pkbot-stones-out';
+    stonesOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:180px;overflow:auto;user-select:text';
+    stonesBox.append(stonesHead, stonesOutEl);
+    body.append(stonesBox);
     logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
     p.append(head, body);
     renderHunt();
     renderBall();
     renderRmt();
+    renderStones();
 
     const place = () => { // mantém dentro da janela
       const r = p.getBoundingClientRect();
@@ -1319,6 +1351,414 @@
     }
   }
 
+  // ---------- 6: Venda de Pedras (RMT — Coins, máximo comprovado) ----------
+  function renderStones(statusMsg) {
+    if (!stonesOutEl || typeof PK_STONES === 'undefined') return;
+    if (stonesPlanBtnEl) stonesPlanBtnEl.disabled = stoneState.running;
+    if (stonesSellBtnEl) {
+      stonesSellBtnEl.disabled = stoneState.running;
+      stonesSellBtnEl.textContent = stoneState.running ? 'Rodando...' : 'Vender';
+    }
+    const mk = (tag, css, text) => { const el = document.createElement(tag); if (css) el.style.cssText = css; if (text != null) el.textContent = text; return el; };
+    stonesOutEl.textContent = '';
+    if (statusMsg) {
+      stonesOutEl.append(mk('div', 'color:#8ef', statusMsg));
+      return;
+    }
+    const d = stoneState.last;
+    if (!d) {
+      stonesOutEl.append(mk('div', 'opacity:.7', 'Clique "Simular" para prévia ou "Vender" para anunciar todas as pedras do inventário em Coins.'));
+      return;
+    }
+    const ageMin = Math.max(0, Math.round((Date.now() - d.at) / 60000));
+    const modeTag = d.dryRun ? 'simulação' : 'venda';
+    const sum = d.summary || PK_STONES.summarizePlan(d.items || []);
+    const listedCount = (d.items || []).filter(i => i.execStatus === 'listed').length;
+    const headTxt = d.items && d.items.length
+      ? `${modeTag} · há ${ageMin}min · ${d.dryRun ? `${sum.sellTypes}/${sum.totalTypes} pedras` : `${listedCount}/${sum.sellTypes} anunciadas`} (${sum.totalUnits} un.) · líq. ${PK_STONES.formatCoins(sum.totalNet)}`
+      : `${modeTag} · há ${ageMin}min · nenhuma pedra disponível no inventário`;
+    stonesOutEl.append(mk('div', 'opacity:.75;font-size:9.5px;margin-bottom:3px', headTxt));
+
+    for (const it of (d.items || [])) {
+      const row = mk('div', 'padding:2px 0;border-bottom:1px solid #fff1');
+      let badge = '';
+      let color = '#dfe';
+      if (it.execStatus === 'listed') { badge = '✅'; color = '#8f8'; }
+      else if (it.execStatus === 'dry') { badge = '👁'; color = '#8ef'; }
+      else if (it.execStatus === 'error') { badge = '⚠'; color = '#f96'; }
+      else if (it.action === 'skip' || it.execStatus === 'skipped') { badge = '⏭'; color = '#fc8'; }
+      const priceStr = it.price ? `${it.price.toLocaleString('pt-BR')}/un.` : '—';
+      const netStr = it.net ? ` → líq. ${PK_STONES.formatCoins(it.net)}` : '';
+      const line1 = `${badge} ${it.name} ×${it.qty}: ${priceStr}${netStr}`;
+      row.append(mk('div', `color:${color}`, line1));
+      const detailParts = [];
+      if (it.execDetail) detailParts.push(it.execDetail);
+      else if (it.reason) detailParts.push(it.reason);
+      if (it.bestFree) detailParts.push(`livre ${it.bestFree.toLocaleString('pt-BR')}`);
+      if (it.avg7d) detailParts.push(`7d ${it.avg7d.toLocaleString('pt-BR')}`);
+      if (it.maxProvenRecent) detailParts.push(`máx.rec ${it.maxProvenRecent.toLocaleString('pt-BR')}`);
+      row.append(mk('div', 'opacity:.68;font-size:9px', detailParts.join(' · ')));
+      stonesOutEl.append(row);
+    }
+  }
+
+  async function closeRmtLeaf(maxMs = 1500) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < maxMs) {
+      const leaf = $('.cm-folha');
+      if (!leaf || !leaf.offsetParent) return true;
+      const btn = $('.cm-fechar', leaf) || $$('button', leaf).find(b => b.offsetParent && b.textContent.trim() === '×');
+      if (btn) btn.click();
+      await sleep(220);
+    }
+    return !($('.cm-folha') && $('.cm-folha').offsetParent);
+  }
+
+  function parseStoneBook(painel) {
+    if (!painel) return { offers: [], avg7d: null, vol7d: null };
+    const mediaText = ($('.cmp-media', painel) || {}).textContent || '';
+    const { avg7d, vol7d } = PK_STONES.parseAvg7d(mediaText);
+    const offers = [];
+    for (const row of $$('.cmv-linha', painel)) {
+      const qtyTxt = ($('.cmv-qtd', row) || {}).textContent || '';
+      const priceTxt = ($('.cmv-preco .cm-preco', row) || $('.cmv-preco', row) || {}).textContent || '';
+      const seller = ($('.cmv-quem', row) || {}).textContent?.trim() || '';
+      const qty = PK_STONES.parseIntClean(qtyTxt) || 1;
+      const price = PK_STONES.parseIntClean(priceTxt);
+      const buyBtn = $('.cmv-comprar', row);
+      const dmBtn = $('.cmv-dm', row);
+      const held = !!($('.cm-retido, [data-retido-ate]', row)) || /retid|held/i.test(buyBtn ? buyBtn.textContent : '');
+      const own = !buyBtn && !dmBtn;
+      if (price) offers.push({ price, qty, held, own, seller });
+    }
+    return { offers, avg7d, vol7d };
+  }
+
+  async function waitForStoneBook(itemId, maxMs = 2600) {
+    const t0 = Date.now();
+    const idStr = String(itemId);
+    while (Date.now() - t0 < maxMs) {
+      const m = $('.modal-caixa[data-modal="community"]');
+      const corpo = m && ($('#modal-corpo', m) || m);
+      const painel = corpo && $('.cmi-painel', corpo);
+      if (painel) {
+        const fav = $('.cm-fav[data-fav-item]', painel);
+        const rightItem = !fav || fav.dataset.favItem === idStr;
+        const coinBtn = $('.cmp-op[data-swmoeda="gold"]', painel)
+          || $$('button.cmp-op', painel).find(b => /coins/i.test(b.textContent));
+        if (rightItem && coinBtn && !coinBtn.classList.contains('on')) {
+          coinBtn.click();
+          await sleep(260);
+          continue;
+        }
+        if (rightItem && (!coinBtn || coinBtn.classList.contains('on'))) {
+          const parsed = parseStoneBook(painel);
+          if (parsed.offers.length || (parsed.avg7d != null && Date.now() - t0 >= 650)) return parsed;
+          if (!/carregando|loading/i.test(painel.textContent || '') && Date.now() - t0 >= 900) return parsed;
+        }
+      }
+      await sleep(180);
+    }
+    const m = $('.modal-caixa[data-modal="community"]');
+    const painel = m && $('.cmi-painel', $('#modal-corpo', m) || m);
+    return parseStoneBook(painel);
+  }
+
+  async function readStoneHistoryCoins(getCorpo, maxPages = 6) {
+    const salesByStone = new Map();
+    const corpo = getCorpo();
+    const btnHist = corpo && $('#cm-historico-global', corpo);
+    if (!btnHist) return salesByStone;
+    btnHist.click();
+    const leaf = await waitForSelector('.cm-folha', () => document, 2200);
+    if (!leaf) return salesByStone;
+    await sleep(300);
+
+    // Filtra Itens + Coins (re-consultando nós a cada clique)
+    const clickHistFilter = async re => {
+      const f = $('.cm-folha');
+      const b = f && $$('button.cm-filtro', f).find(el => re.test(el.textContent.trim()));
+      if (b && !b.classList.contains('on')) { b.click(); await sleep(450); }
+    };
+    await clickHistFilter(/^(itens|items)$/i);
+    await clickHistFilter(/^(coins|ouro)$/i);
+
+    let prevSig = '';
+    for (let page = 1; page <= maxPages; page++) {
+      const f = $('.cm-folha');
+      if (!f) break;
+      const rows = $$('.cm-hist-linha', f);
+      const sig = rows.slice(0, 3).map(r => r.textContent.trim()).join('|');
+      if (!rows.length || (page > 1 && sig === prevSig)) break;
+      prevSig = sig;
+      for (const r of rows) {
+        const itemEl = $('.cm-hist-item', r);
+        const valEl = $('.cm-hist-valor', r);
+        const isOrb = !!$('.cm-preco.orb', r);
+        const parsed = PK_STONES.parseHistoryRow({
+          itemText: (itemEl && (itemEl.title || itemEl.textContent)) || '',
+          valueText: (valEl && valEl.textContent) || '',
+          isOrb,
+        });
+        if (!parsed) continue;
+        if (!salesByStone.has(parsed.normName)) salesByStone.set(parsed.normName, []);
+        salesByStone.get(parsed.normName).push(parsed);
+      }
+      if (page >= maxPages) break;
+      const nextBtn = $$('button.cm-pag', f).find(b => b.textContent.trim() === '›' && !b.disabled);
+      if (!nextBtn) break;
+      nextBtn.click();
+      // Aguarda a próxima página mudar o conteúdo
+      const t0 = Date.now();
+      while (Date.now() - t0 < 1800) {
+        await sleep(180);
+        const f2 = $('.cm-folha');
+        const rows2 = f2 ? $$('.cm-hist-linha', f2) : [];
+        const sig2 = rows2.slice(0, 3).map(r => r.textContent.trim()).join('|');
+        if (rows2.length && sig2 !== prevSig) break;
+      }
+    }
+    await closeRmtLeaf();
+    return salesByStone;
+  }
+
+  async function readInventoryStones(getCorpo, stoneIds) {
+    const corpo = getCorpo();
+    const btnAnn = corpo && $('#cm-anunciar', corpo);
+    if (!btnAnn) throw new Error('Botão + Anunciar não encontrado');
+    btnAnn.click();
+    const btnItem = await waitForSelector('.cm-folha button.cm-grande[data-tipo="item"]', () => document, 2200);
+    if (!btnItem) { await closeRmtLeaf(); throw new Error('Opção "Um item" não encontrada'); }
+    btnItem.click();
+    await sleep(450);
+
+    const leaf = $('.cm-folha');
+    const slots = leaf ? $$('button.cm-slot[data-id]', leaf) : [];
+    const stones = [];
+    for (const s of slots) {
+      if (!s.offsetParent || s.disabled) continue;
+      const id = s.dataset.id;
+      const name = ($('.cm-slot-nome', s) || {}).textContent?.trim() || '';
+      const qty = PK_STONES.parseIntClean(($('b', s) || {}).textContent || '') || 0;
+      const hasTypeChip = !!$('.cm-chip.tipo', s);
+      if (qty > 0 && PK_STONES.isStoneItem({ id, name, hasTypeChip, stoneIds })) {
+        stones.push({ id: String(id), name, qty });
+      }
+    }
+    await closeRmtLeaf();
+    return stones;
+  }
+
+  async function publishStoneListing(getCorpo, planItem) {
+    const corpo = getCorpo();
+    const btnAnn = corpo && $('#cm-anunciar', corpo);
+    if (!btnAnn) return { status: 'error', detail: 'botão + Anunciar ausente' };
+    btnAnn.click();
+    const btnItem = await waitForSelector('.cm-folha button.cm-grande[data-tipo="item"]', () => document, 2200);
+    if (!btnItem) { await closeRmtLeaf(); return { status: 'error', detail: 'tela de tipo não abriu' }; }
+    btnItem.click();
+    await sleep(450);
+
+    const leaf = $('.cm-folha');
+    const slot = leaf && $(`button.cm-slot[data-id="${planItem.id}"]`, leaf);
+    if (!slot || !slot.offsetParent || slot.disabled) {
+      await closeRmtLeaf();
+      return { status: 'skipped', detail: 'indisponível/já anunciada' };
+    }
+    slot.click();
+    const priceInp = await waitForSelector('.cm-folha #cm-preco', () => document, 2200);
+    if (!priceInp) { await closeRmtLeaf(); return { status: 'error', detail: 'formulário de preço não abriu' }; }
+    await sleep(220);
+
+    // Garante moeda Coins
+    const fForm = $('.cm-folha');
+    const btnGold = fForm && $('.cm-moeda[data-moeda="gold"]', fForm);
+    if (btnGold && !btnGold.classList.contains('on')) { btnGold.click(); await sleep(200); }
+
+    // Garante quantidade total (Tudo)
+    const btnAll = fForm && $('button.qtd-atalho[data-frac="1"]', fForm);
+    if (btnAll) { btnAll.click(); await sleep(150); }
+    const qtyInp = $('.cm-folha #qtd-num');
+    const actualQty = qtyInp ? (PK_STONES.parseIntClean(qtyInp.value) || planItem.qty) : planItem.qty;
+
+    // Define preço unitário
+    const inp = $('.cm-folha #cm-preco');
+    inp.value = String(planItem.price);
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(220);
+
+    const tetoEl = $('.cm-folha #cm-preco-teto');
+    const pubBtn = $('.cm-folha #cm-publicar');
+    if (tetoEl && !tetoEl.hidden && tetoEl.textContent.trim()) {
+      const msg = tetoEl.textContent.trim();
+      await closeRmtLeaf();
+      return { status: 'error', detail: msg };
+    }
+    if (!pubBtn || pubBtn.disabled) {
+      await closeRmtLeaf();
+      return { status: 'error', detail: 'botão Publicar desabilitado' };
+    }
+
+    pubBtn.click();
+    // Aguarda a folha fechar (sinal de publicação concluída) ou erro aparecer
+    const t0 = Date.now();
+    while (Date.now() - t0 < 3000) {
+      await sleep(220);
+      const l = $('.cm-folha');
+      if (!l || !l.offsetParent) {
+        return { status: 'listed', listedQty: actualQty, detail: `anunciada ×${actualQty} a ${planItem.price.toLocaleString('pt-BR')}` };
+      }
+      const errEl = $('.cm-erro, .erro, .aviso-erro', l);
+      if (errEl && errEl.offsetParent && errEl.textContent.trim()) {
+        const errTxt = errEl.textContent.trim();
+        await closeRmtLeaf();
+        return { status: 'error', detail: errTxt };
+      }
+    }
+    // Se ainda está aberta após 3 s, checa se mudou texto de erro/toast e fecha com segurança
+    const lEnd = $('.cm-folha');
+    const stillOpen = !!(lEnd && lEnd.offsetParent);
+    if (stillOpen) {
+      const maybeToast = ($('.toast, #toast, .notificacao') || {}).textContent?.trim() || '';
+      await closeRmtLeaf();
+      return { status: 'error', detail: maybeToast || 'não fechou após publicar (cooldown/já anunciada?)' };
+    }
+    return { status: 'listed', listedQty: actualQty, detail: `anunciada ×${actualQty} a ${planItem.price.toLocaleString('pt-BR')}` };
+  }
+
+  async function sellAllStones({ dryRun = false } = {}) {
+    if (typeof PK_STONES === 'undefined') return log('pedras: módulo PK_STONES indisponível');
+    if (stoneState.running) return;
+    if (busy) { renderStones('Aguarde: outra ação em andamento.'); return; }
+    busy = true;
+    stoneState.running = true;
+    const effDry = !!(dryRun || CFG.dry);
+    const voltarUltra = energyNow() === 'ultra';
+    const wasOpen = !!($('.modal-caixa[data-modal="community"]') && $('.modal-caixa[data-modal="community"]').offsetParent);
+    const getCorpo = () => { const m = $('.modal-caixa[data-modal="community"]'); return (m && m.offsetParent) ? ($('#modal-corpo', m) || m) : null; };
+    renderStones(effDry ? 'Simulando venda de pedras...' : 'Analisando pedras do inventário...');
+    try {
+      if (voltarUltra && !(await leaveUltra())) {
+        renderStones('Não consegui sair do modo ULTRA.');
+        return null;
+      }
+      if (!wasOpen) {
+        await closeModal();
+        const nav = navBtn('community');
+        if (!nav) { renderStones('Botão RMT não encontrado.'); return null; }
+        nav.click();
+        await waitForSelector('.modal-caixa[data-modal="community"] #cm-anunciar', () => document, 3500);
+        await sleep(300);
+      }
+      let corpo = getCorpo();
+      if (!corpo) { renderStones('Modal RMT não abriu.'); return null; }
+      await closeRmtLeaf();
+
+      // 1) Aba Itens -> Categoria Pedras para capturar o catálogo dinâmico de IDs de pedras
+      const btnItens = $('button.cm-filtro[data-tipo="item"]', corpo)
+        || $$('button.cm-filtro', corpo).find(b => /^(itens|items)$/i.test(b.textContent.trim()));
+      if (btnItens && !btnItens.classList.contains('on')) { btnItens.click(); await sleep(550); }
+      corpo = getCorpo(); if (!corpo) return null;
+      const btnPedras = $('button.cm-filtro[data-cat="stone"]', corpo)
+        || $$('button.cm-filtro', corpo).find(b => /^(pedras|stones)$/i.test(b.textContent.trim()));
+      if (btnPedras && !btnPedras.classList.contains('on')) { btnPedras.click(); await sleep(500); }
+      corpo = getCorpo(); if (!corpo) return null;
+      const stoneIds = new Set($$('.cmi-linha[data-item]', corpo).map(el => String(el.dataset.item)));
+
+      // 2) Lê pedras disponíveis no inventário via + Anunciar -> Um item
+      renderStones('Lendo pedras no inventário...');
+      const invStones = await readInventoryStones(getCorpo, stoneIds);
+      if (!invStones.length) {
+        stoneState.last = { at: Date.now(), dryRun: effDry, items: [], summary: PK_STONES.summarizePlan([]) };
+        saveStones();
+        log('pedras: nenhuma pedra disponível no inventário para anunciar');
+        return stoneState.last;
+      }
+
+      // 3) Lê Tabela de Preços recente (Itens + Coins) para vendas comprovadas
+      renderStones(`Lendo vendas comprovadas (${invStones.length} tipos de pedra)...`);
+      const salesByStone = await readStoneHistoryCoins(getCorpo, 6);
+
+      // 4) Garante aba Itens -> Pedras e lê book livre + média 7d de cada pedra do inventário
+      corpo = getCorpo(); if (!corpo) return null;
+      const bIt2 = $('button.cm-filtro[data-tipo="item"]', corpo);
+      if (bIt2 && !bIt2.classList.contains('on')) { bIt2.click(); await sleep(500); }
+      corpo = getCorpo(); if (!corpo) return null;
+      const bPd2 = $('button.cm-filtro[data-cat="stone"]', corpo);
+      if (bPd2 && !bPd2.classList.contains('on')) { bPd2.click(); await sleep(450); }
+
+      const planned = [];
+      for (let i = 0; i < invStones.length; i++) {
+        const stItem = invStones[i];
+        renderStones(`Analisando (${i + 1}/${invStones.length}): ${stItem.name}...`);
+        corpo = getCorpo(); if (!corpo) break;
+        const row = $(`.cmi-linha[data-item="${stItem.id}"]`, corpo)
+          || $$('.cmi-linha', corpo).find(el => ($('.cmi-nome b', el) || {}).textContent?.trim() === stItem.name);
+        let offers = [], avg7d = null, vol7d = null;
+        if (row) {
+          row.click();
+          await sleep(450);
+          const parsed = await waitForStoneBook(stItem.id);
+          offers = parsed.offers;
+          avg7d = parsed.avg7d;
+          vol7d = parsed.vol7d;
+        }
+        const recentSales = salesByStone.get(PK_STONES.norm(stItem.name)) || [];
+        const dec = PK_STONES.chooseStonePrice({
+          id: stItem.id,
+          name: stItem.name,
+          qty: stItem.qty,
+          offers,
+          avg7d,
+          vol7d,
+          recentSales,
+        });
+        dec.execStatus = dec.action === 'sell' ? (effDry ? 'dry' : 'pending') : 'skipped';
+        dec.execDetail = dec.action === 'sell' ? dec.reason : dec.reason;
+        planned.push(dec);
+      }
+
+      // 5) Se não for simulação/dry-run, publica cada pedra elegível com intervalo conservador
+      if (!effDry) {
+        const toSell = planned.filter(p => p.action === 'sell');
+        for (let i = 0; i < toSell.length; i++) {
+          const item = toSell[i];
+          renderStones(`Anunciando (${i + 1}/${toSell.length}): ${item.name} ×${item.qty} a ${item.price.toLocaleString('pt-BR')}...`);
+          const res = await publishStoneListing(getCorpo, item);
+          item.execStatus = res.status;
+          item.execDetail = res.detail;
+          if (res.status === 'listed') {
+            log(`pedras: anunciada ${item.name} ×${res.listedQty || item.qty} a ${item.price.toLocaleString('pt-BR')} Coins/un. (líq. ~${PK_STONES.formatCoins(item.net)})`);
+          } else {
+            log(`pedras: ${item.name} -> ${res.status} (${res.detail})`);
+          }
+          if (i + 1 < toSell.length) await sleep(700);
+        }
+      } else {
+        const sumDry = PK_STONES.summarizePlan(planned);
+        log(`pedras[simulação]: ${sumDry.sellTypes}/${sumDry.totalTypes} pedras (${sumDry.totalUnits} un.) · líq. est. ${PK_STONES.formatCoins(sumDry.totalNet)} Coins`);
+      }
+
+      const summary = PK_STONES.summarizePlan(planned);
+      stoneState.last = { at: Date.now(), dryRun: effDry, items: planned, summary };
+      saveStones();
+      return stoneState.last;
+    } catch (e) {
+      log('pedras erro:', e.message);
+      renderStones('Erro na venda de pedras: ' + e.message);
+      return null;
+    } finally {
+      await closeRmtLeaf();
+      if (!wasOpen) await closeModal();
+      if (voltarUltra) await reenterUltra();
+      stoneState.running = false;
+      busy = false;
+      renderStones();
+    }
+  }
+  const planSellStones = () => sellAllStones({ dryRun: true });
+
   // ---------- Analisador Otimizado de Pokébola (hunt atual) ----------
   let ballTableOpen = false;
   const normTxt = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -1827,7 +2267,7 @@
   const rmtPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
     ? PK_RMT.buildActionPlan({ routes: rmtState.last.routes, gold: gold(), source: rmtState.last.source })
     : null;
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, scanRmt, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, scanRmt, stoneState, planSellStones, sellAllStones, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);

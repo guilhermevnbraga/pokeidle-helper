@@ -4,13 +4,14 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 
 ## Ambiente de desenvolvimento & IA
 - [x] Arquitetura Antigravity econômica: `AGENTS.md`, hook `SessionStart`, Git `pre-commit`, `scripts/check.mjs`, `compact-progress.mjs`, skills `/handoff`, `/study-game`, `/feature` e `docs…
-- [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js`, `hunt.js`, `rmt.js` e `ball.js` (`tests/*.test.mjs`).
+- [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js`, `hunt.js`, `rmt.js`, `stones.js` e `ball.js` (`tests/*.test.mjs`).
 - [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
 ## Extensão MV3 (estado atual v0.7.2+)
 - [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`): auto + botão `Verificar` encadeando `Hunt->RMT->Pokébola` (v0.7.6) · NÃO validado: troca real, Economia e ULTRA Economia
 - [ ] Analisador de Pokébola (`ball.js`+`content.js`): auto-aplica bola recomendada + mín. 10 / repor 100 (v0.7.6) · NÃO validado: hunt mista (>1 espécie) e com Shiny/Lure
 - [x] Radar RMT v0.7.5 (`rmt.js`+`content.js`): 100% itens fungíveis (remove Pokémon), META ÓTIMA no topo em SAVE_ONLY, validado em Node e Chrome (9,8 s).
+- [ ] Venda de Pedras v0.7.7 (`stones.js`+`content.js`): `Simular`/`Vender` todas pedras em Coins no máx. comprovado; validado Node+simulação real (6 s) · NÃO validado: clique `#cm-publicar`
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.

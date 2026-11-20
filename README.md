@@ -50,6 +50,15 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
   - **Passo a passo (`ONDE` / `COMPRAR` / `VENDER`):** indica quantas unidades comprar no book real, por quantas Gemas anunciar e quanto você recebe líquido.
   - **Alternativa imediata:** quando compensa juntar, ainda mostra a melhor jogada real com o ouro que você tem hoje (evitando armadilhas como taxa de 25% em lotes pequenos) + ranking completo dobrável dos 8 itens.
 
+### Venda de Pedras (RMT — Coins)
+
+- Seção **`Venda de Pedras (Coins)`** no painel com dois botões: **`Simular`** (prévia segura sem anunciar nada) e **`Vender`** (anuncia todas as pedras de evolução disponíveis no inventário com quantidade `Tudo`).
+- **Como calcula o máximo que vende comprovadamente (`stones.js`):**
+  - Lê o inventário de pedras diretamente em `+ Anunciar → Um item` (nunca toca em Fragmentos, Boss Tokens, Casas, Bicicletas ou Tickets).
+  - Lê a **Tabela de Preços** recente (`Itens` + `Coins`, filtrando outliers de transferência P2P) e o **book real** + **média vendida nos últimos 7 dias** de cada pedra que você possui.
+  - Ignora anúncios **`Retido`** (armadilhas de 2 min/dumping) e micro-iscas no topo do book livre, escolhendo `min(menorLivre - 1, max(média7d, máxVendaComprovada))`, com proteção anti-dump quando o book livre cai abaixo de 50% da média 7d sem vendas confirmando.
+  - Respeita a comissão oficial de `15%`, a regra de 1 anúncio por item / cooldown de `30 min` e restaura o modo **ULTRA Economia** caso estivesse ativo.
+
 ## Painel
 
 - **Arrastar:** pelo cabeçalho. A posição fica salva.
