@@ -13,7 +13,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Radar RMT v0.7.5 (`rmt.js`+`content.js`): 100% itens fungíveis (remove Pokémon), META ÓTIMA no topo em SAVE_ONLY, validado em Node e Chrome (9,8 s).
 - [x] Venda de Pedras v0.7.7 (`stones.js`+`content.js`): `Simular`/`Vender` pedras em Coins no máx. comprovado, confirma `.caixa-confirmar`; validado Node+venda real (3/3 em 12,9 s).
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
-- [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
+- [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível em ULTRA, altura limitada a `100vh - 16px` com rolagem interna e `ResizeObserver` (`content.js`).
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.
 - [ ] Hardening Market/multi-conta (`content.js`): aba Comprar, card fresco, compra parcial, fila, aviso bola 0 e `cena` só no console · NÃO validado: compra real pós-fix no perfil 2
 - [x] Limitador seletivo de FPS (`fps.js`, só `Campo.loop`, UI em 60 FPS, `0.2` mapa parado, pausa oculto) + Modo servidor (`content.js`) + Worker de timers 100 ms.

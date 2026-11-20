@@ -1,6 +1,6 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-20. Versão da extensão: `0.7.7`. Último commit de código: `fa7365c`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 44 passando (`types.js` + `hunt.js` + `rmt.js` + `stones.js` + `ball.js`). Histórico em `docs/archive/` (só Grep).
+Atualizado: 2026-11-20. Versão da extensão: `0.7.7`. Último commit de código: `8656492`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 44 passando (`types.js` + `hunt.js` + `rmt.js` + `stones.js` + `ball.js`). Histórico em `docs/archive/` (só Grep).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
@@ -21,7 +21,7 @@ Vivem no `AGENTS.md` (não repetir aqui). Respeitar Termos §5 do PokeIdle (só 
 4. Validar pendências de gameplay via `/study-game` (`captureRe` com captura real, compra real no `ultraSupplyTick`, seletores do Radar RMT em idioma EN).
 
 ## Pendente do usuário
-- Recarregar a extensão em `chrome://extensions` (e F5 em `pokeidle.io/app`) nos perfis secundários do Chrome (perfil padrão já recarregado na `v0.7.6`) e atualizar o container no CT 104 se quiser a `v0.7.6` lá.
+- Recarregar a extensão em `chrome://extensions` (e F5 em `pokeidle.io/app`) nos perfis secundários do Chrome (perfil padrão já recarregado na `v0.7.7` com `8656492`) e atualizar o container no CT 104 se quiser a `v0.7.7` lá.
 - No CT 104 (`https://192.168.0.104:3001`), conferir se as 4 contas estão em `FPS = 0.2` (ou `ULTRA Economia` nas que não capturam), minimizar na barra inferior e dar **Shutdown** no CT 104 pelo Proxmox quando for jogar no PC local.
 
 ## Armadilhas
