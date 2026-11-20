@@ -10,8 +10,8 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 ## Extensão MV3 (estado atual v0.7.2+)
 - [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`): 100% auto, rebalanceado p/ Auto-Potion e XP pré-Outland (`9f03bda`) · NÃO validado: ao vivo pós-fix, modo Economia e ULTRA Economia
 - [ ] Analisador de Pokébola (`ball.js`+`content.js`): valida hunt atual (NPC, RMT, Shiny, abates/h) e aplica… · NÃO validado: hunt mista (>1 espécie), com Shiny/Lure e após scan RMT completo
-- [x] Radar RMT v0.5.0 (`rmt.js` + `content.js`): plano de ação ONDE/COMPRAR/VENDER (veredito comprar vs juntar + Pokémon exato em Sacrifício/P5/Mega/Shiny), validado em Node e Chrome.
-- [ ] Radar RMT: arredondamento (`ceil` vs `round`) no input de anúncio de Pokémon e seletores em idioma EN · NÃO validado: conta sem Pokémon N 3,5+ no Depot e jogo testado só em PT
+- [x] Radar RMT v0.7.5 (`rmt.js`+`content.js`): 100% itens fungíveis (remove Pokémon), META ÓTIMA no topo em SAVE_ONLY, validado em Node e Chrome (9,8 s).
+- [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.
 - [ ] Hardening Market/multi-conta (`content.js`): aba Comprar, card fresco, compra parcial, fila, aviso bola 0 e `cena` só no console · NÃO validado: compra real pós-fix no perfil 2

@@ -45,10 +45,10 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
 
 - Funciona **100% sob demanda ou passivamente** (não varre em segundo plano, não compra nem anuncia nada e não sai do modo ULTRA sozinho).
 - **Passivo:** ao abrir `RMT → Itens`, lê os preços da lista na hora e calcula o plano de ação apenas para itens com liquidez real comprovada (ignora Pedras/Stones, que não têm demanda orgânica em Gemas).
-- **Botão `Escanear`:** percorre suavemente os books livres dos 8 itens líquidos + 4 categorias de Pokémon com mercado real em Gemas (**Sacrifício N ≥ 3,5**, **P5**, **Mega** e **Shiny**), descarta anúncios `Retido` e preços trolls, aplica a comissão oficial (`15%` com arredondamento para cima em itens; `13% / 10% / 7,5%` + pensão de `100k/dia` em Pokémon) e entrega **instruções prontas sem precisar analisar o mercado**:
-  - **Veredito automático:** diz se compensa **COMPRAR AGORA** com o seu ouro atual ou **JUNTAR OURO** para a próxima meta eficiente (mostrando quantos % a mais de Gemas/Ouro ela rende e quanto falta juntar).
-  - **Passo a passo (`ONDE` / `COMPRAR` / `VENDER`):** indica quantas unidades comprar no book real (ou **qual Pokémon exato** — nome, nível, poder, nota e vendedor), por quantas Gemas anunciar e quanto você recebe líquido.
-  - **Alternativa imediata:** quando compensa juntar, ainda mostra a melhor jogada real com o ouro que você tem hoje (evitando armadilhas como taxa de 25% em lotes pequenos) + ranking completo dobrável de todas as rotas.
+- **Botão `Escanear`:** percorre suavemente os books livres dos **8 itens fungíveis líquidos** (Fragmentos de Bicicleta, Chave, Shiny, Z-Move, MEGA, MEGA Shiny, AoE TM Piece e Bronze Boss Token — sem Pokémon, pois ativos únicos dependem de espécie, IV, meta e liquidez), descarta anúncios `Retido` e preços trolls, aplica a comissão oficial (`15%` com arredondamento para cima) e entrega **instruções prontas sem precisar analisar o mercado**:
+  - **Veredito automático:** diz se compensa **COMPRAR AGORA** com o seu ouro atual ou **JUNTAR OURO** para a próxima meta eficiente (mostrando quantos % a mais de Gemas/Ouro ela rende e quanto falta juntar, sempre com a **META ÓTIMA** em destaque antes da **1ª ENTRADA**).
+  - **Passo a passo (`ONDE` / `COMPRAR` / `VENDER`):** indica quantas unidades comprar no book real, por quantas Gemas anunciar e quanto você recebe líquido.
+  - **Alternativa imediata:** quando compensa juntar, ainda mostra a melhor jogada real com o ouro que você tem hoje (evitando armadilhas como taxa de 25% em lotes pequenos) + ranking completo dobrável dos 8 itens.
 
 ## Painel
 

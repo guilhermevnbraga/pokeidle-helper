@@ -548,7 +548,7 @@ const PK_BALL = (() => {
     // Avisos objetivos para o jogador
     const warnings = [];
     if (!value.hasRmtData) {
-      warnings.push('Sem preços RMT em cache (usando só NPC) — rode Escanear no Radar RMT');
+      warnings.push('Sem preços RMT de Pokémon em cache (usando só NPC)');
     }
     if (value.needsLevelUpForRmt && value.pStrong > 0 && value.hasRmtData) {
       warnings.push(`Captura Nv ${capLvl} (< 50): RMT de N≥3,5 exige upar até Nv 50 (P5/Shiny não exigem)`);

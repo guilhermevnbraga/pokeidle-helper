@@ -215,7 +215,7 @@
     rmtBtnEl = document.createElement('button');
     rmtBtnEl.id = 'pkbot-rmt-scan';
     rmtBtnEl.textContent = 'Escanear';
-    rmtBtnEl.title = 'Lê books livres dos 8 itens líquidos + Pokémon (Sacrifício, P5, Mega, Shiny) e gera instruções do que comprar e vender';
+    rmtBtnEl.title = 'Lê books livres dos 8 itens fungíveis líquidos e gera instruções do que comprar e vender';
     rmtBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#fd83;border:1px solid #fd86;font-size:10px;color:#fff';
     rmtBtnEl.onclick = () => scanRmt();
     rmtHead.append(rmtTit, rmtBtnEl);
@@ -1003,7 +1003,7 @@
     }
     const d = rmtState.last;
     if (!d || !d.routes || !d.routes.length) {
-      rmtOutEl.append(mk('div', 'color:#aab', 'Clique em Escanear para receber instruções do que comprar e vender (itens + Pokémon).'));
+      rmtOutEl.append(mk('div', 'color:#aab', 'Clique em Escanear para receber instruções do que comprar e vender (itens fungíveis).'));
       return;
     }
     const curGold = gold();
@@ -1059,33 +1059,36 @@
         ));
       }
     } else if (plan.verdict === 'SAVE_ONLY') {
-      if (plan.fallback) {
-        rmtOutEl.append(renderStepCard(
-          `1ª ENTRADA (falta +${PK_RMT.formatCoins(plan.fallback.missingCoins)})`,
-          plan.fallback, '#7cf', '#14263688'
-        ));
-      }
       if (plan.primary) {
         rmtOutEl.append(renderStepCard(
           `META ÓTIMA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
           plan.primary, '#fd8', '#332b1488'
         ));
       }
+      if (plan.bestOverall) {
+        rmtOutEl.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+          `Topo absoluto: ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
+      }
+      if (plan.fallback) {
+        rmtOutEl.append(renderStepCard(
+          `1ª ENTRADA (falta +${PK_RMT.formatCoins(plan.fallback.missingCoins)})`,
+          plan.fallback, '#7cf', '#14263688'
+        ));
+      }
     }
 
-    // Ranking completo dobrável (itens + categorias de Pokémon)
+    // Ranking completo dobrável (itens fungíveis)
     const det = document.createElement('details');
     det.open = rmtRankingOpen;
     det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
     det.ontoggle = () => { rmtRankingOpen = det.open; };
-    const sum = mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Ver ranking completo (${plan.ranked.length} rotas)`);
+    const sum = mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Ver ranking completo (${plan.ranked.length} itens)`);
     det.append(sum);
     for (const r of plan.ranked) {
       const ok = curGold >= r.buyCoins ? '✓' : '○';
-      const extra = r.kind === 'pokemon' && r.bestPoke?.name ? ` [${r.bestPoke.name}]` : '';
       const warn = r.warnings && r.warnings.length ? ' !' + r.warnings[0] : '';
       det.append(mk('div', `color:${ok === '✓' ? '#cfd' : '#9aa'};font-size:9.5px;margin-top:1px`,
-        `${ok} ${r.label}${extra}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${warn}`));
+        `${ok} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${warn}`));
     }
     rmtOutEl.append(det);
   }
@@ -1175,58 +1178,6 @@
     return parseRmtItemBook(painel);
   }
 
-  function parseRmtPokeCards(corpo, wantGems) {
-    const cards = $$('.cm-card', corpo).slice(0, 15);
-    const out = [];
-    for (const c of cards) {
-      const priceEl = $('.cm-preco', c);
-      if (!priceEl) continue;
-      const isOrb = priceEl.classList.contains('orb');
-      if (typeof wantGems === 'boolean' && isOrb !== wantGems) continue;
-      const rawPrice = priceEl.getAttribute('title') || priceEl.textContent;
-      const price = PK_RMT.parseCompactNum(rawPrice);
-      const held = /retido|held/i.test(c.innerText || c.textContent || '');
-      const name = ($('.cm-nome-txt', c) || $('.cm-nome', c))?.textContent?.trim() || '';
-      const level = $('.cm-sub', c)?.textContent?.trim() || '';
-      const pot = $('.cm-pot', c)?.textContent?.trim() || '';
-      const nota = $('.pk-selo-n', c)?.textContent?.trim() || '';
-      const seller = $('.cm-vend b', c)?.textContent?.trim() || '';
-      const favId = $('.cm-fav[data-fav]', c)?.getAttribute('data-fav') || '';
-      if (price) out.push({ price, qty: 1, held, name, level, pot, nota, seller, favId });
-    }
-    return out;
-  }
-
-  function pokeCardsSignature(corpo) {
-    if (!corpo) return '';
-    return $$('.cm-card', corpo).slice(0, 4).map(c => {
-      const id = $('.cm-fav[data-fav]', c)?.getAttribute('data-fav') || '';
-      const p = $('.cm-preco', c);
-      return `${id}:${p?.classList.contains('orb') ? 'G' : 'C'}:${p?.getAttribute('title') || p?.textContent?.trim() || ''}`;
-    }).join('|');
-  }
-
-  async function waitForPokeResults(wantGems, prevSig, maxMs = 2600) {
-    const t0 = Date.now();
-    const wantRe = wantGems ? /gema|gem/i : /coins/i;
-    while (Date.now() - t0 < maxMs) {
-      const m = $('.modal-caixa[data-modal="community"]');
-      const corpo = m && ($('#modal-corpo', m) || m);
-      if (corpo) {
-        const moedaOn = $$('button.cm-moeda.on', corpo).some(b => wantRe.test(b.textContent));
-        const allCards = $$('.cm-card', corpo);
-        const list = parseRmtPokeCards(corpo, wantGems);
-        const sig = pokeCardsSignature(corpo);
-        if (list.length && (!prevSig || sig !== prevSig || Date.now() - t0 >= 900)) return list;
-        if (moedaOn && allCards.length === 0 && Date.now() - t0 >= 750) return [];
-      }
-      await sleep(220);
-    }
-    const m = $('.modal-caixa[data-modal="community"]');
-    const corpo = m && ($('#modal-corpo', m) || m);
-    return corpo ? parseRmtPokeCards(corpo, wantGems) : [];
-  }
-
   async function scanRmt() {
     if (typeof PK_RMT === 'undefined') return log('RMT: módulo PK_RMT indisponível');
     if (rmtState.scanning) return;
@@ -1265,8 +1216,7 @@
         .map(row => ($('.cmi-nome b', row) || {}).textContent?.trim())
         .filter(name => PK_RMT.matchLiquidItem(name));
 
-      const pokeCats = PK_RMT.POKE_CATEGORIES || [];
-      const totalSteps = targetNames.length + pokeCats.length;
+      const totalSteps = targetNames.length;
 
       for (let i = 0; i < targetNames.length; i++) {
         const name = targetNames[i];
@@ -1311,90 +1261,6 @@
         }
         const r = PK_RMT.evaluateItemRoute({ item, coinsOffer, gemasOffer, gold: curGold, source: 'book' });
         if (r) routes.push(r);
-      }
-
-      // 2) Aba Pokémon -> Categorias com liquidez real (Sacrifício, P5, Mega, Shiny)
-      corpo = getCorpo();
-      const btnPoke = corpo && $$('button.cm-filtro', corpo).find(b => /^pok[eé]mon$/i.test(b.textContent.trim()));
-      if (btnPoke) {
-        btnPoke.click(); await sleep(900);
-
-        const setLowestOrder = async () => {
-          const c = getCorpo();
-          const sel = c && $('#cm-ordem', c);
-          if (sel) {
-            const opt = [...sel.options].find(o => o.value === 'baratos' || /menor pre[çc]o|lowest price/i.test(o.textContent));
-            if (opt && sel.value !== opt.value) {
-              sel.value = opt.value;
-              sel.dispatchEvent(new Event('change', { bubbles: true }));
-              await sleep(850);
-            }
-            return;
-          }
-          const ordMenor = c && $$('button, option', c).find(el => /menor pre[çc]o|lowest price/i.test(el.textContent));
-          if (ordMenor) { ordMenor.click(); await sleep(850); }
-        };
-
-        for (let k = 0; k < pokeCats.length; k++) {
-          const cat = pokeCats[k];
-          renderRmt(`Lendo (${targetNames.length + k + 1}/${totalSteps}): ${cat.label}...`);
-          corpo = getCorpo(); if (!corpo) break;
-
-          const limpar = $('#cm-limpar', corpo);
-          if (limpar) { limpar.click(); await sleep(600); }
-          await setLowestOrder();
-
-          corpo = getCorpo(); if (!corpo) break;
-          if (cat.filterId) {
-            const flt = $(cat.filterId, corpo);
-            if (!flt) continue;
-            const beforeSig = pokeCardsSignature(corpo);
-            if (!flt.classList.contains('on')) { flt.click(); await sleep(800); }
-            // Garante moeda Coins após ativar filtro
-            corpo = getCorpo(); if (!corpo) break;
-            const mCoins = $$('button.cm-moeda', corpo).find(b => /coins/i.test(b.textContent));
-            if (mCoins && !mCoins.classList.contains('on')) mCoins.click();
-            const cList = await waitForPokeResults(false, beforeSig);
-            const pCoins = PK_RMT.pickBestFreeOffer(cList, cat.minSanityCoins);
-            // Só consulta Gemas se houver ao menos 1 Pokémon livre em Coins nesta categoria
-            if (!pCoins.bestPrice) continue;
-
-            corpo = getCorpo(); if (!corpo) break;
-            const sigCoins = pokeCardsSignature(corpo);
-            const mGemas = $$('button.cm-moeda', corpo).find(b => /gema|gem/i.test(b.textContent));
-            let pGemas = null;
-            if (mGemas) {
-              mGemas.click();
-              const gList = await waitForPokeResults(true, sigCoins);
-              pGemas = PK_RMT.pickBestFreeOffer(gList, 2);
-            }
-            const rPoke = PK_RMT.evaluatePokeRoute({ category: cat, coinsOffer: pCoins, gemasOffer: pGemas, gold: curGold });
-            if (rPoke) routes.push(rPoke);
-          } else {
-            // Sacrifício (sem filtro)
-            const sigBefore = pokeCardsSignature(corpo);
-            const mCoins = $$('button.cm-moeda', corpo).find(b => /coins/i.test(b.textContent));
-            if (mCoins && !mCoins.classList.contains('on')) mCoins.click();
-            const cList = await waitForPokeResults(false, sigBefore);
-            const pCoins = PK_RMT.pickBestFreeOffer(cList, cat.minSanityCoins);
-            if (!pCoins.bestPrice) continue;
-
-            corpo = getCorpo(); if (!corpo) break;
-            const sigCoins = pokeCardsSignature(corpo);
-            const mGemas = $$('button.cm-moeda', corpo).find(b => /gema|gem/i.test(b.textContent));
-            let pGemas = null;
-            if (mGemas) {
-              mGemas.click();
-              const gList = await waitForPokeResults(true, sigCoins);
-              pGemas = PK_RMT.pickBestFreeOffer(gList, 2);
-            }
-            const rPoke = PK_RMT.evaluatePokeRoute({ category: cat, coinsOffer: pCoins, gemasOffer: pGemas, gold: curGold });
-            if (rPoke) routes.push(rPoke);
-          }
-        }
-        // Limpa filtros ao finalizar aba Pokémon
-        const limparFim = getCorpo() && $('#cm-limpar', getCorpo());
-        limparFim && limparFim.click();
       }
 
       const ranked = PK_RMT.rankRoutes(routes);

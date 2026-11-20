@@ -13,14 +13,6 @@ const PK_RMT = (() => {
     { id: 'bronze-token', label: 'Bronze Boss Token', minSanityCoins: 2e6, defaultLot: 10, undercut: 1, minUndercutAsk: 5, aliases: ['Bronze Boss Token'] },
   ];
 
-  // Categorias de Pokémon com liquidez real em Gemas (comparadas sempre contra o piso da própria categoria)
-  const POKE_CATEGORIES = [
-    { id: 'poke-sacrifice', label: 'Poke Sacrifício', filterId: null, filterLabel: 'sem filtro (N ≥ 3,5)', minSanityCoins: 5e6, maxSanityGems: 500, lowLiquidity: false },
-    { id: 'poke-p5', label: 'Poke P5', filterId: '#cm-p5', filterLabel: 'filtro P5', minSanityCoins: 20e6, maxSanityGems: 5000, lowLiquidity: false },
-    { id: 'poke-mega', label: 'Poke Mega', filterId: '#cm-mega', filterLabel: 'filtro Mega', minSanityCoins: 100e6, maxSanityGems: 20000, lowLiquidity: true },
-    { id: 'poke-shiny', label: 'Poke Shiny', filterId: '#cm-shiny', filterLabel: 'filtro Shiny', minSanityCoins: 50e6, maxSanityGems: 20000, lowLiquidity: true },
-  ];
-
   const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
   function matchLiquidItem(name) {
@@ -62,19 +54,8 @@ const PK_RMT = (() => {
     return { gross, fee, net, netPerUnit: net / qty, effPct: (fee / gross) * 100 };
   }
 
-  // Comissão progressiva oficial de Pokémon em Gema (Wiki): 13% <=500, 10% <=5000, 7,5% >5000
-  function netPokeGems(gross) {
-    if (!Number.isFinite(gross) || gross <= 0) return { gross: 0, fee: 0, net: 0, effPct: 0 };
-    const f1 = Math.min(gross, 500) * 0.13;
-    const f2 = Math.max(0, Math.min(gross, 5000) - 500) * 0.10;
-    const f3 = Math.max(0, gross - 5000) * 0.075;
-    const fee = Math.ceil(f1 + f2 + f3);
-    const net = Math.max(0, gross - fee);
-    return { gross, fee, net, effPct: (fee / gross) * 100 };
-  }
-
   // Filtra ofertas de book: descarta "Retido" (2 min) e preços trolls (< minSanityPrice)
-  // Preserva níveis livres ordenados e metadados (nome/vendedor/atributos de Pokémon ou item).
+  // Preserva níveis livres ordenados e metadados (vendedor/quantidade).
   function pickBestFreeOffer(offers, minSanityPrice = 1) {
     let skippedHeld = 0, skippedTroll = 0;
     const valid = [];
@@ -206,90 +187,10 @@ const PK_RMT = (() => {
     };
   }
 
-  // Avalia rota de qualquer categoria de Pokémon (Sacrifício, P5, Mega, Shiny)
-  function evaluatePokeRoute({ category, coinsOffer, gemasOffer, gold = 0, pensionCoins = 100000 }) {
-    const cat = category || POKE_CATEGORIES[0];
-    if (!coinsOffer || !gemasOffer || !coinsOffer.bestPrice || !gemasOffer.bestPrice) return null;
-    const rawBuyCoins = coinsOffer.bestPrice;
-    const askGems = gemasOffer.bestPrice;
-    if (askGems > cat.maxSanityGems || rawBuyCoins < (cat.minSanityCoins || 1e6)) return null;
-
-    // Undercut inteligente: para 8G usa 7G (ambos rendem 6G líq. com ceil 13%, mas 7G fura fila);
-    // abaixo de 8G preserva o piso (mín 2G); acima de 8G faz ask - 1.
-    const sellGems = askGems >= 8 ? askGems - 1 : Math.max(2, askGems);
-    const net = netPokeGems(sellGems);
-    if (net.net <= 0) return null;
-
-    const totalCost = rawBuyCoins + pensionCoins;
-    const coinsPerGem = totalCost / net.net;
-    const warnings = [`${Math.round(net.effPct)}% + pensão 100k/d`];
-    if (cat.lowLiquidity) warnings.push('liquidez menor (confira espécie)');
-    if (coinsOffer.skippedHeld > 0) warnings.push('retidos ignorados');
-
-    const topPokes = (coinsOffer.topOffers || []).map(o => ({
-      name: o.name || cat.label,
-      level: o.level || '',
-      pot: o.pot || '',
-      nota: o.nota || '',
-      seller: o.seller || '',
-      price: o.price,
-      favId: o.favId || null,
-    }));
-    const bestPoke = topPokes[0] || {
-      name: cat.label,
-      level: '',
-      pot: '',
-      nota: '',
-      seller: '',
-      price: rawBuyCoins,
-      favId: null,
-    };
-    const refGemPoke = gemasOffer.bestOffer ? {
-      name: gemasOffer.bestOffer.name || '',
-      nota: gemasOffer.bestOffer.nota || '',
-      price: gemasOffer.bestPrice,
-    } : null;
-
-    return {
-      id: cat.id,
-      label: cat.label,
-      categoryLabel: cat.label,
-      filterId: cat.filterId || null,
-      filterLabel: cat.filterLabel || 'sem filtro',
-      kind: 'pokemon',
-      source: 'book',
-      buyCoins: totalCost,
-      rawBuyCoins,
-      minEntryCoins: totalCost,
-      pensionCoins,
-      askGems,
-      sellGems,
-      lot: 1,
-      netGemsUnit: net.net,
-      netGemsLot: net.net,
-      effFeePct: net.effPct,
-      coinsPerGem,
-      coinsFor1000Gems: coinsPerGem * 1000,
-      gemsPerBillion: 1e9 / coinsPerGem,
-      unitsAtBestCoins: coinsOffer.unitsAtBest || 0,
-      totalFreeCoinsUnits: coinsOffer.totalFreeUnits || 0,
-      coinsLevels: (coinsOffer.levels || []).map(lv => ({ ...lv, price: lv.price + pensionCoins })),
-      bestPoke,
-      topPokes,
-      refGemPoke,
-      canAfford: gold >= totalCost,
-      warnings,
-    };
-  }
-
-  // Retrocompatibilidade com assinatura anterior
-  function evaluateSacrificeRoute({ coinsOffer, gemasOffer, gold = 0, pensionCoins = 100000 }) {
-    return evaluatePokeRoute({ category: POKE_CATEGORIES[0], coinsOffer, gemasOffer, gold, pensionCoins });
-  }
-
+  // Apenas itens fungíveis entram no ranking (ignora rotas legadas de Pokémon salvas em cache)
   function rankRoutes(routes) {
     return (routes || [])
-      .filter(r => r && Number.isFinite(r.coinsPerGem) && r.coinsPerGem > 0)
+      .filter(r => r && r.kind !== 'pokemon' && Number.isFinite(r.coinsPerGem) && r.coinsPerGem > 0)
       .slice()
       .sort((a, b) => a.coinsPerGem - b.coinsPerGem);
   }
@@ -302,71 +203,10 @@ const PK_RMT = (() => {
     return String(Math.round(n));
   }
 
-  function formatPokeDescriptor(p) {
-    if (!p) return 'Pokémon';
-    const meta = [p.level, p.pot, p.nota].filter(Boolean).join(' · ');
-    const base = meta ? `${p.name} (${meta})` : p.name;
-    return p.seller ? `${base} de ${p.seller}` : base;
-  }
-
-  // Gera instrução pronta e acionável (o que comprar, onde ir, por quanto vender, quanto recebe líquido)
+  // Gera instrução pronta e acionável para itens fungíveis (o que comprar, onde ir, por quanto vender, quanto recebe líquido)
   function buildRouteInstruction(route, gold = 0) {
-    if (!route) return null;
+    if (!route || route.kind === 'pokemon') return null;
     const budget = Math.max(0, Number(gold) || 0);
-
-    if (route.kind === 'pokemon') {
-      const p = route.bestPoke || { name: route.label, price: route.rawBuyCoins || route.buyCoins };
-      const rawPrice = p.price || route.rawBuyCoins || route.buyCoins;
-      const pension = route.pensionCoins || 100000;
-      const costOne = rawPrice + pension;
-      const affordable = budget >= costOne;
-      // Verifica se há outros Pokémon livres próximos do piso que cabem no orçamento
-      const extraPokes = [];
-      let rem = budget - costOne;
-      let totalCost = costOne;
-      let totalNet = route.netGemsUnit;
-      if (affordable && route.topPokes && route.topPokes.length > 1) {
-        const cap = rawPrice * 1.08;
-        for (let i = 1; i < route.topPokes.length; i++) {
-          const cand = route.topPokes[i];
-          const candCost = cand.price + pension;
-          if (cand.price <= cap && rem >= candCost) {
-            extraPokes.push(cand);
-            rem -= candCost;
-            totalCost += candCost;
-            totalNet += route.netGemsUnit;
-          }
-        }
-      }
-      const where = route.filterId
-        ? `RMT → Pokémon → Coins + ${route.filterLabel} (Menor preço)`
-        : 'RMT → Pokémon → Coins (Menor preço)';
-      const pokeTxt = formatPokeDescriptor(p);
-      const qty = affordable ? (1 + extraPokes.length) : 1;
-      const buyText = extraPokes.length
-        ? `${pokeTxt} por ${formatCoins(rawPrice)} (+${extraPokes.length} outro${extraPokes.length > 1 ? 's' : ''} no piso até ${formatCoins(extraPokes[extraPokes.length - 1].price)})`
-        : `${pokeTxt} por ${formatCoins(rawPrice)}`;
-      const sellText = qty > 1
-        ? `Anuncie cada por ${route.sellGems} Gemas (+100k pensão/d) → ${totalNet}G líq. (${route.netGemsUnit}G cada)`
-        : `Anuncie por ${route.sellGems} Gemas (+100k pensão 1d) → recebe ${route.netGemsUnit}G líq.`;
-      return {
-        routeId: route.id,
-        kind: 'pokemon',
-        label: route.label,
-        where,
-        qty,
-        affordable,
-        missingCoins: affordable ? 0 : Math.max(0, costOne - budget),
-        totalCoins: affordable ? totalCost : costOne,
-        netGemsTotal: affordable ? totalNet : route.netGemsUnit,
-        coinsPerGem: (affordable ? totalCost : costOne) / (affordable ? totalNet : route.netGemsUnit),
-        buyText,
-        sellText,
-        poke: p,
-        extraPokes,
-        note: route.warnings && route.warnings.length ? route.warnings.join(' · ') : '',
-      };
-    }
 
     // Rota de Item
     const lot = route.lot || 1;
@@ -534,11 +374,11 @@ const PK_RMT = (() => {
         lines.push(`AGORA (-${plan.lossPct}% gemas): ${plan.fallback.buyText} → ${plan.fallback.sellText}`);
       }
     } else if (plan.verdict === 'SAVE_ONLY') {
-      if (plan.fallback) {
-        lines.push(`1ª ENTRADA (falta ${formatCoins(plan.fallback.missingCoins)}): ${plan.fallback.buyText} → ${plan.fallback.sellText}`);
-      }
       if (plan.primary) {
         lines.push(`META ÓTIMA (falta ${formatCoins(plan.primary.missingCoins)}): ${plan.primary.buyText} → ${plan.primary.sellText}`);
+      }
+      if (plan.fallback) {
+        lines.push(`1ª ENTRADA (falta ${formatCoins(plan.fallback.missingCoins)}): ${plan.fallback.buyText} → ${plan.fallback.sellText}`);
       }
     }
     return lines.join('\n');
@@ -546,22 +386,17 @@ const PK_RMT = (() => {
 
   return {
     LIQUID_ITEMS,
-    POKE_CATEGORIES,
     matchLiquidItem,
     parseCompactNum,
     netItemGems,
-    netPokeGems,
     pickBestFreeOffer,
     planBuyFromLevels,
     evaluateItemRoute,
-    evaluatePokeRoute,
-    evaluateSacrificeRoute,
     buildRouteInstruction,
     buildActionPlan,
     formatActionPlanText,
     rankRoutes,
     formatCoins,
-    formatPokeDescriptor,
   };
 })();
 if (typeof module !== 'undefined') module.exports = PK_RMT;
