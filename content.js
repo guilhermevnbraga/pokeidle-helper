@@ -20,8 +20,16 @@
   CFG.potType = 'auto';
   CFG.fps = 10; // quadros/s do jogo (0 = sem limite); aplicado por fps.js
   CFG.huntFocus = 'balanced'; // balanced | xp | lucro | shiny
-  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'huntFocus'];
+  CFG.lite = false; // modo servidor: desativa animações CSS/transições/sombras que forçam repintura a 60 Hz
+  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'huntFocus', 'lite'];
   const applyFps = () => document.dispatchEvent(new CustomEvent('pk-fps', { detail: +CFG.fps || 0 }));
+  const LITE_CSS = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}body *:not(#pkbot-panel):not(#pkbot-panel *){box-shadow:none!important;text-shadow:none!important}';
+  const applyLite = () => {
+    let el = document.getElementById('pkbot-lite-css');
+    if (CFG.lite) {
+      if (!el) { el = document.createElement('style'); el.id = 'pkbot-lite-css'; el.textContent = LITE_CSS; document.head.append(el); }
+    } else if (el) el.remove();
+  };
   document.addEventListener('pk-stat', e => console.log('[pkbot]', new Date().toLocaleTimeString(), 'cena:', e.detail.fps + ' fps reais (limite ' + (e.detail.limite || 'nenhum') + '),', e.detail.ms + ' ms/s de JS'));
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
   if (!['balanced', 'xp', 'lucro', 'shiny'].includes(CFG.huntFocus)) CFG.huntFocus = 'balanced';
@@ -146,6 +154,11 @@
     huntOutEl.style.cssText = 'margin:2px 0 4px 16px;font-size:10px;line-height:1.35;color:#9ab;user-select:text';
     body.append(huntOutEl);
     mk('keepalive', 'Manter ativo em 2º plano');
+    const liteLbl = document.createElement('label'); liteLbl.style.cssText = 'display:block;cursor:pointer';
+    liteLbl.title = 'Desliga animações CSS, transições e sombras do jogo (corta repintura a 60 Hz; ideal para servidor/multi-conta)';
+    const liteChk = document.createElement('input'); liteChk.type = 'checkbox'; liteChk.checked = !!CFG.lite; liteChk.id = 'pkbot-lite';
+    liteChk.onchange = () => { CFG.lite = liteChk.checked; saveCfg(); applyLite(); log('Modo servidor (sem animações)', CFG.lite ? 'ON' : 'OFF'); };
+    liteLbl.append(liteChk, ' Modo servidor (sem animações)'); body.append(liteLbl);
     // compras: tipo, mínimo para repor e quantidade por refill (bolas e poções)
     const box = document.createElement('div'); box.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3;display:grid;grid-template-columns:auto 1fr 52px 52px;gap:3px 5px;align-items:center';
     const fld = (el, key, tip) => { el.title = tip; el.style.cssText = 'width:100%;box-sizing:border-box;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:11px monospace;padding:1px 2px'; el.value = CFG[key];
@@ -158,7 +171,7 @@
     box.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
       cell('Bola'), ballSelEl, nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
-    const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2'], [0, 'sem limite']], 'fps', 'Quadros por segundo da cena do jogo. Menos quadros = bem menos CPU; a captura continua funcionando. Use "sem limite" se for jogar na mão.');
+    const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2 (leve)'], [1, '1 (servidor)'], [0, 'sem limite']], 'fps', 'Quadros por segundo da cena do jogo. Menos quadros = bem menos CPU; a captura continua funcionando. Use "sem limite" se for jogar na mão.');
     fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel); body.append(box);
     // Analisador Otimizado de Pokébola (hunt atual: NPC + RMT + Shiny + ouro/h + taxa/preço)
     const ballBox = document.createElement('div');
@@ -1904,10 +1917,10 @@
   const rmtPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
     ? PK_RMT.buildActionPlan({ routes: rmtState.last.routes, gold: gold(), source: rmtState.last.source })
     : null;
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, rmtState, rmtPlan, scanRmt, ballState, analyzeCurrentHuntBalls, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal };
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, rmtState, rmtPlan, scanRmt, ballState, analyzeCurrentHuntBalls, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);
-    buildPanel(); applyFps(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : ''); };
+    buildPanel(); applyFps(); applyLite(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : ''); };
   document.body ? boot() : addEventListener('DOMContentLoaded', boot);
 })();

@@ -49,7 +49,12 @@
   try {
     const nSet = window.setTimeout.bind(window), nClr = window.clearTimeout.bind(window);
     const nSetI = window.setInterval.bind(window), nClrI = window.clearInterval.bind(window);
-    const w = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),50)'], { type: 'text/javascript' })));
+    // Só liga o ticker de 50 ms no Worker quando a aba está oculta (0 wakeups/s enquanto visível)
+    const wCode = 'let t=0;onmessage=e=>{if(e.data){if(!t)t=setInterval(()=>postMessage(0),50);}else if(t){clearInterval(t);t=0;}};';
+    const w = new Worker(URL.createObjectURL(new Blob([wCode], { type: 'text/javascript' })));
+    const syncWorker = () => w.postMessage(!!document.hidden);
+    document.addEventListener('visibilitychange', syncWorker);
+    syncWorker();
     const table = new Map(); // id -> { due, every, fn, args, nat }
     let seq = 1e9;
     const fire = (id, t) => {
