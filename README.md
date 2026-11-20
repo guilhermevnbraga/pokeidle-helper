@@ -120,11 +120,9 @@ Medido no CT (2 vCPU) com o jogo em modo normal e capturando:
 
 O que mais pesa é **deixar a tela remota aberta**. Feche a aba do Selkies quando não estiver mexendo.
 
-O seletor **FPS** do painel limita a cena do jogo (padrão 10). No jogo isso reduz o JS da cena de cerca de 130 ms/s para 20 ms/s e a imagem muda 9 vezes por segundo em vez de 30; a captura continua funcionando. No servidor, com a tela remota fechada, o consumo total quase não mudou, porque o gasto restante vem de pintura e composição e não do JS da cena. Se for jogar na mão, escolha "sem limite" ou 60.
+O seletor **FPS** do painel limita a cena do jogo (padrão `10` no PC; `2` no deploy Docker, com opção `1 (servidor)`). O checkbox **Modo servidor (sem animações)** desliga animações CSS infinitas, transições e sombras do jogo, cortando a recomposição em 60 Hz do compositor (no deploy Docker já nasce ligado por padrão via `deploy/server-flag.js`). Se for jogar na mão, escolha "sem limite" ou `60` e desligue o Modo servidor.
 
-Foram testados e **não ajudaram** (removidos): reduzir as animações CSS da interface.
-
-Ainda não testado: passar a GPU integrada do host para o CT (`/dev/dri`) e tirar o `--disable-gpu`, para a composição sair da CPU.
+Sobre GPU passthrough (`/dev/dri`): deixado **desativado** de propósito no deploy multi-conta porque, com a tela remota fechada e 1–2 FPS, manter a iGPU acordada pode impedir C-states profundos da CPU além de exigir mapeamento extra de GID no LXC. Só vale avaliar se você costuma deixar a tela remota aberta por longos períodos.
 
 ## Segundo plano
 
@@ -139,25 +137,23 @@ Dicas:
 - Em `chrome://settings/performance`, desligue o **Economizador de memória** ou adicione `pokeidle.io` aos sites que ficam sempre ativos, senão o Chrome pode descartar a aba.
 - Use um mínimo de poção maior que 10 (por exemplo 30 a 50). Assim sobra margem se o relógio atrasar.
 
-## Rodar 24/7 num servidor (Proxmox)
+## Rodar no servidor (Proxmox — até 4 contas em 1 container)
 
-Um Chromium numa tela virtual, com a extensão carregada, evita de vez o problema da aba oculta. Esta configuração ainda não foi testada.
+Um **único** container Docker (`lscr.io/linuxserver/chromium`) abre **1 única instância do Chromium com até 4 perfis** (`Default`, `Conta2`, `Conta3`, `Conta4`) em grade **2×2** (`720×450` cada, tela virtual `1440×900`, modo `--app` sem barras extras). Todos os perfis compartilham `browser`, `gpu-process`, `NetworkService`, Openbox e Selkies (~1,35–1,5 GiB de RAM para as 4 janelas juntas).
 
-1. Crie um CT (LXC) Debian 12 com 2 vCPU, 2 GB de RAM e 8 GB de disco. Em **Options → Features**, ligue **Nesting** e **keyctl**.
+1. Crie um CT (LXC) Debian/Ubuntu com 2 vCPU, 3 GB (ou 4 GB) de RAM e 16 GB de disco. Em **Options → Features**, ligue **Nesting** e **keyctl**.
 2. Instale o Docker no CT e clone este repositório.
-3. Em `deploy/`, copie `.env.example` para `.env` e defina `WEB_PASSWORD`.
-4. Rode `docker compose up -d` em `deploy/`.
-5. Acesse `https://127.0.0.1:3001` pelo túnel (veja abaixo), faça login no jogo uma vez e ligue os modos no painel. O login fica salvo em `deploy/profile/`. A interface exige HTTPS, com certificado autoassinado: aceite o aviso do navegador. Em `http://...:3000` ela mostra "requires a secure connection".
+3. Em `deploy/`, copie `.env.example` para `.env`, defina `WEB_PASSWORD` e, se quiser acessar pela LAN, `BIND_IP=<IP do CT>`.
+4. Garanta `mkdir -p deploy/profile/.config/openbox && chown 1000:1000 deploy/profile/.config/openbox` e rode `docker compose up -d` em `deploy/`.
+5. Acesse `https://<IP>:3001` (certificado autoassinado), faça login manual (anti-robô) nas contas e ajuste o painel de cada uma (recomendado: **Modo servidor** ligado + **FPS = 1 ou 2** se for capturar, ou **ULTRA Economia** do jogo se não for capturar). Depois **feche a aba remota** para o Selkies ficar ocioso (~0–1% CPU).
 
-Para acessar pela rede local, defina `BIND_IP=` com o IP do CT no `.env` (o padrão é `127.0.0.1`, só local) e rode `docker compose up -d` de novo. Para atualizar a extensão, rode `git pull` e `docker compose up -d` em `deploy/`.
+**Uso sob demanda no Proxmox:** deixe o CT desligado quando não precisar; ao clicar **Start** no Proxmox, o Docker sobe automaticamente as 4 contas em ~15 s já logadas e nas configurações da última sessão (salvas em `deploy/profile/`). Ao parar de usar, dê **Shutdown** (gracioso) no CT.
 
-O contêiner tem teto de 1,5 CPU e 2 GB de RAM. O consumo vem quase todo do jogo desenhando a cena, então, se o servidor esquentar, ligue o modo **ULTRA Economia** do próprio jogo (veja "Modos de tela"). Num teste, o CT foi de cerca de 15% de CPU, 1,2 GiB de RAM e 48% de swap para cerca de 5% de CPU, 770 MiB e 3% de swap.
+Para atualizar a extensão no servidor: `git pull` e `docker compose up -d` em `deploy/`. O contêiner tem teto físico de `1.5` CPU e `2600m` de RAM (ajustável via `MEM_LIMIT` no `.env`).
 
 **Uma sessão por conta:** o jogo só deixa uma sessão jogar por vez. Se você abrir o jogo em outro navegador ou aba, a do servidor pausa e mostra "Account opened elsewhere". Clique em "Play here" para retomar. Jogar de novo no servidor desconecta a outra.
 
-Acesso remoto: a porta só escuta em `127.0.0.1`. Exponha com **Cloudflare Tunnel** protegido por Cloudflare Access, ou por Tailscale. Não abra a porta direto na internet, porque quem entrar controla o navegador com a sua conta logada.
-
-Atenção: o login do jogo tem verificação anti-robô, então ele é feito à mão. Não sei se o jogo aceita a mesma conta em duas sessões ao mesmo tempo. Se uma derrubar a outra, jogue só pelo servidor.
+Acesso remoto: por padrão a porta só escuta em `127.0.0.1`. Exponha fora de casa apenas por **Cloudflare Tunnel** (com Cloudflare Access) ou **Tailscale** — nunca abra a porta direto na internet.
 
 ## Regras do jogo
 
