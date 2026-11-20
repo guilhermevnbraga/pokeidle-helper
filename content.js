@@ -108,17 +108,17 @@
     const saveUI = () => { try { localStorage.setItem(UI_KEY, JSON.stringify(u)); } catch (e) {} };
     const p = document.createElement('div');
     p.id = 'pkbot-panel';
-    p.style.cssText = 'position:fixed;z-index:2147483647;background:#1b1f2acc;color:#fff;font:12px/1.35 monospace;border:1px solid #fff3;border-radius:8px;width:316px;box-shadow:0 2px 10px #0008;opacity:.5;transition:opacity .15s;user-select:none';
+    p.style.cssText = 'position:fixed;z-index:2147483647;display:flex;flex-direction:column;max-height:calc(100vh - 16px);max-width:calc(100vw - 16px);box-sizing:border-box;background:#1b1f2acc;color:#fff;font:12px/1.35 monospace;border:1px solid #fff3;border-radius:8px;width:316px;box-shadow:0 2px 10px #0008;opacity:.5;transition:opacity .15s;user-select:none';
     p.onmouseenter = () => p.style.opacity = '1'; p.onmouseleave = () => p.style.opacity = '.5';
 
     const head = document.createElement('div');
-    head.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:move;touch-action:none';
+    head.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:move;touch-action:none';
     const title = document.createElement('span'); title.style.cssText = 'flex:1;font-weight:bold'; head.append(title);
     const btn = (txt, tip, fn) => { const b = document.createElement('button'); b.textContent = txt; b.title = tip; b.style.cssText = 'all:unset;cursor:pointer;padding:0 5px;border-radius:4px;background:#fff2'; b.onpointerdown = e => e.stopPropagation(); b.onclick = fn; head.append(b); return b; };
     btn('—', 'Minimizar/expandir (duplo clique no título)', () => { u.min = !u.min; saveUI(); render(); });
     btn('×', 'Esconder (Alt+P mostra de novo)', () => { u.hidden = true; saveUI(); render(); });
 
-    const body = document.createElement('div'); body.style.cssText = 'padding:2px 8px 8px';
+    const body = document.createElement('div'); body.style.cssText = 'flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;padding:2px 8px 8px';
     const mk = (key, label) => {
       const l = document.createElement('label'); l.style.cssText = 'display:block;cursor:pointer';
       const c = document.createElement('input'); c.type = 'checkbox'; c.checked = !!st[key]; c.id = 'pkbot-' + key;
@@ -215,7 +215,7 @@
     ballHead.append(ballTit, ballFocusEl, ballBtnEl);
     ballOutEl = document.createElement('div');
     ballOutEl.id = 'pkbot-ball-out';
-    ballOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:240px;overflow:auto;user-select:text';
+    ballOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
     ballBox.append(ballHead, ballOutEl);
     body.append(ballBox);
     // Radar RMT (Ouro -> Gema): passivo ao abrir RMT->Itens ou scan sob demanda
@@ -236,7 +236,7 @@
     rmtHead.append(rmtTit, rmtBtnEl);
     rmtOutEl = document.createElement('div');
     rmtOutEl.id = 'pkbot-rmt-out';
-    rmtOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:220px;overflow:auto;user-select:text';
+    rmtOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
     rmtBox.append(rmtHead, rmtOutEl);
     body.append(rmtBox);
     // Venda de Pedras (RMT — Coins): simula ou anuncia todas as pedras do inventário pelo máximo comprovado
@@ -263,10 +263,10 @@
     stonesHead.append(stonesTit, stonesPlanBtnEl, stonesSellBtnEl);
     stonesOutEl = document.createElement('div');
     stonesOutEl.id = 'pkbot-stones-out';
-    stonesOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;max-height:180px;overflow:auto;user-select:text';
+    stonesOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
     stonesBox.append(stonesHead, stonesOutEl);
     body.append(stonesBox);
-    logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:150px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
+    logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:120px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
     p.append(head, body);
     renderHunt();
@@ -274,19 +274,26 @@
     renderRmt();
     renderStones();
 
-    const place = () => { // mantém dentro da janela
+    const place = () => { // mantém inteiro dentro da janela sem cortar embaixo nem nas laterais
+      p.style.maxHeight = Math.max(120, innerHeight - 16) + 'px';
+      p.style.maxWidth = Math.max(200, innerWidth - 16) + 'px';
       const r = p.getBoundingClientRect();
-      u.x = Math.min(Math.max(0, u.x ?? 8), Math.max(0, innerWidth - r.width));
-      u.y = Math.min(Math.max(0, u.y ?? (innerHeight - r.height - 8)), Math.max(0, innerHeight - r.height));
+      const maxX = Math.max(8, innerWidth - r.width - 8);
+      const maxY = Math.max(8, innerHeight - r.height - 8);
+      u.x = Math.min(Math.max(8, u.x ?? 8), maxX);
+      u.y = Math.min(Math.max(8, u.y ?? maxY), maxY);
       p.style.left = u.x + 'px'; p.style.top = u.y + 'px';
     };
     const render = () => {
-      p.classList.toggle('pk-oculto', u.hidden); p.style.display = u.hidden ? 'none' : ''; body.style.display = u.min ? 'none' : '';
+      p.classList.toggle('pk-oculto', u.hidden); p.style.display = u.hidden ? 'none' : 'flex'; body.style.display = u.min ? 'none' : '';
       const on = [['capture', 1], ['potions', 2], ['eterna', 3], ['hunt', 4]].filter(([k]) => st[k]).map(([, n]) => n);
       title.textContent = 'PokeIdle Helper' + (on.length ? ' · ativos: ' + on.join(',') : ' · parado');
       place();
     };
     ui.refresh = () => { for (const k of ['capture', 'potions', 'eterna', 'hunt']) { const c = $('#pkbot-' + k); if (c) c.checked = !!st[k]; } render(); };
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => { if (!u.hidden) place(); }).observe(p);
+    }
 
     // arrastar
     head.onpointerdown = e => {
@@ -2270,7 +2277,7 @@
   window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, scanRmt, stoneState, planSellStones, sellAllStones, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
-    const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);
+    const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:flex!important;visibility:visible!important}'; document.head.append(css);
     buildPanel(); applyFps(); applyLite(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : '');
     if (globalThis.__pkServer) {
       const syncTitle = () => {
