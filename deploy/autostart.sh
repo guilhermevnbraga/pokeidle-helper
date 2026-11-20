@@ -27,6 +27,16 @@ set -u
     i=$((i + 1))
   done
 
+  # O rc.xml padrão da imagem força <maximized>yes</maximized> em todas as janelas;
+  # troca para "no" para o Openbox respeitar a grade 2x2 de janelas menores.
+  if [ -f /etc/xdg/openbox/rc.xml ]; then
+    if [ ! -f /config/.config/openbox/rc.xml ] || grep -q '<maximized>yes</maximized>' /config/.config/openbox/rc.xml 2>/dev/null; then
+      sed 's|<maximized>yes</maximized>|<maximized>no</maximized>|g' /etc/xdg/openbox/rc.xml > /config/.config/openbox/rc.xml
+      openbox --reconfigure 2>/dev/null || true
+      sleep 0.5
+    fi
+  fi
+
   # Descobre a resolução atual da tela virtual (fallback 1440x900)
   RES="$(xrandr --current 2>/dev/null | awk '/\*/{print $1; exit}')"
   SCR_W="${RES%x*}"
@@ -137,7 +147,9 @@ PY
         --hide-crash-restore-bubble \
         --simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT" \
         --disable-gpu \
+        --disable-gpu-compositing \
         --disable-gpu-rasterization \
+        --disable-software-rasterizer \
         --mute-audio \
         --disable-smooth-scrolling \
         --disable-background-networking \
@@ -166,7 +178,9 @@ PY
         --hide-crash-restore-bubble \
         --simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT" \
         --disable-gpu \
+        --disable-gpu-compositing \
         --disable-gpu-rasterization \
+        --disable-software-rasterizer \
         --mute-audio \
         --disable-smooth-scrolling \
         --disable-background-networking \
@@ -182,11 +196,11 @@ PY
         --new-window "$URL" >/dev/null 2>&1 &
     fi
 
-    # Para o 1º perfil, espera o SingletonSocket existir para os demais reutilizarem o MESMO browser process
+    # Para o 1º perfil, espera o SingletonSocket/Lock existir para os demais reutilizarem o MESMO browser process
     if [ "$idx" -eq 0 ]; then
       w=0
       while [ "$w" -lt 30 ]; do
-        [ -S "$DATA_DIR/SingletonSocket" ] && break
+        [ -L "$DATA_DIR/SingletonSocket" ] || [ -S "$DATA_DIR/SingletonSocket" ] && break
         sleep 0.5
         w=$((w + 1))
       done
