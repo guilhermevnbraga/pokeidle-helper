@@ -1,6 +1,7 @@
 #!/bin/sh
 # Abre todos os perfis configurados em UMA única instância do Chromium (mesmo browser/GPU/Network),
-# organizados em grade (ex.: 2x2) para economizar CPU/RAM e manter todas as contas visíveis.
+# todos em TELA CHEIA (sem corte) com barra inferior tint2 para alternar entre contas com 1 clique.
+# Depois que carregam, minimiza automaticamente para zerar GPU/compositor em repouso.
 # Compatível com POSIX sh (dash), pois openbox-autostart invoca `sh autostart`.
 set -u
 
@@ -10,11 +11,12 @@ set -u
   PROFILES_CSV="${POKEIDLE_PROFILES:-Default,Conta2,Conta3,Conta4}"
   STAGGER="${POKEIDLE_STAGGER_SEC:-4}"
   APP_MODE="${POKEIDLE_APP_MODE:-1}"
-  HEAP_MB="${POKEIDLE_V8_HEAP_MB:-256}"
+  HEAP_MB="${POKEIDLE_V8_HEAP_MB:-320}"
+  AUTO_MIN="${POKEIDLE_AUTO_MINIMIZE:-1}"
   LOG="/tmp/pokeidle-autostart.log"
 
   exec >>"$LOG" 2>&1
-  echo "[$(date -Iseconds)] iniciando autostart (perfis=$PROFILES_CSV, app=$APP_MODE)"
+  echo "[$(date -Iseconds)] iniciando autostart (perfis=$PROFILES_CSV, app=$APP_MODE, auto_min=$AUTO_MIN)"
 
   BIN="/usr/lib/chromium/chromium"
   [ -x "$BIN" ] || BIN="/usr/bin/chromium"
@@ -27,24 +29,21 @@ set -u
     i=$((i + 1))
   done
 
-  # O rc.xml padrão da imagem força <maximized>yes</maximized> em todas as janelas;
-  # troca para "no" para o Openbox respeitar a grade 2x2 de janelas menores.
+  # Garante Openbox maximizando todas as janelas (tela cheia completa sem cortes)
   if [ -f /etc/xdg/openbox/rc.xml ]; then
-    if [ ! -f /config/.config/openbox/rc.xml ] || grep -q '<maximized>yes</maximized>' /config/.config/openbox/rc.xml 2>/dev/null; then
-      sed 's|<maximized>yes</maximized>|<maximized>no</maximized>|g' /etc/xdg/openbox/rc.xml > /config/.config/openbox/rc.xml
+    if [ ! -f /config/.config/openbox/rc.xml ] || grep -q '<maximized>no</maximized>' /config/.config/openbox/rc.xml 2>/dev/null; then
+      cp /etc/xdg/openbox/rc.xml /config/.config/openbox/rc.xml
       openbox --reconfigure 2>/dev/null || true
-      sleep 0.5
+      sleep 0.4
     fi
   fi
 
-  # Descobre a resolução atual da tela virtual (fallback 1440x900)
-  RES="$(xrandr --current 2>/dev/null | awk '/\*/{print $1; exit}')"
-  SCR_W="${RES%x*}"
-  SCR_H="${RES#*x}"
-  case "$SCR_W" in ''|*[!0-9]*) SCR_W="${SELKIES_MANUAL_WIDTH:-1440}" ;; esac
-  case "$SCR_H" in ''|*[!0-9]*) SCR_H="${SELKIES_MANUAL_HEIGHT:-900}" ;; esac
+  # Sobe a barra inferior de troca de contas (tint2)
+  if command -v tint2 >/dev/null 2>&1 && ! pgrep -x tint2 >/dev/null 2>&1; then
+    tint2 -c /config/tint2rc >/dev/null 2>&1 &
+    sleep 0.5
+  fi
 
-  # Conta os perfis na lista separada por vírgula
   OLD_IFS="$IFS"
   IFS=','
   set -- $PROFILES_CSV
@@ -52,51 +51,31 @@ set -u
   COUNT="$#"
   [ "$COUNT" -lt 1 ] && exit 0
 
-  if [ "$COUNT" -le 1 ]; then
-    COLS=1; ROWS=1
-  elif [ "$COUNT" -le 2 ]; then
-    COLS=2; ROWS=1
-  elif [ "$COUNT" -le 4 ]; then
-    COLS=2; ROWS=2
-  else
-    COLS=3; ROWS=$(( (COUNT + 2) / 3 ))
-  fi
-
-  WIN_W=$(( SCR_W / COLS ))
-  WIN_H=$(( SCR_H / ROWS ))
-  echo "[$(date -Iseconds)] tela=${SCR_W}x${SCR_H} grade=${COLS}x${ROWS} janela=${WIN_W}x${WIN_H}"
-
   # Limpa locks órfãos se não houver Chromium rodando
   if ! pgrep -f "$BIN" >/dev/null 2>&1; then
     rm -f "$DATA_DIR"/Singleton*
   fi
 
-  # Remove aviso "Restore pages?" e desmaximiza janelas antigas antes de subir
-  idx=0
+  # Remove aviso "Restore pages?" antes de subir
   for prof in "$@"; do
     pref="$DATA_DIR/$prof/Preferences"
     if [ -f "$pref" ]; then
-      col=$(( idx % COLS ))
-      row=$(( idx / COLS ))
-      wx=$(( col * WIN_W ))
-      wy=$(( row * WIN_H ))
-      /lsiopy/bin/python3 - "$pref" "$wx" "$wy" "$WIN_W" "$WIN_H" <<'PY' || true
+      /lsiopy/bin/python3 - "$pref" <<'PY' || true
 import json, sys
-p, x, y, w, h = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
+p = sys.argv[1]
 try:
     with open(p, 'r', encoding='utf-8') as f:
         d = json.load(f)
     d.setdefault('profile', {})['exit_type'] = 'Normal'
     d['profile']['exited_cleanly'] = True
     wp = d.setdefault('browser', {}).setdefault('window_placement', {})
-    wp.update({'left': x, 'top': y, 'right': x + w, 'bottom': y + h, 'maximized': False})
+    wp['maximized'] = True
     with open(p, 'w', encoding='utf-8') as f:
         json.dump(d, f, separators=(',', ':'))
 except Exception:
     pass
 PY
     fi
-    idx=$((idx + 1))
   done
 
   list_wids() {
@@ -124,14 +103,9 @@ PY
 
   idx=0
   for prof in "$@"; do
-    col=$(( idx % COLS ))
-    row=$(( idx / COLS ))
-    wx=$(( col * WIN_W ))
-    wy=$(( row * WIN_H ))
-
     before="$(list_wids)"
+    echo "[$(date -Iseconds)] abrindo perfil '$prof' (tela cheia)"
 
-    echo "[$(date -Iseconds)] abrindo perfil '$prof' em ${wx},${wy} (${WIN_W}x${WIN_H})"
     if [ "$APP_MODE" = "1" ]; then
       "$BIN" \
         --user-data-dir="$DATA_DIR" \
@@ -147,9 +121,7 @@ PY
         --hide-crash-restore-bubble \
         --simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT" \
         --disable-gpu \
-        --disable-gpu-compositing \
         --disable-gpu-rasterization \
-        --disable-software-rasterizer \
         --mute-audio \
         --disable-smooth-scrolling \
         --disable-background-networking \
@@ -159,9 +131,8 @@ PY
         --media-router=0 \
         --disable-features=site-per-process,Translate,MediaRouter \
         --js-flags="--max-old-space-size=${HEAP_MB}" \
+        --start-maximized \
         --profile-directory="$prof" \
-        --window-size="${WIN_W},${WIN_H}" \
-        --window-position="${wx},${wy}" \
         --app="$URL" >/dev/null 2>&1 &
     else
       "$BIN" \
@@ -178,9 +149,7 @@ PY
         --hide-crash-restore-bubble \
         --simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT" \
         --disable-gpu \
-        --disable-gpu-compositing \
         --disable-gpu-rasterization \
-        --disable-software-rasterizer \
         --mute-audio \
         --disable-smooth-scrolling \
         --disable-background-networking \
@@ -190,13 +159,12 @@ PY
         --media-router=0 \
         --disable-features=site-per-process,Translate,MediaRouter \
         --js-flags="--max-old-space-size=${HEAP_MB}" \
+        --start-maximized \
         --profile-directory="$prof" \
-        --window-size="${WIN_W},${WIN_H}" \
-        --window-position="${wx},${wy}" \
         --new-window "$URL" >/dev/null 2>&1 &
     fi
 
-    # Para o 1º perfil, espera o SingletonSocket/Lock existir para os demais reutilizarem o MESMO browser process
+    # Para o 1º perfil, espera o SingletonSocket existir para os demais reutilizarem o MESMO browser process
     if [ "$idx" -eq 0 ]; then
       w=0
       while [ "$w" -lt 30 ]; do
@@ -206,7 +174,7 @@ PY
       done
     fi
 
-    # Aguarda a nova janela aparecer e encaixa exatamente na célula da grade
+    # Aguarda a nova janela aparecer e marca um nome inicial na barra (a extensão troca pelo nick depois)
     new_wid=""
     w=0
     while [ "$w" -lt 25 ]; do
@@ -218,10 +186,8 @@ PY
     done
 
     if [ -n "$new_wid" ]; then
-      xdotool windowmove --sync "$new_wid" "$wx" "$wy" windowsize --sync "$new_wid" "$WIN_W" "$WIN_H" 2>/dev/null || true
-      echo "[$(date -Iseconds)] perfil '$prof' posicionado (wid=$new_wid)"
-    else
-      echo "[$(date -Iseconds)] aviso: janela do perfil '$prof' não detectada pelo xdotool"
+      xdotool set_window --name "$prof - Pokeidle" "$new_wid" 2>/dev/null || true
+      echo "[$(date -Iseconds)] perfil '$prof' aberto (wid=$new_wid)"
     fi
 
     idx=$((idx + 1))
@@ -231,4 +197,14 @@ PY
   done
 
   echo "[$(date -Iseconds)] todos os $COUNT perfis abertos."
+
+  # Minimiza todas após carregarem: GPU/compositor cai para 0% quando rodando em segundo plano no servidor.
+  # Basta clicar em qualquer conta na barra inferior (tint2) para abrir em tela cheia.
+  if [ "$AUTO_MIN" = "1" ]; then
+    sleep 10
+    for wid in $(list_wids); do
+      xdotool windowminimize "$wid" 2>/dev/null || true
+    done
+    echo "[$(date -Iseconds)] janelas minimizadas para modo economia (clique na barra inferior para abrir)."
+  fi
 ) &

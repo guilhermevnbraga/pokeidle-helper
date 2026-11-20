@@ -139,17 +139,17 @@ Dicas:
 
 ## Rodar no servidor (Proxmox — até 4 contas em 1 container)
 
-Um **único** container Docker (`lscr.io/linuxserver/chromium`) abre **1 única instância do Chromium com até 4 perfis** (`Default`, `Conta2`, `Conta3`, `Conta4`) em grade **2×2** (`720×450` cada, tela virtual `1440×900`, modo `--app` sem barras extras). Todos os perfis compartilham `browser`, `gpu-process`, `NetworkService`, Openbox e Selkies (~1,35–1,5 GiB de RAM para as 4 janelas juntas).
+Um **único** container Docker (`deploy/Dockerfile`, baseado em `lscr.io/linuxserver/chromium`) abre **1 única instância do Chromium com até 4 perfis** (`Default`, `Conta2`, `Conta3`, `Conta4`), **cada um em tela cheia** (sem cortes na interface do jogo nem da extensão), com uma barra inferior (`tint2`) para alternar entre as contas com 1 clique. O daemon `pulseaudio` é desativado e as janelas são minimizadas automaticamente após o boot (zerando GPU/compositor enquanto roda em segundo plano; os timers continuam ativos via `fps.js`/`content.js`).
 
-1. Crie um CT (LXC) Debian/Ubuntu com 2 vCPU, 3 GB (ou 4 GB) de RAM e 16 GB de disco. Em **Options → Features**, ligue **Nesting** e **keyctl**.
+1. Crie um CT (LXC) Debian/Ubuntu com 2 vCPU, 3 GB (recomendado 4 GB para 4 contas sem swap) de RAM e 16 GB de disco. Em **Options → Features**, ligue **Nesting** e **keyctl**.
 2. Instale o Docker no CT e clone este repositório.
 3. Em `deploy/`, copie `.env.example` para `.env`, defina `WEB_PASSWORD` e, se quiser acessar pela LAN, `BIND_IP=<IP do CT>`.
-4. Garanta `mkdir -p deploy/profile/.config/openbox && chown 1000:1000 deploy/profile/.config/openbox` e rode `docker compose up -d` em `deploy/`.
-5. Acesse `https://<IP>:3001` (certificado autoassinado), faça login manual (anti-robô) nas contas e ajuste o painel de cada uma (recomendado: **Modo servidor** ligado + **FPS = 1 ou 2** se for capturar, ou **ULTRA Economia** do jogo se não for capturar). Depois **feche a aba remota** para o Selkies ficar ocioso (~0–1% CPU).
+4. Garanta `mkdir -p deploy/profile/.config/openbox && chown 1000:1000 deploy/profile/.config/openbox` e rode `docker compose up -d --build` em `deploy/`.
+5. Acesse `https://<IP>:3001` (certificado autoassinado), clique em cada conta na barra inferior para abrir em tela cheia, faça o login manual (anti-robô) e ajuste o painel (**Modo servidor** ligado + **FPS = 1 ou 2** se for capturar, ou **ULTRA Economia** do jogo se não for capturar). Ao terminar, clique novamente na conta ativa na barra inferior para minimizar e **feche a aba remota**.
 
-**Uso sob demanda no Proxmox:** deixe o CT desligado quando não precisar; ao clicar **Start** no Proxmox, o Docker sobe automaticamente as 4 contas em ~15 s já logadas e nas configurações da última sessão (salvas em `deploy/profile/`). Ao parar de usar, dê **Shutdown** (gracioso) no CT.
+**Uso sob demanda no Proxmox:** deixe o CT desligado quando não precisar; ao clicar **Start** no Proxmox, o Docker sobe automaticamente as 4 contas já logadas nas configurações da última sessão (salvas em `deploy/profile/`) e minimiza todas após carregar. Ao parar de usar, dê **Shutdown** (gracioso) no CT.
 
-Para atualizar a extensão no servidor: `git pull` e `docker compose up -d` em `deploy/`. O contêiner tem teto físico de `1.5` CPU e `2600m` de RAM (ajustável via `MEM_LIMIT` no `.env`).
+Para atualizar a extensão no servidor: `git pull` e `docker compose up -d --build` em `deploy/`. O limite de CPU vem do próprio CT no Proxmox (evitando engasgos de CFS quota do Docker ao digitar na tela remota).
 
 **Uma sessão por conta:** o jogo só deixa uma sessão jogar por vez. Se você abrir o jogo em outro navegador ou aba, a do servidor pausa e mostra "Account opened elsewhere". Clique em "Play here" para retomar. Jogar de novo no servidor desconecta a outra.
 

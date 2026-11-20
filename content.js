@@ -1921,6 +1921,15 @@
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:block!important;visibility:visible!important}'; document.head.append(css);
-    buildPanel(); applyFps(); applyLite(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : ''); };
+    buildPanel(); applyFps(); applyLite(); watch(); startTimer(); log('PokeIdle Helper pronto', CFG.dry ? '(DRY-RUN)' : '');
+    if (globalThis.__pkServer) {
+      const syncTitle = () => {
+        const nick = ($('#tr-nome, #tr-name, .tr-nome')?.textContent || '').trim();
+        if (nick) { const want = nick + ' · Pokeidle'; if (document.title !== want) document.title = want; }
+      };
+      setTimeout(syncTitle, 3000);
+      setInterval(syncTitle, 15000);
+    }
+  };
   document.body ? boot() : addEventListener('DOMContentLoaded', boot);
 })();

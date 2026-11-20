@@ -1,35 +1,32 @@
-# 1 único Chromium com até 4 perfis (grade 2x2) numa tela virtual, com a extensão carregada.
-# Compartilha browser/GPU/rede entre todas as contas para gastar o mínimo de CPU/RAM.
-# Fluxo no Proxmox: deixe o CT desligado quando não precisar; clique Start para subir as 4 contas
-# já logadas nas últimas configs, e Shutdown (gracioso) ao terminar.
+# 1 único Chromium com até 4 perfis em TELA CHEIA + barra inferior (tint2) para trocar com 1 clique.
+# Sem teto CFS duro no Docker (o próprio CT no Proxmox limita vCPUs), evitando travamentos ao digitar.
+# Após o boot, minimiza as janelas automaticamente (GPU/compositor = 0% em repouso).
 services:
   chromium:
-    image: lscr.io/linuxserver/chromium:latest
+    build: .
+    image: pokeidle-chromium-multi:latest
     container_name: pokeidle-chromium
     security_opt:
       - seccomp:unconfined          # exigido pelo Chromium dentro do Docker
     shm_size: "512m"
-    cpus: "1.5"                      # teto físico de CPU: impede o servidor de esquentar
-    mem_limit: ${MEM_LIMIT:-2600m}   # com 4 GB no CT, pode subir para 3400m no .env
+    mem_limit: ${MEM_LIMIT:-2800m}  # com CT de 4 GB no Proxmox, pode subir para 3500m no .env
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=America/Sao_Paulo
       - CUSTOM_USER=${WEB_USER:-pokeidle}
       - PASSWORD=${WEB_PASSWORD:?defina WEB_PASSWORD no arquivo .env}
-      # X11 (Openbox): permite posicionar as 4 contas em grade 2x2 fixa e visível (zero throttling de aba oculta)
+      # X11 (Openbox + tint2): janelas maximizadas na resolução da sua tela + minimização automática
       - PIXELFLUX_WAYLAND=false
-      - SELKIES_MANUAL_WIDTH=${SCREEN_WIDTH:-1440}
-      - SELKIES_MANUAL_HEIGHT=${SCREEN_HEIGHT:-900}
-      - SELKIES_FRAMERATE=${SELKIES_FRAMERATE:-15}
-      # Perfis separados por vírgula (Default reaproveita a Conta 1 já logada)
       - POKEIDLE_PROFILES=${POKEIDLE_PROFILES:-Default,Conta2,Conta3,Conta4}
       - POKEIDLE_APP_MODE=${POKEIDLE_APP_MODE:-1}
-      - POKEIDLE_V8_HEAP_MB=${POKEIDLE_V8_HEAP_MB:-256}
+      - POKEIDLE_V8_HEAP_MB=${POKEIDLE_V8_HEAP_MB:-320}
       - POKEIDLE_STAGGER_SEC=${POKEIDLE_STAGGER_SEC:-4}
+      - POKEIDLE_AUTO_MINIMIZE=${POKEIDLE_AUTO_MINIMIZE:-1}
     volumes:
       - ./profile:/config                                    # perfis, logins e configs da extensão ficam salvos aqui
-      - ./autostart.sh:/config/.config/openbox/autostart:ro  # abre os 4 perfis na mesma instância do Chromium
+      - ./autostart.sh:/config/.config/openbox/autostart:ro  # abre os 4 perfis em tela cheia no mesmo Chromium
+      - ./tint2rc:/config/tint2rc:ro                         # barra inferior para alternar/minimizar contas
       - ../:/extension:ro                                    # esta pasta é a extensão
       - ./server-flag.js:/extension/server-flag.js:ro        # ativa Modo Servidor + FPS 2 por padrão nas contas novas
     ports:
