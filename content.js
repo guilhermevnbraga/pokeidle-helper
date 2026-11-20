@@ -18,7 +18,7 @@
   };
   // configurações editáveis no painel (salvas no navegador); potType 'auto' = repõe as poções em uso
   CFG.potType = 'auto';
-  CFG.fps = globalThis.__pkServer ? 2 : 10; // quadros/s do jogo (0 = sem limite); aplicado por fps.js
+  CFG.fps = globalThis.__pkServer ? 0.2 : 10; // quadros/s só do mapa (0 = sem limite); UI sempre fica em 60 FPS
   CFG.huntFocus = 'balanced'; // balanced | xp | lucro | shiny
   CFG.lite = !!globalThis.__pkServer; // modo servidor: desativa animações CSS/transições/sombras que forçam repintura a 60 Hz
   const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'huntFocus', 'lite'];
@@ -171,7 +171,7 @@
     box.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
       cell('Bola'), ballSelEl, nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999),
       cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
-    const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2 (leve)'], [1, '1 (servidor)'], [0, 'sem limite']], 'fps', 'Quadros por segundo da cena do jogo. Menos quadros = bem menos CPU; a captura continua funcionando. Use "sem limite" se for jogar na mão.');
+    const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2 (leve)'], [1, '1 (servidor)'], [0.2, '0.2 (mapa quase parado · captura ON)'], [0, 'sem limite']], 'fps', 'Limita apenas o desenho do mapa (canvas). A interface, cliques, combate, XP e captura ficam sempre em velocidade normal (60 FPS).');
     fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel); body.append(box);
     // Analisador Otimizado de Pokébola (hunt atual: NPC + RMT + Shiny + ouro/h + taxa/preço)
     const ballBox = document.createElement('div');
@@ -1865,7 +1865,6 @@
   // ---------- loop (Worker evita throttle em aba em segundo plano) ----------
   let lastTick = Date.now(), lastSupply = 0, warnedCapture = false;
   async function tick() {
-    if (document.hidden) document.dispatchEvent(new CustomEvent('pk-pump'));
     try {
       const now = Date.now(), gap = now - lastTick; lastTick = now;
       if (gap > 8000) { log('relógio ficou parado', Math.round(gap / 1000) + 's (aba oculta/freada?) - checando estoque já'); lastSupply = 0; }

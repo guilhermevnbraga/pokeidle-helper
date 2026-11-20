@@ -120,7 +120,7 @@ Medido no CT (2 vCPU) com o jogo em modo normal e capturando:
 
 O que mais pesa é **deixar a tela remota aberta**. Feche a aba do Selkies quando não estiver mexendo.
 
-O seletor **FPS** do painel limita a cena do jogo (padrão `10` no PC; `2` no deploy Docker, com opção `1 (servidor)`). O checkbox **Modo servidor (sem animações)** desliga animações CSS infinitas, transições e sombras do jogo, cortando a recomposição em 60 Hz do compositor (no deploy Docker já nasce ligado por padrão via `deploy/server-flag.js`). Se for jogar na mão, escolha "sem limite" ou `60` e desligue o Modo servidor.
+O seletor **FPS** do painel limita **apenas** o desenho do mapa (`Campo.loop` em `campo.mjs`, que não afeta combate, XP/h, ouro nem a lista de captura `#caidos-lista`). Toda a interface do jogo (Market, Mapa, RMT, Coleção, filtros e cliques) continua em **60 FPS nativos** mesmo com o mapa em **`0.2` (quase parado · captura ON)** — padrão automático no deploy Docker via `deploy/server-flag.js`. Com a aba oculta/minimizada, o desenho do mapa pausa completamente (0% CPU de canvas) enquanto o Worker de timers mantém a captura ativa. O checkbox **Modo servidor (sem animações)** desliga animações CSS infinitas, transições e sombras. Se quiser ver o mapa liso ao jogar na mão, escolha `10`, `60` ou "sem limite".
 
 Sobre GPU passthrough (`/dev/dri`): deixado **desativado** de propósito no deploy multi-conta porque, com a tela remota fechada e 1–2 FPS, manter a iGPU acordada pode impedir C-states profundos da CPU além de exigir mapeamento extra de GID no LXC. Só vale avaliar se você costuma deixar a tela remota aberta por longos períodos.
 
