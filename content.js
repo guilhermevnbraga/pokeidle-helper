@@ -1608,26 +1608,45 @@
     }
 
     pubBtn.click();
-    // Aguarda a folha fechar (sinal de publicação concluída) ou erro aparecer
+    // Ao anunciar em Coins, o jogo abre .modal-caixa.caixa-confirmar (#confirmar-sim) para evitar confusão com Gemas
+    let confirmedCoins = false;
     const t0 = Date.now();
-    while (Date.now() - t0 < 3000) {
+    while (Date.now() - t0 < 4500) {
       await sleep(220);
+      const confirmBox = $('.modal-caixa.caixa-confirmar');
+      if (!confirmedCoins && confirmBox && confirmBox.offsetParent) {
+        const simBtn = $('#confirmar-sim', confirmBox);
+        if (simBtn && !simBtn.disabled) {
+          confirmedCoins = true;
+          simBtn.click();
+          await sleep(300);
+          continue;
+        }
+      }
       const l = $('.cm-folha');
-      if (!l || !l.offsetParent) {
+      const boxStillOpen = !!(confirmBox && confirmBox.offsetParent);
+      if ((!l || !l.offsetParent) && !boxStillOpen) {
         return { status: 'listed', listedQty: actualQty, detail: `anunciada ×${actualQty} a ${planItem.price.toLocaleString('pt-BR')}` };
       }
-      const errEl = $('.cm-erro, .erro, .aviso-erro', l);
-      if (errEl && errEl.offsetParent && errEl.textContent.trim()) {
-        const errTxt = errEl.textContent.trim();
-        await closeRmtLeaf();
-        return { status: 'error', detail: errTxt };
+      if (l && l.offsetParent) {
+        const errEl = $('.cm-erro, .erro, .aviso-erro', l);
+        if (errEl && errEl.offsetParent && errEl.textContent.trim()) {
+          const errTxt = errEl.textContent.trim();
+          const naoBtn = $('.modal-caixa.caixa-confirmar #confirmar-nao');
+          if (naoBtn && naoBtn.offsetParent) { naoBtn.click(); await sleep(180); }
+          await closeRmtLeaf();
+          return { status: 'error', detail: errTxt };
+        }
       }
     }
-    // Se ainda está aberta após 3 s, checa se mudou texto de erro/toast e fecha com segurança
+    // Se ainda está aberta após 4,5 s, limpa confirmação/folha e reporta toast visível (se houver)
+    const naoEnd = $('.modal-caixa.caixa-confirmar #confirmar-nao');
+    if (naoEnd && naoEnd.offsetParent) { naoEnd.click(); await sleep(180); }
     const lEnd = $('.cm-folha');
     const stillOpen = !!(lEnd && lEnd.offsetParent);
     if (stillOpen) {
-      const maybeToast = ($('.toast, #toast, .notificacao') || {}).textContent?.trim() || '';
+      const toastEl = $$('.toast, #toast, .notificacao').find(el => el.offsetParent && !el.classList.contains('hidden'));
+      const maybeToast = toastEl ? toastEl.textContent.trim() : '';
       await closeRmtLeaf();
       return { status: 'error', detail: maybeToast || 'não fechou após publicar (cooldown/já anunciada?)' };
     }

@@ -162,12 +162,12 @@ const PK_STONES = (() => {
       else levels.push({ price: o.price, qty: o.qty });
     }
 
-    // Descarta micro-iscas no topo (<= 5 un. acumuladas com preço < 80% do próximo nível livre)
+    // Descarta micro-iscas no topo (<= 5 un. acumuladas com preço < 92% do próximo nível livre)
     let idx = 0, skippedBaitUnits = 0, skippedBaitLevels = 0;
     while (idx + 1 < levels.length) {
       const cur = levels[idx];
       const next = levels[idx + 1];
-      if (cur.qty <= 3 && skippedBaitUnits + cur.qty <= 5 && cur.price < next.price * 0.80) {
+      if (cur.qty <= 3 && skippedBaitUnits + cur.qty <= 5 && cur.price < next.price * 0.92) {
         skippedBaitUnits += cur.qty;
         skippedBaitLevels++;
         idx++;

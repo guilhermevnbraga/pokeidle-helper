@@ -152,6 +152,17 @@ test('chooseStonePrice: pula micro-isca livre e protege contra dump maciço não
   assert.equal(bait.action, 'sell');
   assert.equal(bait.price, 79999);
 
+  // Micro-isca real de 1 un. a 17.999 (~87% do nível seguinte 20.552) -> ignora e mira 20.551
+  const baitReal = PK_STONES.chooseStonePrice({
+    id: '23', name: 'Cocoon Stone', qty: 89, avg7d: 20559,
+    offers: [
+      { price: 17999, qty: 1, held: false },
+      { price: 20552, qty: 120, held: false },
+    ],
+  });
+  assert.equal(baitReal.action, 'sell');
+  assert.equal(baitReal.price, 20551);
+
   // Parede gigante (500 un.) livre a 20k quando média é 95k e sem vendas recentes confirmando -> pula por segurança
   const dump = PK_STONES.chooseStonePrice({
     id: '53', name: 'Fire Stone', qty: 10, avg7d: 95000,

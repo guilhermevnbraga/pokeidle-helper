@@ -11,7 +11,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`): auto + botão `Verificar` encadeando `Hunt->RMT->Pokébola` (v0.7.6) · NÃO validado: troca real, Economia e ULTRA Economia
 - [ ] Analisador de Pokébola (`ball.js`+`content.js`): auto-aplica bola recomendada + mín. 10 / repor 100 (v0.7.6) · NÃO validado: hunt mista (>1 espécie) e com Shiny/Lure
 - [x] Radar RMT v0.7.5 (`rmt.js`+`content.js`): 100% itens fungíveis (remove Pokémon), META ÓTIMA no topo em SAVE_ONLY, validado em Node e Chrome (9,8 s).
-- [ ] Venda de Pedras v0.7.7 (`stones.js`+`content.js`): `Simular`/`Vender` todas pedras em Coins no máx. comprovado; validado Node+simulação real (6 s) · NÃO validado: clique `#cm-publicar`
+- [x] Venda de Pedras v0.7.7 (`stones.js`+`content.js`): `Simular`/`Vender` pedras em Coins no máx. comprovado, confirma `.caixa-confirmar`; validado Node+venda real (3/3 em 12,9 s).
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível mesmo em ULTRA Economia, com config persistida em `localStorage`.
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.
