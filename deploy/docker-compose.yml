@@ -31,6 +31,7 @@ services:
       - ./profile:/config                                    # perfis, logins e configs da extensão ficam salvos aqui
       - ./autostart.sh:/config/.config/openbox/autostart:ro  # abre os 4 perfis na mesma instância do Chromium
       - ../:/extension:ro                                    # esta pasta é a extensão
+      - ./server-flag.js:/extension/server-flag.js:ro        # ativa Modo Servidor + FPS 2 por padrão nas contas novas
     ports:
       # interface web em HTTPS (certificado autoassinado). Por padrão só local; defina BIND_IP no .env
       # (ex.: o IP do CT) para acessar pela rede. Exponha fora de casa só por Cloudflare Tunnel ou Tailscale.

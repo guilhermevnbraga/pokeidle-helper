@@ -18,9 +18,9 @@
   };
   // configurações editáveis no painel (salvas no navegador); potType 'auto' = repõe as poções em uso
   CFG.potType = 'auto';
-  CFG.fps = 10; // quadros/s do jogo (0 = sem limite); aplicado por fps.js
+  CFG.fps = globalThis.__pkServer ? 2 : 10; // quadros/s do jogo (0 = sem limite); aplicado por fps.js
   CFG.huntFocus = 'balanced'; // balanced | xp | lucro | shiny
-  CFG.lite = false; // modo servidor: desativa animações CSS/transições/sombras que forçam repintura a 60 Hz
+  CFG.lite = !!globalThis.__pkServer; // modo servidor: desativa animações CSS/transições/sombras que forçam repintura a 60 Hz
   const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'huntFocus', 'lite'];
   const applyFps = () => document.dispatchEvent(new CustomEvent('pk-fps', { detail: +CFG.fps || 0 }));
   const LITE_CSS = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}body *:not(#pkbot-panel):not(#pkbot-panel *){box-shadow:none!important;text-shadow:none!important}';

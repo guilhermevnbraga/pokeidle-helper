@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PokeIdle Helper",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Captura, reposição de bolas/poções, gerenciador de hunt, radar RMT (Ouro→Gema) e analisador otimizado de pokébola para o pokeidle.io (só cliques no DOM).",
   "permissions": ["alarms"],
   "host_permissions": ["https://pokeidle.io/*"],
@@ -9,13 +9,13 @@
   "content_scripts": [
     {
       "matches": ["https://pokeidle.io/app*"],
-      "js": ["fps.js"],
+      "js": ["server-flag.js", "fps.js"],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
       "matches": ["https://pokeidle.io/app*"],
-      "js": ["types.js", "hunt.js", "rmt.js", "ball.js", "content.js"],
+      "js": ["server-flag.js", "types.js", "hunt.js", "rmt.js", "ball.js", "content.js"],
       "run_at": "document_idle"
     }
   ]

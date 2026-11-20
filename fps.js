@@ -6,7 +6,7 @@
   if (window.__pkFps) return;
   window.__pkFps = true;
   const raf = window.requestAnimationFrame.bind(window);
-  let fps = 10;
+  let fps = globalThis.__pkServer ? 2 : 10;
   try { const c = JSON.parse(localStorage.getItem('pkbot-cfg') || '{}'); if ('fps' in c) fps = +c.fps; } catch (e) {}
   document.addEventListener('pk-fps', e => { fps = +e.detail || 0; });
 
