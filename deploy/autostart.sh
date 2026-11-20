@@ -1,6 +1,7 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Abre todos os perfis configurados em UMA única instância do Chromium (mesmo browser/GPU/Network),
 # organizados em grade (ex.: 2x2) para economizar CPU/RAM e manter todas as contas visíveis.
+# Compatível com POSIX sh (dash), pois openbox-autostart invoca `sh autostart`.
 set -u
 
 (
@@ -13,15 +14,17 @@ set -u
   LOG="/tmp/pokeidle-autostart.log"
 
   exec >>"$LOG" 2>&1
-  echo "[$(date -Is)] iniciando autostart (perfis=$PROFILES_CSV, app=$APP_MODE)"
+  echo "[$(date -Iseconds)] iniciando autostart (perfis=$PROFILES_CSV, app=$APP_MODE)"
 
   BIN="/usr/lib/chromium/chromium"
   [ -x "$BIN" ] || BIN="/usr/bin/chromium"
 
   # Espera o X11/Openbox estabilizar
-  for _ in $(seq 1 30); do
+  i=0
+  while [ "$i" -lt 30 ]; do
     xrandr --current >/dev/null 2>&1 && break
     sleep 0.5
+    i=$((i + 1))
   done
 
   # Descobre a resolução atual da tela virtual (fallback 1440x900)
@@ -31,8 +34,12 @@ set -u
   case "$SCR_W" in ''|*[!0-9]*) SCR_W="${SELKIES_MANUAL_WIDTH:-1440}" ;; esac
   case "$SCR_H" in ''|*[!0-9]*) SCR_H="${SELKIES_MANUAL_HEIGHT:-900}" ;; esac
 
-  IFS=',' read -r -a PROFILES <<< "$PROFILES_CSV"
-  COUNT="${#PROFILES[@]}"
+  # Conta os perfis na lista separada por vírgula
+  OLD_IFS="$IFS"
+  IFS=','
+  set -- $PROFILES_CSV
+  IFS="$OLD_IFS"
+  COUNT="$#"
   [ "$COUNT" -lt 1 ] && exit 0
 
   if [ "$COUNT" -le 1 ]; then
@@ -47,7 +54,7 @@ set -u
 
   WIN_W=$(( SCR_W / COLS ))
   WIN_H=$(( SCR_H / ROWS ))
-  echo "[$(date -Is)] tela=${SCR_W}x${SCR_H} grade=${COLS}x${ROWS} janela=${WIN_W}x${WIN_H}"
+  echo "[$(date -Iseconds)] tela=${SCR_W}x${SCR_H} grade=${COLS}x${ROWS} janela=${WIN_W}x${WIN_H}"
 
   # Limpa locks órfãos se não houver Chromium rodando
   if ! pgrep -f "$BIN" >/dev/null 2>&1; then
@@ -55,15 +62,15 @@ set -u
   fi
 
   # Remove aviso "Restore pages?" e desmaximiza janelas antigas antes de subir
-  for i in "${!PROFILES[@]}"; do
-    prof="${PROFILES[$i]}"
+  idx=0
+  for prof in "$@"; do
     pref="$DATA_DIR/$prof/Preferences"
-    [ -f "$pref" ] || continue
-    col=$(( i % COLS ))
-    row=$(( i / COLS ))
-    wx=$(( col * WIN_W ))
-    wy=$(( row * WIN_H ))
-    /lsiopy/bin/python3 - "$pref" "$wx" "$wy" "$WIN_W" "$WIN_H" <<'PY' || true
+    if [ -f "$pref" ]; then
+      col=$(( idx % COLS ))
+      row=$(( idx / COLS ))
+      wx=$(( col * WIN_W ))
+      wy=$(( row * WIN_H ))
+      /lsiopy/bin/python3 - "$pref" "$wx" "$wy" "$WIN_W" "$WIN_H" <<'PY' || true
 import json, sys
 p, x, y, w, h = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
 try:
@@ -78,88 +85,136 @@ try:
 except Exception:
     pass
 PY
+    fi
+    idx=$((idx + 1))
   done
-
-  COMMON_FLAGS=(
-    --user-data-dir="$DATA_DIR"
-    --load-extension=/extension
-    --disable-extensions-except=/extension
-    --no-sandbox
-    --disable-dev-shm-usage
-    --password-store=basic
-    --no-first-run
-    --no-default-browser-check
-    --test-type
-    --disable-session-crashed-bubble
-    --hide-crash-restore-bubble
-    --simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT"
-    --disable-gpu
-    --disable-gpu-rasterization
-    --mute-audio
-    --disable-smooth-scrolling
-    --disable-background-networking
-    --disable-component-update
-    --disable-sync
-    --disable-pings
-    --media-router=0
-    --disable-features=site-per-process,Translate,MediaRouter
-    --js-flags="--max-old-space-size=${HEAP_MB}"
-  )
 
   list_wids() {
     xdotool search --onlyvisible --class chromium 2>/dev/null | sort -u
   }
 
-  for i in "${!PROFILES[@]}"; do
-    prof="${PROFILES[$i]}"
-    col=$(( i % COLS ))
-    row=$(( i / COLS ))
+  find_new_wid() {
+    before_list="$1"
+    after_list="$2"
+    for w in $after_list; do
+      found=0
+      for b in $before_list; do
+        if [ "$w" = "$b" ]; then
+          found=1
+          break
+        fi
+      done
+      if [ "$found" -eq 0 ]; then
+        echo "$w"
+        return 0
+      fi
+    done
+    return 1
+  }
+
+  idx=0
+  for prof in "$@"; do
+    col=$(( idx % COLS ))
+    row=$(( idx / COLS ))
     wx=$(( col * WIN_W ))
     wy=$(( row * WIN_H ))
 
     before="$(list_wids)"
 
-    TARGET_ARGS=(--new-window "$URL")
+    echo "[$(date -Iseconds)] abrindo perfil '$prof' em ${wx},${wy} (${WIN_W}x${WIN_H})"
     if [ "$APP_MODE" = "1" ]; then
-      TARGET_ARGS=(--app="$URL")
+      "$BIN" \
+        --user-data-dir="$DATA_DIR" \
+        --load-extension=/extension \
+        --disable-extensions-except=/extension \
+        --no-sandbox \
+        --disable-dev-shm-usage \
+        --password-store=basic \
+        --no-first-run \
+        --no-default-browser-check \
+        --test-type \
+        --disable-session-crashed-bubble \
+        --hide-crash-restore-bubble \
+        --simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT" \
+        --disable-gpu \
+        --disable-gpu-rasterization \
+        --mute-audio \
+        --disable-smooth-scrolling \
+        --disable-background-networking \
+        --disable-component-update \
+        --disable-sync \
+        --disable-pings \
+        --media-router=0 \
+        --disable-features=site-per-process,Translate,MediaRouter \
+        --js-flags="--max-old-space-size=${HEAP_MB}" \
+        --profile-directory="$prof" \
+        --window-size="${WIN_W},${WIN_H}" \
+        --window-position="${wx},${wy}" \
+        --app="$URL" >/dev/null 2>&1 &
+    else
+      "$BIN" \
+        --user-data-dir="$DATA_DIR" \
+        --load-extension=/extension \
+        --disable-extensions-except=/extension \
+        --no-sandbox \
+        --disable-dev-shm-usage \
+        --password-store=basic \
+        --no-first-run \
+        --no-default-browser-check \
+        --test-type \
+        --disable-session-crashed-bubble \
+        --hide-crash-restore-bubble \
+        --simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT" \
+        --disable-gpu \
+        --disable-gpu-rasterization \
+        --mute-audio \
+        --disable-smooth-scrolling \
+        --disable-background-networking \
+        --disable-component-update \
+        --disable-sync \
+        --disable-pings \
+        --media-router=0 \
+        --disable-features=site-per-process,Translate,MediaRouter \
+        --js-flags="--max-old-space-size=${HEAP_MB}" \
+        --profile-directory="$prof" \
+        --window-size="${WIN_W},${WIN_H}" \
+        --window-position="${wx},${wy}" \
+        --new-window "$URL" >/dev/null 2>&1 &
     fi
 
-    echo "[$(date -Is)] abrindo perfil '$prof' em ${wx},${wy} (${WIN_W}x${WIN_H})"
-    "$BIN" \
-      "${COMMON_FLAGS[@]}" \
-      --profile-directory="$prof" \
-      --window-size="${WIN_W},${WIN_H}" \
-      --window-position="${wx},${wy}" \
-      "${TARGET_ARGS[@]}" >/dev/null 2>&1 &
-
     # Para o 1º perfil, espera o SingletonSocket existir para os demais reutilizarem o MESMO browser process
-    if [ "$i" -eq 0 ]; then
-      for _ in $(seq 1 30); do
+    if [ "$idx" -eq 0 ]; then
+      w=0
+      while [ "$w" -lt 30 ]; do
         [ -S "$DATA_DIR/SingletonSocket" ] && break
         sleep 0.5
+        w=$((w + 1))
       done
     fi
 
     # Aguarda a nova janela aparecer e encaixa exatamente na célula da grade
     new_wid=""
-    for _ in $(seq 1 25); do
+    w=0
+    while [ "$w" -lt 25 ]; do
       after="$(list_wids)"
-      new_wid="$(comm -13 <(printf '%s\n' "$before" | sed '/^$/d') <(printf '%s\n' "$after" | sed '/^$/d') | head -n 1)"
+      new_wid="$(find_new_wid "$before" "$after" || true)"
       [ -n "$new_wid" ] && break
       sleep 0.4
+      w=$((w + 1))
     done
 
     if [ -n "$new_wid" ]; then
       xdotool windowmove --sync "$new_wid" "$wx" "$wy" windowsize --sync "$new_wid" "$WIN_W" "$WIN_H" 2>/dev/null || true
-      echo "[$(date -Is)] perfil '$prof' posicionado (wid=$new_wid)"
+      echo "[$(date -Iseconds)] perfil '$prof' posicionado (wid=$new_wid)"
     else
-      echo "[$(date -Is)] aviso: janela do perfil '$prof' não detectada pelo xdotool"
+      echo "[$(date -Iseconds)] aviso: janela do perfil '$prof' não detectada pelo xdotool"
     fi
 
-    if [ "$i" -lt $(( COUNT - 1 )) ]; then
+    idx=$((idx + 1))
+    if [ "$idx" -lt "$COUNT" ]; then
       sleep "$STAGGER"
     fi
   done
 
-  echo "[$(date -Is)] todos os $COUNT perfis abertos."
+  echo "[$(date -Iseconds)] todos os $COUNT perfis abertos."
 ) &
