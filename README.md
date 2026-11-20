@@ -139,7 +139,7 @@ Dicas:
 
 ## Rodar no servidor (Proxmox — até 4 contas em 1 container)
 
-Um **único** container Docker (`deploy/Dockerfile`, baseado em `lscr.io/linuxserver/chromium`) abre **1 única instância do Chromium com até 4 perfis** (`Default`, `Conta2`, `Conta3`, `Conta4`), **cada um em tela cheia** (sem cortes na interface do jogo nem da extensão), com uma barra inferior (`tint2`) para alternar entre as contas com 1 clique. O daemon `pulseaudio` é desativado e as janelas são minimizadas automaticamente após o boot (zerando GPU/compositor enquanto roda em segundo plano; os timers continuam ativos via `fps.js`/`content.js`).
+Um **único** container Docker (`deploy/Dockerfile`, baseado em `lscr.io/linuxserver/chromium`) abre **1 única instância do Chromium com até 4 perfis** (`Default`, `Conta2`, `Conta3`, `Conta4`), **cada um em tela cheia** (sem cortes na interface do jogo nem da extensão), com uma barra inferior (`tint2`) para alternar entre as contas com 1 clique. As janelas são minimizadas automaticamente após o boot (zerando GPU/compositor enquanto roda em segundo plano; os timers continuam ativos via `fps.js`/`content.js`).
 
 1. Crie um CT (LXC) Debian/Ubuntu com 2 vCPU, 3 GB (recomendado 4 GB para 4 contas sem swap) de RAM e 16 GB de disco. Em **Options → Features**, ligue **Nesting** e **keyctl**.
 2. Instale o Docker no CT e clone este repositório.

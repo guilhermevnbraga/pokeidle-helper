@@ -19,7 +19,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Alarme de reserva de 30 s no service worker (`background.js`) e bloqueio de descarte da aba (`autoDiscardable: false`).
 - [ ] Modo 1 (Captura com parada automática): regex `captureRe` sobre toasts/log · NÃO confirmado com uma captura real
 - [ ] Ciclo completo de compra após saída periódica do ULTRA Economia (`ultraSupplyTick`) · NÃO validado: volta ao ULTRA confirmada, compra real no ciclo ainda não ocorreu
-- [ ] Deploy Docker multi-conta no Proxmox (`deploy/`, 4 perfis tela cheia + `tint2` + auto-minimize, sem `pulseaudio`) · NÃO validado: fluidez remota e captura contínua minimizada
+- [ ] Deploy Docker multi-conta no Proxmox (`deploy/`, 4 perfis tela cheia + `tint2` + auto-minimize) · NÃO validado: fluidez remota e captura contínua minimizada
 
 ## Estudo do jogo (`pokeidle.io/app`)
 - [x] Estudo de caso RMT (5.000 tx Itens + 900 tx Pokémon + books): trio de Fragmentos (~5,3–5,7M/G, ~5,6B p/ 1.000G), Stones = transfer P2P, high-end Pokémon só em Gemas (`docs/GAME_STUDY.m…
