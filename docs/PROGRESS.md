@@ -7,8 +7,8 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js`, `hunt.js`, `rmt.js` e `ball.js` (`tests/*.test.mjs`).
 - [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
-## Extensão MV3 (estado atual v0.7.1)
-- [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`): 100% automático (4 focos, auto-reavaliação, troca real validada em Nv 28 e Nv 422) · NÃO validado: modo Economia e ULTRA Economia
+## Extensão MV3 (estado atual v0.7.2+)
+- [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`): 100% auto, rebalanceado p/ Auto-Potion e XP pré-Outland (`9f03bda`) · NÃO validado: ao vivo pós-fix, modo Economia e ULTRA Economia
 - [ ] Analisador de Pokébola (`ball.js`+`content.js`): valida hunt atual (NPC, RMT, Shiny, abates/h) e aplica… · NÃO validado: hunt mista (>1 espécie), com Shiny/Lure e após scan RMT completo
 - [x] Radar RMT v0.5.0 (`rmt.js` + `content.js`): plano de ação ONDE/COMPRAR/VENDER (veredito comprar vs juntar + Pokémon exato em Sacrifício/P5/Mega/Shiny), validado em Node e Chrome.
 - [ ] Radar RMT: arredondamento (`ceil` vs `round`) no input de anúncio de Pokémon e seletores em idioma EN · NÃO validado: conta sem Pokémon N 3,5+ no Depot e jogo testado só em PT
