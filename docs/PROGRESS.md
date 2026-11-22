@@ -10,7 +10,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 ## Extensão MV3 (estado atual v0.7.2+)
 - [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`, v0.7.8): física calibrada (`1.0`/`2.9s`), XP puro + desempate 3% · NÃO validado: ao vivo no Chrome (v0.7.8), troca real, Eco/ULTRA
 - [ ] Analisador de Pokébola (`ball.js`+`content.js`): auto-aplica bola recomendada + mín. 10 / repor 100 (v0.7.6) · NÃO validado: hunt mista (>1 espécie) e com Shiny/Lure
-- [x] Radar RMT v0.7.5 (`rmt.js`+`content.js`): 100% itens fungíveis (remove Pokémon), META ÓTIMA no topo em SAVE_ONLY, validado em Node e Chrome (9,8 s).
+- [x] Radar RMT v0.8.1 (`rmt.js`+`content.js`): bidirecional Ouro→Gema e Gema→Ouro (seletor Ambos/Ouro→Gema/Gema→Ouro, `#tr-gemas`, 15% Coins), validado Node (62/62) e Chrome.
 - [x] Venda de Pedras v0.7.7 (`stones.js`+`content.js`): `Simular`/`Vender` pedras em Coins no máx. comprovado, confirma `.caixa-confirmar`; validado Node+venda real (3/3 em 12,9 s).
 - [ ] Analisador de Venda v0.8.0 (`sell.js`+`content.js`): item/Pokémon em Gold×Gema + melhor moeda via RMT; validado Node+Chrome (Token+Charizard) · NÃO validado: Shiny/P5 e `#cm-pks` Depot
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT

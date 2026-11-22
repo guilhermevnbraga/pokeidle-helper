@@ -229,3 +229,156 @@ test('buildActionPlan escolhe melhor item acessível pelo Coins/Gema REAL do our
   assert.equal(plan.verdict, 'SAVE_OR_BUY');
   assert.equal(plan.fallback.routeId, 'shiny-frag');
 });
+
+test('netItemCoins aplica 15% com arredondamento para cima em Coins', () => {
+  assert.equal(PK_RMT.netItemCoins(100, 1).fee, 15);
+  assert.equal(PK_RMT.netItemCoins(100, 1).net, 85);
+  assert.equal(PK_RMT.netItemCoins(101, 1).fee, 16); // ceil(15.15) = 16
+  assert.equal(PK_RMT.netItemCoins(101, 1).net, 85);
+  const big = PK_RMT.netItemCoins(702499999, 2);
+  assert.equal(big.gross, 1404999998);
+  assert.equal(big.fee, Math.ceil(1404999998 * 0.15));
+  assert.equal(big.net, big.gross - big.fee);
+});
+
+test('evaluateItemRoute + rankReverseRoutes ordena Gema->Ouro por MAIOR Coins líquidos/Gema e aplica undercut de 1 Coin', () => {
+  const bike = PK_RMT.matchLiquidItem('Fragmento de Bicicleta');
+  const shiny = PK_RMT.matchLiquidItem('Fragmento de Shiny Stone');
+  const token = PK_RMT.matchLiquidItem('Bronze Boss Token');
+
+  // Bike: compra 150G, vende por 702.499.999 -> líq. ~597,12M / 150G = ~3,98M/G
+  const rBike = PK_RMT.evaluateItemRoute({
+    item: bike,
+    coinsOffer: { bestPrice: 702.5e6, unitsAtBest: 3, totalFreeUnits: 60 },
+    gemasOffer: { bestPrice: 150, unitsAtBest: 7, totalFreeUnits: 70 },
+    gems: 100,
+  });
+  // Shiny: compra 90G, vende por 424.999.999 -> líq. ~361,25M / 90G = ~4,01M/G
+  const rShiny = PK_RMT.evaluateItemRoute({
+    item: shiny,
+    coinsOffer: { bestPrice: 425e6, unitsAtBest: 3, totalFreeUnits: 72 },
+    gemasOffer: { bestPrice: 90, unitsAtBest: 16, totalFreeUnits: 67 },
+    gems: 100,
+  });
+  // Token: compra 4G, vende por 28.999.999 -> líq. ~24,65M / 4G = ~6,16M/G (MELHOR em Gema->Ouro!)
+  const rToken = PK_RMT.evaluateItemRoute({
+    item: token,
+    coinsOffer: { bestPrice: 29e6, unitsAtBest: 17, totalFreeUnits: 1300 },
+    gemasOffer: { bestPrice: 4, unitsAtBest: 21, totalFreeUnits: 2100 },
+    gems: 100,
+  });
+  const legacyPoke = { id: 'poke-p5', kind: 'pokemon', label: 'Poke P5', buyCoins: 101.1e6, askGems: 10 };
+
+  // Notice: em Ouro->Gema, bike vence token; em Gema->Ouro, token vence shiny e bike!
+  const rankedO2G = PK_RMT.rankRoutes([rToken, rShiny, rBike]);
+  assert.deepEqual(rankedO2G.map(r => r.id), ['bike-frag', 'shiny-frag', 'bronze-token']);
+
+  const rankedG2O = PK_RMT.rankReverseRoutes([rBike, legacyPoke, rShiny, rToken]);
+  assert.deepEqual(rankedG2O.map(r => r.id), ['bronze-token', 'shiny-frag', 'bike-frag']);
+  assert.equal(rBike.sellCoins, 702499999);
+  assert.equal(rToken.sellCoins, 28999999);
+  assert.equal(rToken.canAffordGems, true);
+  assert.equal(rBike.canAffordGems, false);
+  assert.ok(rToken.netCoinsPerGem > 6.1e6 && rToken.netCoinsPerGem < 6.2e6);
+});
+
+test('rankReverseRoutes e buildGemToGoldActionPlan são retrocompatíveis com rotas legadas em cache (sem netCoinsPerGem)', () => {
+  const legacyCached = [
+    { id: 'bike-frag', kind: 'item', label: 'Frag. Bicicleta', marketName: 'Fragmento de Bicicleta', buyCoins: 700e6, askGems: 150, coinsPerGem: 5.5e6 },
+    { id: 'bronze-token', kind: 'item', label: 'Bronze Boss Token', marketName: 'Bronze Boss Token', buyCoins: 28e6, askGems: 4, coinsPerGem: 8.2e6 },
+  ];
+  const plan = PK_RMT.buildGemToGoldActionPlan({ routes: legacyCached, gems: 20, source: 'book' });
+  assert.equal(plan.verdict, 'BUY_NOW');
+  assert.equal(plan.primary.routeId, 'bronze-token');
+  assert.equal(plan.primary.qty, 5);
+  assert.equal(plan.primary.totalGems, 20);
+  assert.match(plan.primary.sellText, /27\.999\.999 Coins\/un/);
+});
+
+test('buildGemToGoldActionPlan decide BUY_NOW respeitando degraus do book de Gemas e teto +4%', () => {
+  const bike = PK_RMT.matchLiquidItem('Fragmento de Bicicleta');
+  const rBike = PK_RMT.evaluateItemRoute({
+    item: bike,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 800e6, qty: 10, held: false }], bike.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([
+      { price: 100, qty: 2, held: false, seller: 'alice' },
+      { price: 103, qty: 2, held: false, seller: 'bob' },
+      { price: 130, qty: 5, held: false, seller: 'cara' }, // acima do teto +4% (104)
+    ], 2),
+    gems: 500,
+  });
+  const plan = PK_RMT.buildGemToGoldActionPlan({ routes: [rBike], gems: 500, source: 'book' });
+  assert.equal(plan.direction, 'gem-to-gold');
+  assert.equal(plan.verdict, 'BUY_NOW');
+  assert.equal(plan.primary.qty, 4); // 2 a 100G + 2 a 103G = 406G (não toca no nível de 130G)
+  assert.equal(plan.primary.totalGems, 406);
+  assert.deepEqual(plan.primary.sellers, ['alice', 'bob']);
+  assert.match(plan.primary.where, /Gemas$/);
+  assert.match(plan.primary.buyText, /4× Fragmento de Bicicleta até 103G\/un \(total 406G\)/);
+  assert.match(plan.primary.sellText, /Anuncie 4× por 799\.999\.999 Coins\/un/);
+  assert.match(PK_RMT.formatActionPlanText(plan), /1\. COMPRAR/);
+});
+
+test('buildGemToGoldActionPlan decide SAVE_OR_BUY quando rota mais cara em Gemas rende >8% mais ouro/gema', () => {
+  const mshiny = PK_RMT.matchLiquidItem('Fragmento de MEGA Shiny Stone');
+  const shiny = PK_RMT.matchLiquidItem('Fragmento de Shiny Stone');
+  const token = PK_RMT.matchLiquidItem('Bronze Boss Token');
+
+  // mshiny: 200G -> 1.4B Coins -> ~5,95M/G líq. (topo absoluto)
+  const rMShiny = PK_RMT.evaluateItemRoute({
+    item: mshiny,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 1400e6, qty: 5, held: false }], mshiny.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 200, qty: 5, held: false }], 2),
+    gems: 40,
+  });
+  // shiny: 100G -> 680M Coins -> ~5,78M/G líq. (dentro de 10% do topo -> META RECOMENDADA)
+  const rShiny = PK_RMT.evaluateItemRoute({
+    item: shiny,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 680e6, qty: 5, held: false }], shiny.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 100, qty: 5, held: false }], 2),
+    gems: 40,
+  });
+  // token: 4G -> 20M Coins -> ~4,25M/G líq. (acessível com 40G, mas ~29% menos ouro/gema)
+  const rToken = PK_RMT.evaluateItemRoute({
+    item: token,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 20e6, qty: 50, held: false }], token.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 4, qty: 50, held: false }], 2),
+    gems: 40,
+  });
+
+  const plan = PK_RMT.buildGemToGoldActionPlan({ routes: [rMShiny, rShiny, rToken], gems: 40, source: 'book' });
+  assert.equal(plan.verdict, 'SAVE_OR_BUY');
+  assert.equal(plan.primary.routeId, 'shiny-frag');
+  assert.equal(plan.primary.missingGems, 60);
+  assert.equal(plan.bestOverall.routeId, 'mshiny-frag');
+  assert.equal(plan.fallback.routeId, 'bronze-token');
+  assert.equal(plan.fallback.qty, 10);
+  assert.ok(plan.lossPct >= 25);
+  assert.match(plan.headline, /MELHOR JUNTAR/);
+  assert.match(PK_RMT.formatActionPlanText(plan), /AGORA \(-\d+% ouro\)/);
+});
+
+test('buildGemToGoldActionPlan decide SAVE_ONLY com 0 Gemas e mostra melhor rota do mercado + 1ª entrada', () => {
+  const shiny = PK_RMT.matchLiquidItem('Fragmento de Shiny Stone');
+  const token = PK_RMT.matchLiquidItem('Bronze Boss Token');
+  const rShiny = PK_RMT.evaluateItemRoute({
+    item: shiny,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 600e6, qty: 5, held: false }], shiny.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 80, qty: 5, held: false }], 2),
+    gems: 0,
+  });
+  const rToken = PK_RMT.evaluateItemRoute({
+    item: token,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 20e6, qty: 50, held: false }], token.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 4, qty: 50, held: false }], 2),
+    gems: 0,
+  });
+  const plan = PK_RMT.buildGemToGoldActionPlan({ routes: [rShiny, rToken], gems: 0, source: 'book' });
+  assert.equal(plan.verdict, 'SAVE_ONLY');
+  assert.equal(plan.primary.routeId, 'shiny-frag');
+  assert.equal(plan.primary.missingGems, 80);
+  assert.equal(plan.fallback.routeId, 'bronze-token');
+  assert.equal(plan.fallback.missingGems, 4);
+  const txt = PK_RMT.formatActionPlanText(plan);
+  assert.ok(txt.indexOf('META ÓTIMA') < txt.indexOf('1ª ENTRADA'));
+});

@@ -20,8 +20,9 @@
   CFG.potType = 'auto';
   CFG.fps = globalThis.__pkServer ? 0.2 : 10; // quadros/s só do mapa (0 = sem limite); UI sempre fica em 60 FPS
   CFG.huntFocus = 'balanced'; // balanced | xp | lucro | shiny
+  CFG.rmtDir = 'both'; // both | gold-to-gem | gem-to-gold
   CFG.lite = !!globalThis.__pkServer; // modo servidor: desativa animações CSS/transições/sombras que forçam repintura a 60 Hz
-  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'huntFocus', 'lite'];
+  const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'huntFocus', 'rmtDir', 'lite'];
   const applyFps = () => document.dispatchEvent(new CustomEvent('pk-fps', { detail: +CFG.fps || 0 }));
   const LITE_CSS = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}body *:not(#pkbot-panel):not(#pkbot-panel *){box-shadow:none!important;text-shadow:none!important}';
   const applyLite = () => {
@@ -33,6 +34,7 @@
   document.addEventListener('pk-stat', e => console.log('[pkbot]', new Date().toLocaleTimeString(), 'cena:', e.detail.fps + ' fps reais (limite ' + (e.detail.limite || 'nenhum') + '),', e.detail.ms + ' ms/s de JS'));
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
   if (!['balanced', 'xp', 'lucro', 'shiny'].includes(CFG.huntFocus)) CFG.huntFocus = 'balanced';
+  if (!['both', 'gold-to-gem', 'gem-to-gold'].includes(CFG.rmtDir)) CFG.rmtDir = 'both';
   const saveCfg = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(Object.fromEntries(EDITABLE.map(k => [k, CFG[k]])))); } catch (e) {} };
   const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
   const POTIONS = ['Small Potion', 'Great Potion', 'Ultra Potion', 'Hyper Potion', 'Ultimate Potion', 'Golden Potion'];
@@ -56,7 +58,7 @@
 
   // ---------- log + painel ----------
   const logLines = [];
-  let logEl, rmtOutEl, rmtBtnEl, stonesOutEl, stonesPlanBtnEl, stonesSellBtnEl, sellOutEl, sellLoadBtnEl, sellScanBtnEl, sellSelEl, sellQtyEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, ballMinEl, ballBuyEl, huntOutEl, huntFocusEl, huntBtnEl;
+  let logEl, rmtOutEl, rmtBtnEl, rmtDirEl, stonesOutEl, stonesPlanBtnEl, stonesSellBtnEl, sellOutEl, sellLoadBtnEl, sellScanBtnEl, sellSelEl, sellQtyEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, ballMinEl, ballBuyEl, huntOutEl, huntFocusEl, huntBtnEl;
   const log = (...a) => {
     const l = new Date().toLocaleTimeString() + ' ' + a.join(' ');
     logLines.push(l); if (logLines.length > 60) logLines.shift();
@@ -239,22 +241,31 @@
     ballOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
     ballBox.append(ballHead, ballOutEl);
     body.append(ballBox);
-    // Radar RMT (Ouro -> Gema): passivo ao abrir RMT->Itens ou scan sob demanda
+    // Radar RMT (Ouro <-> Gema): passivo ao abrir RMT->Itens ou scan sob demanda
     const rmtBox = document.createElement('div');
     rmtBox.id = 'pkbot-rmt-box';
     rmtBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
     const rmtHead = document.createElement('div');
-    rmtHead.style.cssText = 'display:flex;align-items:center;gap:6px';
+    rmtHead.style.cssText = 'display:flex;align-items:center;gap:4px';
     const rmtTit = document.createElement('span');
-    rmtTit.textContent = 'Radar RMT (Ouro→Gema)';
+    rmtTit.textContent = 'Radar RMT';
     rmtTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#fd8';
+    rmtDirEl = document.createElement('select');
+    rmtDirEl.id = 'pkbot-rmt-dir';
+    rmtDirEl.title = 'Sentido do Radar RMT: Ambos (Ouro→Gema e Gema→Ouro), só Ouro→Gema ou só Gema→Ouro';
+    rmtDirEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
+    [['both', 'Ambos'], ['gold-to-gem', 'Ouro→Gema'], ['gem-to-gold', 'Gema→Ouro']].forEach(([v, t]) => {
+      const o = document.createElement('option'); o.value = v; o.textContent = t; rmtDirEl.append(o);
+    });
+    rmtDirEl.value = CFG.rmtDir;
+    rmtDirEl.onchange = () => { CFG.rmtDir = rmtDirEl.value; saveCfg(); renderRmt(); };
     rmtBtnEl = document.createElement('button');
     rmtBtnEl.id = 'pkbot-rmt-scan';
     rmtBtnEl.textContent = 'Escanear';
-    rmtBtnEl.title = 'Lê books livres dos 8 itens fungíveis líquidos e gera instruções do que comprar e vender';
+    rmtBtnEl.title = 'Lê books livres dos 8 itens fungíveis líquidos e mostra as melhores rotas Ouro→Gema e Gema→Ouro';
     rmtBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#fd83;border:1px solid #fd86;font-size:10px;color:#fff';
     rmtBtnEl.onclick = () => scanRmt();
-    rmtHead.append(rmtTit, rmtBtnEl);
+    rmtHead.append(rmtTit, rmtDirEl, rmtBtnEl);
     rmtOutEl = document.createElement('div');
     rmtOutEl.id = 'pkbot-rmt-out';
     rmtOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
@@ -394,6 +405,7 @@
   // seletores estruturais (data-modal, classes): funcionam com o jogo em qualquer idioma
   const navBtn = key => $(`button[data-modal="${key}"]`);
   const gold = () => num((($('#tr-gold') || {}).textContent) || 0);
+  const gems = () => num((($('#tr-gemas') || {}).textContent) || 0);
   const ballQty = name => { const c = $$('#auto-ball-opts .auto-chip').find(b => (b.title || '').startsWith(name)); return c ? num($('.q', c).textContent) : null; };
   const potChips = () => $$('#auto-potion-opts .auto-chip').map(b => ({ name: (b.title || '').split(' — ')[0], qty: num($('.q', b).textContent), on: b.classList.contains('on') }));
 
@@ -1133,12 +1145,15 @@
     await analyzeHunts({ autoSwitch: true, manual: false, includeFollowUps: true });
   }
 
-  // ---------- 5: Radar RMT (Ouro -> Gema, passivo + scan sob demanda com plano de ação) ----------
+  // ---------- 5: Radar RMT (Ouro <-> Gema, passivo + scan sob demanda com plano de ação) ----------
   let lastRmtGold = -1;
+  let lastRmtGems = -1;
   let rmtRankingOpen = false;
+  let rmtReverseRankingOpen = false;
   function renderRmt(statusMsg) {
     if (!rmtOutEl || typeof PK_RMT === 'undefined') return;
     if (rmtBtnEl) rmtBtnEl.textContent = rmtState.scanning ? 'Lendo...' : 'Escanear';
+    if (rmtDirEl && rmtDirEl.value !== CFG.rmtDir) rmtDirEl.value = CFG.rmtDir;
     rmtOutEl.textContent = '';
     const mk = (tag, css, txt) => {
       const el = document.createElement(tag);
@@ -1152,18 +1167,24 @@
     }
     const d = rmtState.last;
     if (!d || !d.routes || !d.routes.length) {
-      rmtOutEl.append(mk('div', 'color:#aab', 'Clique em Escanear para receber instruções do que comprar e vender (itens fungíveis).'));
+      rmtOutEl.append(mk('div', 'color:#aab', 'Clique em Escanear para ver as melhores rotas Ouro→Gema e Gema→Ouro (itens fungíveis).'));
       return;
     }
     const curGold = gold();
+    const curGems = gems();
     lastRmtGold = curGold;
-    const plan = PK_RMT.buildActionPlan({ routes: d.routes, gold: curGold, source: d.source });
-    if (!plan) {
+    lastRmtGems = curGems;
+    const showG2Gem = CFG.rmtDir !== 'gem-to-gold';
+    const showGem2G = CFG.rmtDir !== 'gold-to-gem';
+    const plan = showG2Gem ? PK_RMT.buildActionPlan({ routes: d.routes, gold: curGold, source: d.source }) : null;
+    const revPlan = showGem2G ? PK_RMT.buildGemToGoldActionPlan({ routes: d.routes, gems: curGems, source: d.source }) : null;
+    if (!plan && !revPlan) {
       rmtOutEl.append(mk('div', 'color:#aab', 'Sem rotas válidas no último scan.'));
       return;
     }
     const ageMin = Math.max(0, Math.round((Date.now() - d.at) / 60000));
     const tag = d.source === 'book' ? 'books livres' : '~estimado (clique Escanear)';
+    const both = showG2Gem && showGem2G;
 
     const renderStepCard = (title, inst, accent, bg) => {
       const box = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
@@ -1180,66 +1201,137 @@
       return box;
     };
 
-    const headColor = plan.verdict === 'BUY_NOW' ? '#6f9' : '#fd8';
-    rmtOutEl.append(mk('div', `font-weight:bold;color:${headColor}`, plan.headline));
-    rmtOutEl.append(mk('div', 'color:#bcd;font-size:9.5px', `${plan.summary} · ${tag}, ${ageMin}m`));
-
-    if (plan.verdict === 'BUY_NOW' && plan.primary) {
-      rmtOutEl.append(renderStepCard(`PLANO COM SEUS ${PK_RMT.formatCoins(curGold)}`, plan.primary, '#6f9', '#16332288'));
-      if (plan.goal) {
-        rmtOutEl.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-          `Topo absoluto: ${plan.goal.label} (${PK_RMT.formatCoins(plan.goal.coinsPerGem)}/G · falta ${PK_RMT.formatCoins(plan.goal.missingCoins)})`));
-      }
-    } else if (plan.verdict === 'SAVE_OR_BUY') {
-      if (plan.primary) {
-        rmtOutEl.append(renderStepCard(
-          `META RECOMENDADA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
-          plan.primary, '#fd8', '#332b1488'
-        ));
-      }
-      if (plan.bestOverall) {
-        rmtOutEl.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-          `Topo absoluto: ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
-      }
-      if (plan.fallback) {
-        rmtOutEl.append(renderStepCard(
-          `SE QUISER CONVERTER JÁ (${PK_RMT.formatCoins(curGold)} · -${plan.lossPct}% gemas)`,
-          plan.fallback, '#7cf', '#14263688'
-        ));
-      }
-    } else if (plan.verdict === 'SAVE_ONLY') {
-      if (plan.primary) {
-        rmtOutEl.append(renderStepCard(
-          `META ÓTIMA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
-          plan.primary, '#fd8', '#332b1488'
-        ));
-      }
-      if (plan.bestOverall) {
-        rmtOutEl.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-          `Topo absoluto: ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
-      }
-      if (plan.fallback) {
-        rmtOutEl.append(renderStepCard(
-          `1ª ENTRADA (falta +${PK_RMT.formatCoins(plan.fallback.missingCoins)})`,
-          plan.fallback, '#7cf', '#14263688'
-        ));
-      }
+    if (both) {
+      rmtOutEl.append(mk('div', 'color:#9ab;font-size:9px;margin-bottom:3px', `${tag}, ${ageMin}m · Saldo: ${PK_RMT.formatCoins(curGold)} · ${PK_RMT.formatGems(curGems)}`));
     }
 
-    // Ranking completo dobrável (itens fungíveis)
-    const det = document.createElement('details');
-    det.open = rmtRankingOpen;
-    det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
-    det.ontoggle = () => { rmtRankingOpen = det.open; };
-    const sum = mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Ver ranking completo (${plan.ranked.length} itens)`);
-    det.append(sum);
-    for (const r of plan.ranked) {
-      const ok = curGold >= r.buyCoins ? '✓' : '○';
-      const warn = r.warnings && r.warnings.length ? ' !' + r.warnings[0] : '';
-      det.append(mk('div', `color:${ok === '✓' ? '#cfd' : '#9aa'};font-size:9.5px;margin-top:1px`,
-        `${ok} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${warn}`));
+    if (plan) {
+      const wrap = mk('div', both ? 'padding-bottom:5px' : '');
+      if (both) wrap.append(mk('div', 'font-weight:bold;color:#fd8;font-size:10px;letter-spacing:.3px;margin-bottom:1px', 'OURO → GEMA (menor Coins/Gema)'));
+      const headColor = plan.verdict === 'BUY_NOW' ? '#6f9' : '#fd8';
+      wrap.append(mk('div', `font-weight:bold;color:${headColor}`, plan.headline));
+      wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? plan.summary : `${plan.summary} · ${tag}, ${ageMin}m`));
+
+      if (plan.verdict === 'BUY_NOW' && plan.primary) {
+        wrap.append(renderStepCard(`PLANO COM SEUS ${PK_RMT.formatCoins(curGold)}`, plan.primary, '#6f9', '#16332288'));
+        if (plan.goal) {
+          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+            `Topo absoluto: ${plan.goal.label} (${PK_RMT.formatCoins(plan.goal.coinsPerGem)}/G · falta ${PK_RMT.formatCoins(plan.goal.missingCoins)})`));
+        }
+      } else if (plan.verdict === 'SAVE_OR_BUY') {
+        if (plan.primary) {
+          wrap.append(renderStepCard(
+            `META RECOMENDADA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
+            plan.primary, '#fd8', '#332b1488'
+          ));
+        }
+        if (plan.bestOverall) {
+          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+            `Topo absoluto: ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
+        }
+        if (plan.fallback) {
+          wrap.append(renderStepCard(
+            `SE QUISER CONVERTER JÁ (${PK_RMT.formatCoins(curGold)} · -${plan.lossPct}% gemas)`,
+            plan.fallback, '#7cf', '#14263688'
+          ));
+        }
+      } else if (plan.verdict === 'SAVE_ONLY') {
+        if (plan.primary) {
+          wrap.append(renderStepCard(
+            `META ÓTIMA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
+            plan.primary, '#fd8', '#332b1488'
+          ));
+        }
+        if (plan.bestOverall) {
+          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+            `Topo absoluto: ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
+        }
+        if (plan.fallback) {
+          wrap.append(renderStepCard(
+            `1ª ENTRADA (falta +${PK_RMT.formatCoins(plan.fallback.missingCoins)})`,
+            plan.fallback, '#7cf', '#14263688'
+          ));
+        }
+      }
+
+      const det = document.createElement('details');
+      det.open = rmtRankingOpen;
+      det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
+      det.ontoggle = () => { rmtRankingOpen = det.open; };
+      det.append(mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Ranking Ouro→Gema (${plan.ranked.length} itens)`));
+      for (const r of plan.ranked) {
+        const ok = curGold >= r.buyCoins ? '✓' : '○';
+        const warn = r.warnings && r.warnings.length ? ' !' + r.warnings[0] : '';
+        det.append(mk('div', `color:${ok === '✓' ? '#cfd' : '#9aa'};font-size:9.5px;margin-top:1px`,
+          `${ok} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${warn}`));
+      }
+      wrap.append(det);
+      rmtOutEl.append(wrap);
     }
-    rmtOutEl.append(det);
+
+    if (revPlan) {
+      const wrap = mk('div', both ? 'margin-top:5px;padding-top:5px;border-top:1px dashed #8ef5' : '');
+      if (both) wrap.append(mk('div', 'font-weight:bold;color:#8ef;font-size:10px;letter-spacing:.3px;margin-bottom:1px', 'GEMA → OURO (maior Coins/Gema líq.)'));
+      const headColor = revPlan.verdict === 'BUY_NOW' ? '#6f9' : '#8ef';
+      wrap.append(mk('div', `font-weight:bold;color:${headColor}`, revPlan.headline));
+      wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? revPlan.summary : `${revPlan.summary} · ${tag}, ${ageMin}m`));
+
+      if (revPlan.verdict === 'BUY_NOW' && revPlan.primary) {
+        wrap.append(renderStepCard(`PLANO COM SUAS ${PK_RMT.formatGems(curGems)}`, revPlan.primary, '#6f9', '#16332288'));
+        if (revPlan.goal) {
+          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+            `Topo absoluto: ${revPlan.goal.label} (${PK_RMT.formatCoins(revPlan.goal.netCoinsPerGem)}/G · falta ${PK_RMT.formatGems(revPlan.goal.missingGems)})`));
+        }
+      } else if (revPlan.verdict === 'SAVE_OR_BUY') {
+        if (revPlan.primary) {
+          wrap.append(renderStepCard(
+            `META RECOMENDADA (falta +${PK_RMT.formatGems(revPlan.primary.missingGems)})`,
+            revPlan.primary, '#8ef', '#142a3688'
+          ));
+        }
+        if (revPlan.bestOverall) {
+          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+            `Topo absoluto: ${revPlan.bestOverall.label} (${PK_RMT.formatCoins(revPlan.bestOverall.netCoinsPerGem)}/G · falta +${PK_RMT.formatGems(revPlan.bestOverall.missingGems)})`));
+        }
+        if (revPlan.fallback) {
+          wrap.append(renderStepCard(
+            `SE QUISER CONVERTER JÁ (${PK_RMT.formatGems(curGems)} · -${revPlan.lossPct}% ouro)`,
+            revPlan.fallback, '#fd8', '#332b1488'
+          ));
+        }
+      } else if (revPlan.verdict === 'SAVE_ONLY') {
+        if (revPlan.primary) {
+          wrap.append(renderStepCard(
+            `META ÓTIMA (falta +${PK_RMT.formatGems(revPlan.primary.missingGems)})`,
+            revPlan.primary, '#8ef', '#142a3688'
+          ));
+        }
+        if (revPlan.bestOverall) {
+          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
+            `Topo absoluto: ${revPlan.bestOverall.label} (${PK_RMT.formatCoins(revPlan.bestOverall.netCoinsPerGem)}/G · falta +${PK_RMT.formatGems(revPlan.bestOverall.missingGems)})`));
+        }
+        if (revPlan.fallback) {
+          wrap.append(renderStepCard(
+            `1ª ENTRADA (falta +${PK_RMT.formatGems(revPlan.fallback.missingGems)})`,
+            revPlan.fallback, '#fd8', '#332b1488'
+          ));
+        }
+      }
+
+      const det = document.createElement('details');
+      det.open = rmtReverseRankingOpen;
+      det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
+      det.ontoggle = () => { rmtReverseRankingOpen = det.open; };
+      det.append(mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Ranking Gema→Ouro (${revPlan.ranked.length} itens)`));
+      for (const r of revPlan.ranked) {
+        const ok = curGems >= r.buyGems ? '✓' : '○';
+        const warn = r.reverseWarnings && r.reverseWarnings.length ? ' !' + r.reverseWarnings[0] : '';
+        det.append(mk('div', `color:${ok === '✓' ? '#cef' : '#9aa'};font-size:9.5px;margin-top:1px`,
+          `${ok} ${r.label}: ${PK_RMT.formatCoins(r.netCoinsPerGem)}/G (${r.buyGems}G→${PK_RMT.formatCoins(r.netCoinsUnit)} líq.)${warn}`));
+      }
+      wrap.append(det);
+      rmtOutEl.append(wrap);
+    }
   }
 
   // Leitura passiva (0 cliques): só lê .cmi-linha já visíveis quando o usuário abre RMT → Itens
@@ -1256,6 +1348,7 @@
     if (!rows.length) return;
     lastPassiveRmt = now;
     const curGold = gold();
+    const curGems = gems();
     const routes = [];
     for (const row of rows) {
       const name = ($('.cmi-nome b', row) || {}).textContent?.trim();
@@ -1269,15 +1362,16 @@
       const r = PK_RMT.evaluateItemRoute({
         item,
         coinsOffer: { bestPrice: cVal, unitsAtBest: 0, totalFreeUnits: 0, skippedTroll: 0 },
-        gemasOffer: { bestPrice: gVal, unitsAtBest: 0, totalFreeUnits: 0 },
+        gemasOffer: { bestPrice: gVal, unitsAtBest: 0, totalFreeUnits: 0, skippedTroll: 0 },
         gold: curGold,
+        gems: curGems,
         source: 'list',
       });
       if (r) routes.push(r);
     }
     const ranked = PK_RMT.rankRoutes(routes);
     if (ranked.length) {
-      rmtState.last = { at: now, gold: curGold, source: 'list', routes: ranked };
+      rmtState.last = { at: now, gold: curGold, gems: curGems, source: 'list', routes: ranked };
       saveRmt();
       renderRmt();
     }
@@ -1360,6 +1454,7 @@
       if (btnTodas && !btnTodas.classList.contains('on')) { btnTodas.click(); await sleep(900); }
 
       const curGold = gold();
+      const curGems = gems();
       const routes = [];
       corpo = getCorpo(); if (!corpo) return;
       const targetNames = $$('.cmi-linha', corpo)
@@ -1409,16 +1504,19 @@
             }
           }
         }
-        const r = PK_RMT.evaluateItemRoute({ item, coinsOffer, gemasOffer, gold: curGold, source: 'book' });
+        const r = PK_RMT.evaluateItemRoute({ item, coinsOffer, gemasOffer, gold: curGold, gems: curGems, source: 'book' });
         if (r) routes.push(r);
       }
 
       const ranked = PK_RMT.rankRoutes(routes);
-      rmtState.last = { at: Date.now(), gold: curGold, source: 'book', routes: ranked };
+      rmtState.last = { at: Date.now(), gold: curGold, gems: curGems, source: 'book', routes: ranked };
       saveRmt();
       if (ranked.length) {
         const plan = PK_RMT.buildActionPlan({ routes: ranked, gold: curGold, source: 'book' });
-        log('RMT:', plan.headline, '|', plan.primary?.buyText || ranked[0].label);
+        const revPlan = PK_RMT.buildGemToGoldActionPlan({ routes: ranked, gems: curGems, source: 'book' });
+        const revTop = revPlan?.ranked?.[0];
+        const revTxt = revTop ? ` | Gema→Ouro: ${revTop.label} (${PK_RMT.formatCoins(revTop.netCoinsPerGem)}/G líq.)` : '';
+        log('RMT:', plan.headline, '|', plan.primary?.buyText || ranked[0].label, revTxt);
       } else {
         log('RMT: nenhuma rota válida lida');
       }
@@ -3154,7 +3252,8 @@
       if (gap > 8000) { log('relógio ficou parado', Math.round(gap / 1000) + 's (aba oculta/freada?) - checando estoque já'); lastSupply = 0; }
       captureTick();
       readRmtListPassive();
-      if (!rmtState.scanning && rmtState.last && Math.abs(gold() - lastRmtGold) >= Math.max(1e6, lastRmtGold * 0.01)) renderRmt();
+      const curG = gold(), curGm = gems();
+      if (!rmtState.scanning && rmtState.last && (Math.abs(curG - lastRmtGold) >= Math.max(1e6, lastRmtGold * 0.01) || curGm !== lastRmtGems)) renderRmt();
       if (st.potions && !busy && now - lastSupply >= 5000) { lastSupply = now; energyNow() === 'ultra' ? ultraSupplyTick() : checkSupplies(); }
       if ((st.capture || st.eterna) && energyNow() !== 'normal' && !warnedCapture) { warnedCapture = true; log('aviso: captura não funciona em Economia/ULTRA (a lista de corpos não atualiza)'); }
       if (energyNow() === 'normal') warnedCapture = false;
@@ -3200,7 +3299,10 @@
   const rmtPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
     ? PK_RMT.buildActionPlan({ routes: rmtState.last.routes, gold: gold(), source: rmtState.last.source })
     : null;
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, scanRmt, stoneState, planSellStones, sellAllStones, sellState, loadSellInventory, analyzeSelectedSale, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
+  const rmtReversePlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
+    ? PK_RMT.buildGemToGoldActionPlan({ routes: rmtState.last.routes, gems: gems(), source: rmtState.last.source })
+    : null;
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, rmtReversePlan, scanRmt, stoneState, planSellStones, sellAllStones, sellState, loadSellInventory, analyzeSelectedSale, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, gold, gems, scanHunts, switchTo, closeModal, applyLite };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:flex!important;visibility:visible!important}'; document.head.append(css);
