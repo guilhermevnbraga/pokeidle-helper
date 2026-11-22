@@ -3,7 +3,7 @@
 Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` do `ai-kit`. Nunca marque `[x]` sem validação.
 
 ## Ambiente de desenvolvimento & IA
-- [x] Arquitetura Antigravity econômica: `AGENTS.md`, hook `SessionStart`, Git `pre-commit`, `scripts/check.mjs`, `compact-progress.mjs`, skills `/handoff`, `/study-game`, `/feature` e `docs…
+- [x] Arquitetura Antigravity econômica: `AGENTS.md`, hook `SessionStart`, Git `pre-commit`, `scripts/check.mjs`, `compact-progress.mjs`, skills `/handoff`, `/study-game`, `/feature` e docs.
 - [x] Suite de testes unitários nativa (`node --test`) cobrindo `types.js`, `hunt.js`, `rmt.js`, `stones.js` e `ball.js` (`tests/*.test.mjs`).
 - [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
@@ -23,7 +23,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [ ] Deploy Docker multi-conta no Proxmox (`deploy/`, 4 perfis tela cheia + `tint2` + auto-minimize, ~34% CPU / 1,86 GiB) · NÃO validado: fluidez remota e captura contínua minimizada
 
 ## Estudo do jogo (`pokeidle.io/app`)
-- [x] Estudo de caso RMT (5.000 tx Itens + 900 tx Pokémon + books): trio de Fragmentos (~5,3–5,7M/G, ~5,6B p/ 1.000G), Stones = transfer P2P, high-end Pokémon só em Gemas (`docs/GAME_STUDY.m…
+- [x] Estudo de caso RMT (5.000 tx Itens + 900 tx Pokémon + books): trio de Fragmentos (~5,3–5,7M/G, ~5,6B p/ 1.000G), Stones = transfer P2P, high-end Pokémon só em Gemas (`GAME_STUDY.md`).
 - [x] Combate de hunt, Hunt Analyser (`hunt-analyser.mjs`), Outland (40 tiers) e poções confirmados via Wiki/módulos; hunt usa só o Pokémon ativo (`docs/GAME_STUDY.md`).
 - [x] Loop do mapa (`campo.mjs`) confirmado sem side effects em combate/captura (`#caidos-lista` via WS + `setInterval` 250 ms); UI do `app.js` usa `rAF` global (`docs/GAME_STUDY.md`).
 - [ ] Mapear tela principal, abas, modais e mecânicas completas do `pokeidle.io/app` via `/study-game` para planejar novas automações/ajudas.
