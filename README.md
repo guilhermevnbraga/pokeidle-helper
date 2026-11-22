@@ -59,6 +59,13 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
   - Ignora anúncios **`Retido`** (armadilhas de 2 min/dumping) e micro-iscas no topo do book livre, escolhendo `min(menorLivre - 1, max(média7d, máxVendaComprovada))`, com proteção anti-dump quando o book livre cai abaixo de 50% da média 7d sem vendas confirmando.
   - Respeita a comissão oficial de `15%`, a regra de 1 anúncio por item / cooldown de `30 min` e restaura o modo **ULTRA Economia** caso estivesse ativo.
 
+### Analisador de Venda de Inventário (Gold vs Gema)
+
+- Seção **`Analisador Venda (Gold×Gema)`** no painel (100% somente leitura — nunca publica anúncios):
+  - **`Carregar`:** lista todos os seus **itens** vendáveis no RMT (`+ Anunciar → Um item`, com quantidade atual editável para simular lote) e **Pokémons** (elegíveis no Depot/Coleção via `+ Anunciar → Um pokemon` + os da sua Equipe).
+  - **`Analisar`:** lê o book de ofertas livres e vendas comprovadas recentes em **Coins (Gold)** e em **Gemas** para o item ou Pokémon escolhido (para Pokémons treinados `Nv ≥ 200`, filtra automaticamente por nível compatível para não misturar com Nv 100; respeita a regra de **Shiny somente em Gemas** e não mistura P5 com P1–P4).
+  - **Qual vale mais a pena vender (`sell.js`):** aplica as comissões oficiais do jogo (`15%` para itens e Coins; faixas progressivas `13% / 10% / 7,5%` para Pokémon em Gemas), converte os valores líquidos usando o câmbio real `Coins/Gema` do **Radar RMT** e destaca qual moeda entrega mais valor real (`+X%`), exibindo ambos os valores líquidos, equivalentes e referências de mercado.
+
 ## Painel
 
 - **Arrastar:** pelo cabeçalho. A posição fica salva.

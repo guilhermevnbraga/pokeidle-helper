@@ -56,7 +56,7 @@
 
   // ---------- log + painel ----------
   const logLines = [];
-  let logEl, rmtOutEl, rmtBtnEl, stonesOutEl, stonesPlanBtnEl, stonesSellBtnEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, ballMinEl, ballBuyEl, huntOutEl, huntFocusEl, huntBtnEl;
+  let logEl, rmtOutEl, rmtBtnEl, stonesOutEl, stonesPlanBtnEl, stonesSellBtnEl, sellOutEl, sellLoadBtnEl, sellScanBtnEl, sellSelEl, sellQtyEl, ballOutEl, ballBtnEl, ballFocusEl, ballSelEl, ballMinEl, ballBuyEl, huntOutEl, huntFocusEl, huntBtnEl;
   const log = (...a) => {
     const l = new Date().toLocaleTimeString() + ' ' + a.join(' ');
     logLines.push(l); if (logLines.length > 60) logLines.shift();
@@ -88,6 +88,27 @@
   const stoneState = { running: false, last: null };
   try { stoneState.last = JSON.parse(localStorage.getItem(STONES_KEY) || 'null'); } catch (e) {}
   const saveStones = () => { try { localStorage.setItem(STONES_KEY, JSON.stringify(stoneState.last)); } catch (e) {} };
+  const SELL_KEY = 'pkbot-sell';
+  const sellState = { loading: false, scanning: false, inventory: { at: 0, items: [], pokemons: [] }, selectedKey: '', qtyOverride: null, last: null };
+  try {
+    const savedSell = JSON.parse(localStorage.getItem(SELL_KEY) || 'null');
+    if (savedSell && typeof savedSell === 'object') {
+      if (savedSell.inventory && Array.isArray(savedSell.inventory.items) && Array.isArray(savedSell.inventory.pokemons)) {
+        sellState.inventory = savedSell.inventory;
+      }
+      if (typeof savedSell.selectedKey === 'string') sellState.selectedKey = savedSell.selectedKey;
+      if (savedSell.last) sellState.last = savedSell.last;
+    }
+  } catch (e) {}
+  const saveSell = () => {
+    try {
+      localStorage.setItem(SELL_KEY, JSON.stringify({
+        inventory: sellState.inventory,
+        selectedKey: sellState.selectedKey,
+        last: sellState.last,
+      }));
+    } catch (e) {}
+  };
   const BALL_KEY = 'pkbot-ball';
   const ballState = { scanning: false, focus: 'balanced', last: null };
   try {
@@ -266,6 +287,58 @@
     stonesOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
     stonesBox.append(stonesHead, stonesOutEl);
     body.append(stonesBox);
+    // Analisador de Venda de Inventário (Gold vs Gema): escolhe item ou Pokémon e recomenda a melhor moeda/valor
+    const sellBox = document.createElement('div');
+    sellBox.id = 'pkbot-sell-box';
+    sellBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
+    const sellHead = document.createElement('div');
+    sellHead.style.cssText = 'display:flex;align-items:center;gap:4px';
+    const sellTit = document.createElement('span');
+    sellTit.textContent = 'Analisador Venda (Gold×Gema)';
+    sellTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#c9f';
+    sellLoadBtnEl = document.createElement('button');
+    sellLoadBtnEl.id = 'pkbot-sell-load';
+    sellLoadBtnEl.textContent = 'Carregar';
+    sellLoadBtnEl.title = 'Lê os itens do inventário e Pokémons (RMT + Equipe) para escolher qual analisar';
+    sellLoadBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#c9f3;border:1px solid #c9f6;font-size:10px;color:#fff';
+    sellLoadBtnEl.onclick = () => loadSellInventory();
+    sellScanBtnEl = document.createElement('button');
+    sellScanBtnEl.id = 'pkbot-sell-scan';
+    sellScanBtnEl.textContent = 'Analisar';
+    sellScanBtnEl.title = 'Analisa o item ou Pokémon escolhido em Gold e em Gemas no RMT e indica qual vale mais a pena';
+    sellScanBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#6f93;border:1px solid #6f96;font-size:10px;color:#fff';
+    sellScanBtnEl.onclick = () => analyzeSelectedSale();
+    sellHead.append(sellTit, sellLoadBtnEl, sellScanBtnEl);
+    const sellCtrl = document.createElement('div');
+    sellCtrl.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:4px';
+    sellSelEl = document.createElement('select');
+    sellSelEl.id = 'pkbot-sell-sel';
+    sellSelEl.title = 'Escolha um item ou Pokémon do seu inventário para analisar';
+    sellSelEl.style.cssText = 'flex:1;min-width:0;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:2px 3px';
+    sellSelEl.onchange = () => {
+      sellState.selectedKey = sellSelEl.value;
+      sellState.qtyOverride = null;
+      syncSellQtyInput();
+      saveSell();
+    };
+    sellQtyEl = document.createElement('input');
+    sellQtyEl.id = 'pkbot-sell-qty';
+    sellQtyEl.type = 'number';
+    sellQtyEl.min = 1;
+    sellQtyEl.max = 999999;
+    sellQtyEl.title = 'Quantidade do item a simular (padrão: todo o estoque)';
+    sellQtyEl.style.cssText = 'width:48px;display:none;box-sizing:border-box;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:2px 3px';
+    sellQtyEl.onchange = () => {
+      const v = Math.max(1, Math.floor(+sellQtyEl.value) || 1);
+      sellQtyEl.value = v;
+      sellState.qtyOverride = v;
+    };
+    sellCtrl.append(sellSelEl, sellQtyEl);
+    sellOutEl = document.createElement('div');
+    sellOutEl.id = 'pkbot-sell-out';
+    sellOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
+    sellBox.append(sellHead, sellCtrl, sellOutEl);
+    body.append(sellBox);
     logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:120px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
     body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
     p.append(head, body);
@@ -273,6 +346,7 @@
     renderBall();
     renderRmt();
     renderStones();
+    renderSell();
 
     const place = () => { // mantém inteiro dentro da janela sem cortar embaixo nem nas laterais
       p.style.maxHeight = Math.max(120, innerHeight - 16) + 'px';
@@ -1788,6 +1862,836 @@
   }
   const planSellStones = () => sellAllStones({ dryRun: true });
 
+  // ---------- 7: Analisador de Venda de Inventário (Gold vs Gema) ----------
+  function findSellEntry(key) {
+    if (!key) return null;
+    const inv = sellState.inventory || { items: [], pokemons: [] };
+    if (key.startsWith('item:')) {
+      const id = key.slice(5);
+      return inv.items.find(it => String(it.id) === id) || null;
+    }
+    if (key.startsWith('pk:')) {
+      const uid = key.slice(3);
+      return inv.pokemons.find(pk => String(pk.uid) === uid) || null;
+    }
+    return null;
+  }
+
+  function syncSellQtyInput() {
+    if (!sellQtyEl) return;
+    const entry = findSellEntry(sellState.selectedKey);
+    if (entry && entry.kind === 'item') {
+      sellQtyEl.style.display = '';
+      sellQtyEl.max = Math.max(999999, entry.qty || 1);
+      sellQtyEl.value = String(sellState.qtyOverride || entry.qty || 1);
+    } else {
+      sellQtyEl.style.display = 'none';
+    }
+  }
+
+  function populateSellSelect() {
+    if (!sellSelEl) return;
+    const inv = sellState.inventory || { items: [], pokemons: [] };
+    const items = inv.items || [];
+    const pokes = inv.pokemons || [];
+    sellSelEl.textContent = '';
+
+    if (!items.length && !pokes.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Clique "Carregar" p/ listar inventário...';
+      sellSelEl.append(opt);
+      sellState.selectedKey = '';
+      syncSellQtyInput();
+      return;
+    }
+
+    if (items.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = `Itens (${items.length})`;
+      for (const it of items) {
+        const o = document.createElement('option');
+        o.value = `item:${it.id}`;
+        o.textContent = `${it.name} ×${it.qty}${it.disabled ? ' (anunciado)' : ''}`;
+        grp.append(o);
+      }
+      sellSelEl.append(grp);
+    }
+    if (pokes.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = `Pokémons (${pokes.length})`;
+      for (const pk of pokes) {
+        const o = document.createElement('option');
+        o.value = `pk:${pk.uid}`;
+        const sh = pk.shiny ? '✨ ' : '';
+        const notaTxt = Number.isFinite(pk.nota) ? ` N${pk.nota.toFixed(2).replace('.', ',')}` : '';
+        const potTxt = pk.potency ? ` P${pk.potency}` : '';
+        const tag = pk.eligible === false ? ' [fora RMT]' : (pk.where ? ` [${pk.where}]` : '');
+        o.textContent = `${sh}${pk.species} Nv${pk.level || '?'}${potTxt}${notaTxt}${tag}`;
+        grp.append(o);
+      }
+      sellSelEl.append(grp);
+    }
+
+    const exists = findSellEntry(sellState.selectedKey);
+    if (exists) {
+      sellSelEl.value = sellState.selectedKey;
+    } else {
+      sellState.selectedKey = items.length ? `item:${items[0].id}` : (pokes.length ? `pk:${pokes[0].uid}` : '');
+      sellSelEl.value = sellState.selectedKey;
+      sellState.qtyOverride = null;
+    }
+    syncSellQtyInput();
+  }
+
+  function renderSell(statusMsg) {
+    if (!sellOutEl || typeof PK_SELL === 'undefined') return;
+    const busyNow = sellState.loading || sellState.scanning;
+    if (sellLoadBtnEl) {
+      sellLoadBtnEl.disabled = busyNow;
+      sellLoadBtnEl.textContent = sellState.loading ? 'Lendo...' : 'Carregar';
+    }
+    if (sellScanBtnEl) {
+      sellScanBtnEl.disabled = busyNow;
+      sellScanBtnEl.textContent = sellState.scanning ? 'Analisando...' : 'Analisar';
+    }
+    populateSellSelect();
+
+    const mk = (tag, css, text) => {
+      const el = document.createElement(tag);
+      if (css) el.style.cssText = css;
+      if (text != null) el.textContent = text;
+      return el;
+    };
+    sellOutEl.textContent = '';
+
+    if (statusMsg) {
+      sellOutEl.append(mk('div', 'color:#c9f', statusMsg));
+      return;
+    }
+
+    const d = sellState.last;
+    if (!d || !d.result) {
+      sellOutEl.append(mk('div', 'opacity:.72', 'Clique "Carregar" para puxar seus itens e Pokémons, escolha um e clique "Analisar".'));
+      return;
+    }
+
+    const r = d.result;
+    const fc = PK_SELL.formatCoins;
+    const fg = PK_SELL.formatGems;
+    const ageMin = Math.max(0, Math.round((Date.now() - (d.at || Date.now())) / 60000));
+    const isItem = r.kind === 'item';
+
+    // Card do veredito principal
+    const palette = r.bestCurrency === 'gem'
+      ? { accent: '#c9f', bg: '#26183888' }
+      : r.bestCurrency === 'gold'
+        ? { accent: '#fd8', bg: '#33291488' }
+        : { accent: '#8ef', bg: '#16293888' };
+    const card = mk('div', `margin-top:3px;padding:5px 6px;border-radius:5px;background:${palette.bg};border:1px solid ${palette.accent}66`);
+    const itemHead = `${r.name}${isItem && r.qty > 1 ? ` ×${r.qty}` : ''} · há ${ageMin}m`;
+    card.append(mk('div', 'color:#bcd;font-size:9.5px', itemHead));
+    card.append(mk('div', `font-weight:bold;color:${palette.accent};margin-top:2px`, r.headline));
+    if (r.explanation) {
+      card.append(mk('div', 'color:#efe;font-size:9.5px;margin-top:2px', r.explanation));
+    }
+
+    // Bloco comparativo: Gold (Coins) vs Gemas
+    const renderRow = (title, color, ev, isGold, equivTxt, winner) => {
+      const box = mk('div', `margin-top:4px;padding:3px 5px;border-radius:4px;background:#0004;border-left:2px solid ${winner ? color : '#fff3'}`);
+      const badge = winner ? ' ★' : '';
+      if (!ev || !ev.available) {
+        box.append(mk('div', `color:${color};font-weight:bold;font-size:9.5px`, `${title}: indisponível`));
+        box.append(mk('div', 'opacity:.72;font-size:9px', (ev && (ev.blockedReason || ev.source)) || 'sem dados no mercado'));
+        return box;
+      }
+      const unitTxt = isGold
+        ? `${ev.unitPrice.toLocaleString('pt-BR')} Coins${isItem ? '/un.' : ''}`
+        : `${ev.unitPrice.toLocaleString('pt-BR')} G${isItem ? '/un.' : ''}`;
+      const netTxt = isGold ? `${fc(ev.net)} líq.` : `${fg(ev.net)} líq.`;
+      const feePct = Math.round((ev.effPct || 0) * 10) / 10;
+      box.append(mk('div', `color:${color};font-weight:bold;font-size:9.5px`, `${title}${badge}: ${unitTxt}`));
+      const totalLine = isItem && r.qty > 1
+        ? `Total ${isGold ? fc(ev.gross) : fg(ev.gross)} − ${feePct}% taxa → ${netTxt}${equivTxt ? ` (${equivTxt})` : ''}`
+        : `Taxa ${feePct}% → ${netTxt}${equivTxt ? ` (${equivTxt})` : ''}`;
+      box.append(mk('div', 'color:#fff;font-size:9.5px', totalLine));
+      const meta = [];
+      if (ev.source) meta.push(ev.source);
+      if (isItem) {
+        if (ev.bestFree != null) meta.push(`livre ${ev.bestFree.toLocaleString('pt-BR')}`);
+        if (ev.avg7d != null) meta.push(`7d ${ev.avg7d.toLocaleString('pt-BR')}`);
+        if (ev.provenCount > 0) meta.push(`${ev.provenCount} vendas rec.`);
+      } else {
+        if (ev.bestFree != null) meta.push(`menor ${isGold ? fc(ev.bestFree) : fg(ev.bestFree)}`);
+        if (ev.medianSale != null) meta.push(`med.venda ${isGold ? fc(ev.medianSale) : fg(ev.medianSale)}`);
+        meta.push(`${ev.comparableListings || 0} anún. · ${ev.comparableSales || 0} vendas`);
+      }
+      box.append(mk('div', 'opacity:.72;font-size:9px', meta.join(' · ')));
+      return box;
+    };
+
+    const gEquiv = r.goldEquivGems ? `≈ ${fg(r.goldEquivGems)}` : '';
+    const oEquiv = r.gemEquivGold ? `≈ ${fc(r.gemEquivGold)} Coins` : '';
+    card.append(renderRow('GOLD (Coins)', '#fd8', r.gold, true, gEquiv, r.bestCurrency === 'gold'));
+    card.append(renderRow('GEMAS', '#c9f', r.gem, false, oEquiv, r.bestCurrency === 'gem'));
+
+    if (r.exchangeRate && r.exchangeRate.coinsPerGem > 0) {
+      const implTxt = r.impliedCoinsPerGem ? ` · razão deste item: ${fc(r.impliedCoinsPerGem)}/G` : '';
+      card.append(mk('div', 'opacity:.75;font-size:9px;margin-top:4px',
+        `Câmbio RMT: 1G ≈ ${fc(r.exchangeRate.coinsPerGem)} Coins (${r.exchangeRate.label})${implTxt}`));
+    }
+
+    if (d.eligibilityNote) {
+      card.append(mk('div', 'color:#fc9;font-size:9px;margin-top:3px', '⚠ ' + d.eligibilityNote));
+    }
+
+    for (const w of (r.warnings || []).slice(0, 4)) {
+      const line = mk('div', 'margin-top:2px;color:#fc9;font-size:9px;display:flex;align-items:center;gap:4px');
+      line.append(mk('span', 'flex:1', '⚠ ' + w));
+      if (/Radar RMT/i.test(w)) {
+        const bRmt = mk('button', 'all:unset;cursor:pointer;padding:0 5px;border-radius:3px;background:#fd83;border:1px solid #fd86;color:#fff;font-size:9px', 'Ler RMT');
+        bRmt.onclick = () => scanRmt();
+        line.append(bRmt);
+      }
+      card.append(line);
+    }
+
+    sellOutEl.append(card);
+  }
+
+  function readTeamPokemonsFromDom() {
+    const out = [];
+    for (const el of $$('#time .poke-linha')) {
+      const id = el.dataset.id ? String(el.dataset.id) : '';
+      const nomeEl = $('.pl-nome', el);
+      let species = '';
+      if (nomeEl) {
+        const clone = nomeEl.cloneNode(true);
+        $$('.pl-lv, .pl-colecao-marca, .cm-selo-shiny', clone).forEach(x => x.remove());
+        species = (clone.textContent || '').replace(/[✨★]/g, '').replace(/\s+/g, ' ').trim();
+      }
+      if (!species) continue;
+      const lvTxt = ($('.pl-lv', el) || {}).textContent || '';
+      const selosTxt = ($('.pk-selos', el) || {}).textContent || '';
+      const attrs = PK_SELL.parsePokemonAttrs(`${lvTxt} ${selosTxt}`);
+      const shiny = el.classList.contains('shiny')
+        || !!$('.cm-selo-shiny, .shiny', el)
+        || /✨|\bshiny\b/i.test((nomeEl && nomeEl.textContent) || '');
+      const mega = /^mega\s+/i.test(species);
+      const pk = {
+        kind: 'pokemon',
+        uid: id || `team-${PK_SELL.norm(species)}-${attrs.level || 0}-${attrs.iv || 0}`,
+        id,
+        species,
+        level: attrs.level || 1,
+        potency: attrs.potency || 1,
+        iv: attrs.iv,
+        quality: attrs.quality,
+        nota: attrs.nota,
+        shiny,
+        mega,
+        where: el.classList.contains('ativo') ? 'Ativo' : 'Equipe',
+      };
+      const elig = PK_SELL.pokemonEligibility(pk);
+      pk.eligible = elig.eligible;
+      pk.eligReason = elig.reason;
+      out.push(pk);
+    }
+    return out;
+  }
+
+  async function readAllRmtInventory(getCorpo) {
+    const items = [];
+    const pokemons = [];
+
+    // 1) Itens comercializáveis no RMT (+ Anunciar -> Um item)
+    let corpo = getCorpo();
+    const btnAnn = corpo && $('#cm-anunciar', corpo);
+    if (!btnAnn) throw new Error('Botão + Anunciar não encontrado');
+    btnAnn.click();
+    const btnItem = await waitForSelector('.cm-folha button.cm-grande[data-tipo="item"]', () => document, 2200);
+    if (btnItem) {
+      btnItem.click();
+      await sleep(500);
+      const leaf = $('.cm-folha');
+      for (const s of (leaf ? $$('button.cm-slot[data-id]', leaf) : [])) {
+        if (!s.offsetParent) continue;
+        const id = String(s.dataset.id);
+        const name = ($('.cm-slot-nome', s) || {}).textContent?.trim() || '';
+        const qty = PK_SELL.parseIntClean(($('b', s) || {}).textContent || '') || 0;
+        if (name && qty > 0) {
+          items.push({ kind: 'item', id, name, qty, disabled: !!s.disabled });
+        }
+      }
+      await closeRmtLeaf();
+    }
+
+    // 2) Pokémons elegíveis no RMT (+ Anunciar -> Um pokemon)
+    corpo = getCorpo();
+    const btnAnn2 = corpo && $('#cm-anunciar', corpo);
+    if (btnAnn2) {
+      btnAnn2.click();
+      const btnPk = await waitForSelector('.cm-folha button.cm-grande[data-tipo="pokemon"]', () => document, 2200);
+      if (btnPk) {
+        btnPk.click();
+        await sleep(650);
+        const leaf = $('.cm-folha');
+        const cards = leaf ? $$('#cm-pks .cm-pk-escolha, #cm-pks .mk-card', leaf) : [];
+        for (let i = 0; i < cards.length; i++) {
+          const c = cards[i];
+          const rawName = ($('.mk-nome', c) || {}).textContent?.trim() || '';
+          const shiny = c.classList.contains('shiny') || !!$('.cm-selo-shiny', c) || /✨|\bshiny\b/i.test(rawName);
+          const species = rawName.replace(/[✨★]/g, '').replace(/^shiny\s+/i, '').replace(/\s+/g, ' ').trim();
+          if (!species) continue;
+          const subTxt = ($('.mk-sub', c) || {}).textContent || '';
+          const selosTxt = ($('.pk-selos', c) || {}).textContent || '';
+          const attrs = PK_SELL.parsePokemonAttrs(`${subTxt} ${selosTxt}`);
+          const whereM = subTxt.match(/[·•]\s*(.+)$/);
+          const where = whereM ? whereM[1].trim() : 'Depot';
+          const keyAttr = (c.dataset && (c.dataset.chave || c.dataset.id || c.dataset.uid)) || '';
+          const idM = String(keyAttr).match(/(\d+)$/);
+          const uid = idM ? idM[1] : `rmt-${PK_SELL.norm(species)}-${attrs.level || 0}-${attrs.iv || 0}-${i}`;
+          pokemons.push({
+            kind: 'pokemon',
+            uid,
+            id: idM ? idM[1] : '',
+            species,
+            level: attrs.level || 50,
+            potency: attrs.potency || 1,
+            iv: attrs.iv,
+            quality: attrs.quality,
+            nota: attrs.nota,
+            shiny,
+            mega: /^mega\s+/i.test(species),
+            where,
+            eligible: true,
+            eligReason: 'Elegível no RMT',
+          });
+        }
+        await closeRmtLeaf();
+      }
+    }
+
+    // Mescla Pokémons da Equipe (incluindo o ativo) evitando duplicatas
+    const teamPks = readTeamPokemonsFromDom();
+    const seen = new Set(pokemons.map(p => p.id ? `id:${p.id}` : `sig:${PK_SELL.norm(p.species)}:${p.level}:${p.iv}:${p.potency}`));
+    for (const tp of teamPks) {
+      const k1 = tp.id ? `id:${tp.id}` : '';
+      const k2 = `sig:${PK_SELL.norm(tp.species)}:${tp.level}:${tp.iv}:${tp.potency}`;
+      if ((k1 && seen.has(k1)) || seen.has(k2)) continue;
+      if (k1) seen.add(k1);
+      seen.add(k2);
+      pokemons.push(tp);
+    }
+
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    pokemons.sort((a, b) => (b.eligible - a.eligible) || ((b.nota || 0) - (a.nota || 0)) || ((b.level || 0) - (a.level || 0)));
+    return { items, pokemons };
+  }
+
+  async function loadSellInventory() {
+    if (typeof PK_SELL === 'undefined') return log('venda: módulo PK_SELL indisponível');
+    if (sellState.loading || sellState.scanning) return;
+    if (busy) { renderSell('Aguarde: outra ação em andamento.'); return; }
+    busy = true;
+    sellState.loading = true;
+    const voltarUltra = energyNow() === 'ultra';
+    const wasOpen = !!($('.modal-caixa[data-modal="community"]') && $('.modal-caixa[data-modal="community"]').offsetParent);
+    const getCorpo = () => { const m = $('.modal-caixa[data-modal="community"]'); return (m && m.offsetParent) ? ($('#modal-corpo', m) || m) : null; };
+    renderSell('Carregando itens e Pokémons do inventário...');
+    try {
+      if (voltarUltra && !(await leaveUltra())) {
+        renderSell('Não consegui sair do modo ULTRA.');
+        return null;
+      }
+      if (!wasOpen) {
+        await closeModal();
+        const nav = navBtn('community');
+        if (!nav) { renderSell('Botão RMT não encontrado.'); return null; }
+        nav.click();
+        await waitForSelector('.modal-caixa[data-modal="community"] #cm-anunciar', () => document, 3500);
+        await sleep(300);
+      }
+      if (!getCorpo()) { renderSell('Modal RMT não abriu.'); return null; }
+      await closeRmtLeaf();
+
+      const inv = await readAllRmtInventory(getCorpo);
+      sellState.inventory = { at: Date.now(), items: inv.items, pokemons: inv.pokemons };
+      saveSell();
+      log(`venda: carregados ${inv.items.length} item(ns) e ${inv.pokemons.length} Pokémon(s)`);
+      return sellState.inventory;
+    } catch (e) {
+      log('venda erro ao carregar:', e.message);
+      renderSell('Erro ao carregar inventário: ' + e.message);
+      return null;
+    } finally {
+      await closeRmtLeaf();
+      if (!wasOpen) await closeModal();
+      if (voltarUltra) await reenterUltra();
+      sellState.loading = false;
+      busy = false;
+      renderSell();
+    }
+  }
+
+  function readExchangeRateFromOpenItemList(corpo) {
+    if (!corpo || typeof PK_RMT === 'undefined') return null;
+    const pairs = [];
+    for (const row of $$('.cmi-linha', corpo)) {
+      const name = ($('.cmi-nome b', row) || {}).textContent?.trim();
+      const liq = PK_RMT.matchLiquidItem(name);
+      if (!liq) continue;
+      const precos = $$('.cm-preco', row);
+      let coins = null, gems = null;
+      for (const el of precos) {
+        const val = PK_RMT.parseCompactNum(el.title || el.textContent);
+        if (!val) continue;
+        if (el.classList.contains('orb')) gems = val;
+        else coins = val;
+      }
+      if (coins && gems) pairs.push({ name: liq.label, coins, gems });
+    }
+    return PK_SELL.estimateRateFromItemList(pairs);
+  }
+
+  async function waitForItemCurrencyBook(itemId, currency, prevSig = '', maxMs = 2600) {
+    const t0 = Date.now();
+    const idStr = String(itemId || '');
+    const wantSw = currency === 'gem' ? 'orb' : 'gold';
+    const wantRe = currency === 'gem' ? /gema|gem/i : /coins/i;
+    const sigOf = parsed => `${parsed.avg7d || 0}|${parsed.vol7d || 0}|` + (parsed.offers || []).slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join(',');
+    while (Date.now() - t0 < maxMs) {
+      const m = $('.modal-caixa[data-modal="community"]');
+      const corpo = m && ($('#modal-corpo', m) || m);
+      const painel = corpo && $('.cmi-painel', corpo);
+      if (painel) {
+        const fav = $('.cm-fav[data-fav-item]', painel);
+        const rightItem = !idStr || !fav || fav.dataset.favItem === idStr;
+        const btn = $(`.cmp-op[data-swmoeda="${wantSw}"]`, painel)
+          || $$('button.cmp-op', painel).find(b => wantRe.test(b.textContent));
+        if (rightItem && btn && !btn.classList.contains('on')) {
+          btn.click();
+          await sleep(260);
+          continue;
+        }
+        if (rightItem && (!btn || btn.classList.contains('on'))) {
+          const parsed = parseStoneBook(painel);
+          const sig = sigOf(parsed);
+          if ((parsed.offers.length || parsed.avg7d != null) && (!prevSig || sig !== prevSig || Date.now() - t0 >= 800)) {
+            return { parsed, sig };
+          }
+          if (!/carregando|loading/i.test(painel.textContent || '') && Date.now() - t0 >= 900) {
+            return { parsed, sig };
+          }
+        }
+      }
+      await sleep(180);
+    }
+    const m = $('.modal-caixa[data-modal="community"]');
+    const painel = m && $('.cmi-painel', $('#modal-corpo', m) || m);
+    const parsed = parseStoneBook(painel);
+    return { parsed, sig: sigOf(parsed) };
+  }
+
+  async function readItemHistoryBothCurrencies(getCorpo, itemName, maxPages = 3) {
+    const targetNorm = PK_SELL.norm(itemName);
+    const goldSales = [];
+    const gemSales = [];
+    const corpo = getCorpo();
+    const btnHist = corpo && $('#cm-historico-global', corpo);
+    if (!btnHist) return { goldSales, gemSales };
+    btnHist.click();
+    const leaf = await waitForSelector('.cm-folha', () => document, 2200);
+    if (!leaf) return { goldSales, gemSales };
+    await sleep(300);
+
+    const clickHistFilter = async (attr, val, re) => {
+      const f = $('.cm-folha');
+      const b = f && ($(`button.cm-filtro[${attr}="${val}"]`, f)
+        || $$('button.cm-filtro', f).find(el => re.test(el.textContent.trim())));
+      if (b && !b.classList.contains('on')) { b.click(); await sleep(450); }
+    };
+
+    const readPages = async (currency, outArr) => {
+      await clickHistFilter('data-hist-tipo', 'item', /^(itens|items)$/i);
+      await clickHistFilter('data-hist-moeda', currency === 'gem' ? 'orb' : 'gold', currency === 'gem' ? /^(gemas|gems)$/i : /^(coins|ouro)$/i);
+      let prevSig = '';
+      for (let page = 1; page <= maxPages; page++) {
+        const f = $('.cm-folha');
+        if (!f) break;
+        const rows = $$('.cm-hist-linha', f);
+        const sig = rows.slice(0, 3).map(r => r.textContent.trim()).join('|');
+        if (!rows.length || (page > 1 && sig === prevSig)) break;
+        prevSig = sig;
+        for (const r of rows) {
+          const itemEl = $('.cm-hist-item', r);
+          const valEl = $('.cm-hist-valor', r);
+          const isOrb = !!$('.cm-preco.orb', r);
+          const parsed = PK_SELL.parseItemHistoryRow({
+            itemText: (itemEl && (itemEl.title || itemEl.textContent)) || '',
+            valueText: (valEl && valEl.textContent) || '',
+            isOrb,
+          });
+          if (parsed && parsed.normName === targetNorm && parsed.currency === currency) {
+            outArr.push(parsed);
+          }
+        }
+        if (page >= maxPages || outArr.length >= 12) break;
+        const nextBtn = $$('button.cm-pag', f).find(b => b.textContent.trim() === '›' && !b.disabled);
+        if (!nextBtn) break;
+        nextBtn.click();
+        const t0 = Date.now();
+        while (Date.now() - t0 < 1600) {
+          await sleep(180);
+          const f2 = $('.cm-folha');
+          const rows2 = f2 ? $$('.cm-hist-linha', f2) : [];
+          const sig2 = rows2.slice(0, 3).map(r => r.textContent.trim()).join('|');
+          if (rows2.length && sig2 !== prevSig) break;
+        }
+      }
+    };
+
+    await readPages('gold', goldSales);
+    await readPages('gem', gemSales);
+    await closeRmtLeaf();
+    return { goldSales, gemSales };
+  }
+
+  function parseRmtPokemonCards(corpo, wantCurrency) {
+    if (!corpo) return [];
+    const out = [];
+    for (const c of $$('.cm-card', corpo)) {
+      const precoEl = $('.cm-preco', c);
+      if (!precoEl) continue;
+      const isOrb = precoEl.classList.contains('orb');
+      if ((wantCurrency === 'gem') !== isOrb) continue;
+      const price = PK_SELL.parseCompactNum(precoEl.title || precoEl.textContent);
+      if (!price) continue;
+      const species = ($('.cm-nome-txt', c) || {}).textContent?.trim() || '';
+      if (!species) continue;
+      const subTxt = ($('.cm-sub', c) || {}).textContent || '';
+      const selosTxt = ($('.pk-selos', c) || {}).textContent || '';
+      const attrs = PK_SELL.parsePokemonAttrs(`${subTxt} ${selosTxt}`);
+      const shiny = c.classList.contains('shiny') || !!$('.cm-selo-shiny', c);
+      const mega = /^mega\s+/i.test(species);
+      const held = !!$('.cm-retido, [data-retido-ate]', c);
+      const hasBuy = !!($('.cm-btn.comprar, button.comprar', c) || $$('button', c).find(b => /^(comprar|buy|retido|held)/i.test(b.textContent.trim())));
+      const hasDm = !!$('.cm-dm', c);
+      const own = !hasBuy && !hasDm;
+      out.push({
+        species,
+        level: attrs.level || 1,
+        potency: attrs.potency || 1,
+        iv: attrs.iv,
+        quality: attrs.quality,
+        nota: attrs.nota,
+        shiny,
+        mega,
+        price,
+        held,
+        own,
+      });
+    }
+    return out;
+  }
+
+  async function readPokemonMarketListings(getCorpo, pk) {
+    let corpo = getCorpo();
+    if (!corpo) return { goldListings: [], gemListings: [] };
+    const bPk = $('button.cm-filtro[data-tipo="pokemon"]', corpo)
+      || $$('button.cm-filtro', corpo).find(b => /pok[eé]mon/i.test(b.textContent));
+    if (bPk && !bPk.classList.contains('on')) { bPk.click(); await sleep(700); }
+
+    // Limpa filtros anteriores
+    corpo = getCorpo();
+    const bLimpar = corpo && $('#cm-limpar', corpo);
+    if (bLimpar && !bLimpar.classList.contains('hidden')) { bLimpar.click(); await sleep(500); }
+
+    // Aplica espécie + flags estruturais (Shiny / P5 / Mega) + ordenação menor preço
+    corpo = getCorpo();
+    if (!corpo) return { goldListings: [], gemListings: [] };
+    const toggleBtn = async sel => {
+      const c = getCorpo();
+      const b = c && $(sel, c);
+      if (b && !b.classList.contains('on')) { b.click(); await sleep(350); }
+    };
+    if (pk.shiny) await toggleBtn('#cm-shiny');
+    if (Number(pk.potency) === 5) await toggleBtn('#cm-p5');
+    if (pk.mega) await toggleBtn('#cm-mega');
+
+    corpo = getCorpo();
+    const ordSel = corpo && $('#cm-ordem', corpo);
+    if (ordSel && ordSel.value !== 'baratos') {
+      ordSel.value = 'baratos';
+      ordSel.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(450);
+    }
+
+    corpo = getCorpo();
+    const busca = corpo && $('#cm-busca', corpo);
+    if (busca) {
+      busca.value = pk.species;
+      busca.dispatchEvent(new Event('input', { bubbles: true }));
+      busca.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(550);
+    }
+
+    // Para Pokémon treinado (Nv >= 200), filtra por nível mínimo compatível para não encher a 1ª página de Nv 100
+    const useMinLv = Number.isFinite(pk.level) && pk.level >= 200 ? Math.floor(pk.level * 0.55) : 0;
+    const setMinLevel = async val => {
+      const c = getCorpo();
+      const inp = c && $('#cm-nivel-min', c);
+      if (!inp) return false;
+      inp.value = val ? String(val) : '';
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(650);
+      return true;
+    };
+    if (useMinLv > 0) await setMinLevel(useMinLv);
+    else await sleep(200);
+
+    const readCurrency = async currency => {
+      const c = getCorpo();
+      if (!c) return [];
+      const filtro = currency === 'gem' ? 'orb' : 'gold';
+      const btn = $(`button.cm-moeda[data-moeda-filtro="${filtro}"]`, c)
+        || $$('button.cm-moeda', c).find(b => (currency === 'gem' ? /gema|gem/i : /coins/i).test(b.textContent));
+      if (btn && !btn.classList.contains('on')) {
+        btn.click();
+        await sleep(750);
+      }
+      return parseRmtPokemonCards(getCorpo(), currency);
+    };
+
+    let gemListings = await readCurrency('gem');
+    let goldListings = PK_SELL.pokemonOnlyGems(pk) ? [] : await readCurrency('gold');
+
+    // Fallback sem filtro de nível caso não haja nenhum anúncio no tier de nível alto
+    if (useMinLv > 0 && (!gemListings.length || (!PK_SELL.pokemonOnlyGems(pk) && !goldListings.length))) {
+      await setMinLevel(0);
+      if (!gemListings.length) gemListings = await readCurrency('gem');
+      if (!PK_SELL.pokemonOnlyGems(pk) && !goldListings.length) goldListings = await readCurrency('gold');
+    }
+
+    // Restaura filtros do RMT para não sujar a aba do usuário
+    corpo = getCorpo();
+    const bLimparEnd = corpo && $('#cm-limpar', corpo);
+    if (bLimparEnd && !bLimparEnd.classList.contains('hidden')) { bLimparEnd.click(); await sleep(350); }
+    else {
+      const bTodas = corpo && $('button.cm-moeda[data-moeda-filtro="todas"]', corpo);
+      if (bTodas && !bTodas.classList.contains('on')) { bTodas.click(); await sleep(250); }
+    }
+    return { goldListings, gemListings };
+  }
+
+  async function readPokemonHistoryBothCurrencies(getCorpo, pk, maxPages = 2) {
+    const goldSales = [];
+    const gemSales = [];
+    const corpo = getCorpo();
+    const btnHist = corpo && $('#cm-historico-global', corpo);
+    if (!btnHist) return { goldSales, gemSales };
+    btnHist.click();
+    const leaf = await waitForSelector('.cm-folha', () => document, 2200);
+    if (!leaf) return { goldSales, gemSales };
+    await sleep(300);
+
+    const clickHist = async (sel, re) => {
+      const f = $('.cm-folha');
+      const b = f && ($(sel, f) || $$('button.cm-filtro', f).find(el => re.test(el.textContent.trim())));
+      if (b && !b.classList.contains('on')) { b.click(); await sleep(450); }
+    };
+    await clickHist('button.cm-filtro[data-hist-tipo="pokemon"]', /^pok[eé]mon$/i);
+    await clickHist('button.cm-filtro[data-hist-moeda=""]', /^(todas|all)$/i);
+    if (pk.shiny) await clickHist('button.cm-filtro[data-hist-chave="soShiny"]', /shiny/i);
+    if (Number(pk.potency) === 5) await clickHist('button.cm-filtro[data-hist-chave="soP5"]', /\bP5\b/i);
+
+    const fInp = $('.cm-folha #cm-hist-busca');
+    if (fInp) {
+      fInp.value = pk.species;
+      fInp.dispatchEvent(new Event('input', { bubbles: true }));
+      fInp.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(700);
+    }
+
+    let prevSig = '';
+    for (let page = 1; page <= maxPages; page++) {
+      const f = $('.cm-folha');
+      if (!f) break;
+      const rows = $$('.cm-hist-linha', f);
+      const sig = rows.slice(0, 3).map(r => r.textContent.trim()).join('|');
+      if (!rows.length || (page > 1 && sig === prevSig)) break;
+      prevSig = sig;
+      for (const r of rows) {
+        const itemEl = $('.cm-hist-item', r);
+        const valEl = $('.cm-hist-valor', r);
+        const isOrb = !!$('.cm-preco.orb', r);
+        const isShiny = !!$('.cm-selo-shiny, .shiny', r) || /✨/.test((itemEl && itemEl.textContent) || '');
+        const parsed = PK_SELL.parsePokemonHistoryRow({
+          itemTitle: (itemEl && itemEl.title) || '',
+          itemText: (itemEl && itemEl.textContent) || '',
+          valueText: (valEl && valEl.textContent) || '',
+          isOrb,
+          isShiny,
+        });
+        if (!parsed) continue;
+        if (parsed.currency === 'gem') gemSales.push(parsed);
+        else goldSales.push(parsed);
+      }
+      if (page >= maxPages) break;
+      const nextBtn = $$('button.cm-pag', f).find(b => b.textContent.trim() === '›' && !b.disabled);
+      if (!nextBtn) break;
+      nextBtn.click();
+      const t0 = Date.now();
+      while (Date.now() - t0 < 1600) {
+        await sleep(180);
+        const f2 = $('.cm-folha');
+        const rows2 = f2 ? $$('.cm-hist-linha', f2) : [];
+        const sig2 = rows2.slice(0, 3).map(r => r.textContent.trim()).join('|');
+        if (rows2.length && sig2 !== prevSig) break;
+      }
+    }
+
+    await closeRmtLeaf();
+    return { goldSales, gemSales };
+  }
+
+  async function analyzeSelectedSale(targetKey = null) {
+    if (typeof PK_SELL === 'undefined') return log('venda: módulo PK_SELL indisponível');
+    if (sellState.scanning || sellState.loading) return;
+    if (busy) { renderSell('Aguarde: outra ação em andamento.'); return; }
+
+    if (targetKey) {
+      sellState.selectedKey = targetKey;
+      sellState.qtyOverride = null;
+    }
+    let entry = findSellEntry(sellState.selectedKey);
+    if (!entry) {
+      await loadSellInventory();
+      entry = findSellEntry(sellState.selectedKey);
+      if (!entry) {
+        renderSell('Nenhum item ou Pokémon encontrado no inventário.');
+        return null;
+      }
+    }
+
+    busy = true;
+    sellState.scanning = true;
+    const voltarUltra = energyNow() === 'ultra';
+    const wasOpen = !!($('.modal-caixa[data-modal="community"]') && $('.modal-caixa[data-modal="community"]').offsetParent);
+    const getCorpo = () => { const m = $('.modal-caixa[data-modal="community"]'); return (m && m.offsetParent) ? ($('#modal-corpo', m) || m) : null; };
+    renderSell(`Analisando ${entry.kind === 'item' ? entry.name : entry.species} em Gold e Gemas...`);
+    try {
+      if (voltarUltra && !(await leaveUltra())) {
+        renderSell('Não consegui sair do modo ULTRA.');
+        return null;
+      }
+      if (!wasOpen) {
+        await closeModal();
+        const nav = navBtn('community');
+        if (!nav) { renderSell('Botão RMT não encontrado.'); return null; }
+        nav.click();
+        await waitForSelector('.modal-caixa[data-modal="community"] #cm-anunciar', () => document, 3500);
+        await sleep(300);
+      }
+      if (!getCorpo()) { renderSell('Modal RMT não abriu.'); return null; }
+      await closeRmtLeaf();
+
+      // Garante taxa de câmbio Coins/Gema (Radar RMT em cache ou leitura rápida da lista de itens)
+      let exchangeRate = PK_SELL.extractExchangeRate({ rmtRoutes: rmtState.last?.routes || [] });
+
+      const ensureItemsAllTab = async () => {
+        let c = getCorpo(); if (!c) return null;
+        const bIt = $('button.cm-filtro[data-tipo="item"]', c)
+          || $$('button.cm-filtro', c).find(b => /^(itens|items)$/i.test(b.textContent.trim()));
+        if (bIt && !bIt.classList.contains('on')) { bIt.click(); await sleep(650); }
+        c = getCorpo(); if (!c) return null;
+        const bAll = $('button.cm-filtro[data-cat=""]', c)
+          || $$('button.cm-filtro', c).find(b => /^(todas|all)$/i.test(b.textContent.trim()));
+        if (bAll && !bAll.classList.contains('on')) { bAll.click(); await sleep(550); }
+        return getCorpo();
+      };
+
+      let result = null;
+      let eligibilityNote = '';
+
+      if (entry.kind === 'item') {
+        const qty = Math.max(1, sellState.qtyOverride || entry.qty || 1);
+        const corpo = await ensureItemsAllTab();
+        if (!corpo) throw new Error('Aba Itens do RMT indisponível');
+        if (!exchangeRate) exchangeRate = readExchangeRateFromOpenItemList(corpo);
+
+        const row = $(`.cmi-linha[data-item="${entry.id}"]`, corpo)
+          || $$('.cmi-linha', corpo).find(el => PK_SELL.norm(($('.cmi-nome b', el) || {}).textContent) === PK_SELL.norm(entry.name));
+        let goldBook = { offers: [], avg7d: null, vol7d: null };
+        let gemBook = { offers: [], avg7d: null, vol7d: null };
+
+        if (row) {
+          renderSell(`Lendo book Gold e Gemas de ${entry.name}...`);
+          row.click();
+          await sleep(450);
+          const g1 = await waitForItemCurrencyBook(entry.id, 'gold', '');
+          goldBook = g1.parsed;
+          const o1 = await waitForItemCurrencyBook(entry.id, 'gem', g1.sig);
+          gemBook = o1.parsed;
+        }
+
+        renderSell(`Lendo vendas comprovadas de ${entry.name}...`);
+        const { goldSales, gemSales } = await readItemHistoryBothCurrencies(getCorpo, entry.name, 3);
+
+        result = PK_SELL.analyzeItemSale({
+          name: entry.name,
+          qty,
+          goldBook,
+          gemBook,
+          goldSales,
+          gemSales,
+          exchangeRate,
+        });
+      } else {
+        if (entry.eligible === false) {
+          eligibilityNote = `Este Pokémon não atende ao mínimo do RMT (${entry.eligReason}). Valores abaixo são referência caso atinja os requisitos.`;
+        }
+        if (!exchangeRate) {
+          renderSell('Lendo câmbio Coins/Gema no RMT...');
+          const corpoIt = await ensureItemsAllTab();
+          exchangeRate = readExchangeRateFromOpenItemList(corpoIt);
+        }
+
+        renderSell(`Buscando anúncios similares de ${entry.species}...`);
+        const { goldListings, gemListings } = await readPokemonMarketListings(getCorpo, entry);
+
+        renderSell(`Lendo histórico de vendas de ${entry.species}...`);
+        const { goldSales, gemSales } = await readPokemonHistoryBothCurrencies(getCorpo, entry, 2);
+
+        result = PK_SELL.analyzePokemonSale({
+          pokemon: entry,
+          goldListings,
+          gemListings,
+          goldSales,
+          gemSales,
+          exchangeRate,
+        });
+      }
+
+      sellState.last = { at: Date.now(), key: sellState.selectedKey, eligibilityNote, result };
+      saveSell();
+      log('venda:', `${result.name} -> ${result.headline}`);
+      return sellState.last;
+    } catch (e) {
+      log('venda erro:', e.message);
+      renderSell('Erro ao analisar venda: ' + e.message);
+      return null;
+    } finally {
+      await closeRmtLeaf();
+      if (!wasOpen) await closeModal();
+      if (voltarUltra) await reenterUltra();
+      sellState.scanning = false;
+      busy = false;
+      renderSell();
+    }
+  }
+
   // ---------- Analisador Otimizado de Pokébola (hunt atual) ----------
   let ballTableOpen = false;
   const normTxt = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -2296,7 +3200,7 @@
   const rmtPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
     ? PK_RMT.buildActionPlan({ routes: rmtState.last.routes, gold: gold(), source: rmtState.last.source })
     : null;
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, scanRmt, stoneState, planSellStones, sellAllStones, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, scanRmt, stoneState, planSellStones, sellAllStones, sellState, loadSellInventory, analyzeSelectedSale, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, scanHunts, switchTo, closeModal, applyLite };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:flex!important;visibility:visible!important}'; document.head.append(css);
