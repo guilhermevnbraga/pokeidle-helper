@@ -44,6 +44,23 @@ const PK_RMT = (() => {
     return Math.round(base * mult);
   }
 
+  // Parseia texto de média 7d e volume do painel de item (.cmp-media) em PT e EN (preserva 0 vendas)
+  function parseAvg7d(text) {
+    const s = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!s) return { avg7d: null, vol7d: null };
+    const avgMatch = s.match(/:\s*([\d.,]+(?:\s*[KMBT])?)\s*\/?\s*(?:un|ea|u\b)/i)
+      || s.match(/([\d.,]+(?:\s*[KMBT])?)\s*\/\s*(?:un|ea)/i);
+    const volMatch = s.match(/[·|•]\s*([\d.,]+)\s*(?:un|units?|vendid|sold)/i)
+      || s.match(/([\d.,]+)\s*(?:un\.\s*vendid|units?\s*sold)/i);
+    const avg7d = avgMatch ? parseCompactNum(avgMatch[1]) : null;
+    let vol7d = null;
+    if (volMatch) {
+      const digits = volMatch[1].replace(/[^\d]/g, '');
+      if (digits) vol7d = parseInt(digits, 10);
+    }
+    return { avg7d, vol7d };
+  }
+
   // Comissão oficial de Item em Gema: 15% sobre o total, arredondada para cima (confirmado na UI)
   function netItemGems(unitPrice, lotSize = 1) {
     const qty = Math.max(1, Math.floor(lotSize) || 1);
@@ -151,11 +168,31 @@ const PK_RMT = (() => {
 
   // Avalia rota de um item líquido nos dois sentidos (Ouro->Gema e Gema->Ouro)
   // modo 'book' = verificado no book; 'list' = estimativa da tabela esquerda
-  function evaluateItemRoute({ item, coinsOffer, gemasOffer, gold = 0, gems = 0, source = 'book' }) {
+  function evaluateItemRoute({
+    item,
+    coinsOffer,
+    gemasOffer,
+    gold = 0,
+    gems = 0,
+    source = 'book',
+    coinsAvg7d = null,
+    coinsVol7d = null,
+    gemsAvg7d = null,
+    gemsVol7d = null,
+  }) {
     if (!item || !coinsOffer || !gemasOffer) return null;
     const buyCoins = coinsOffer.bestPrice;
     const askGems = gemasOffer.bestPrice;
     if (!buyCoins || !askGems) return null;
+
+    const cAvg = Number.isFinite(coinsAvg7d) && coinsAvg7d > 0 ? coinsAvg7d
+      : (Number.isFinite(coinsOffer.avg7d) && coinsOffer.avg7d > 0 ? coinsOffer.avg7d : null);
+    const cVol = Number.isFinite(coinsVol7d) && coinsVol7d >= 0 ? coinsVol7d
+      : (Number.isFinite(coinsOffer.vol7d) && coinsOffer.vol7d >= 0 ? coinsOffer.vol7d : null);
+    const gAvg = Number.isFinite(gemsAvg7d) && gemsAvg7d > 0 ? gemsAvg7d
+      : (Number.isFinite(gemasOffer.avg7d) && gemasOffer.avg7d > 0 ? gemasOffer.avg7d : null);
+    const gVol = Number.isFinite(gemsVol7d) && gemsVol7d >= 0 ? gemsVol7d
+      : (Number.isFinite(gemasOffer.vol7d) && gemasOffer.vol7d >= 0 ? gemasOffer.vol7d : null);
 
     const warnings = [];
     if (buyCoins < item.minSanityCoins) warnings.push('preço Coins suspeito');
@@ -170,6 +207,7 @@ const PK_RMT = (() => {
     if (netLot.netPerUnit <= 0) return null;
 
     if (lot > 1 && netOne.effPct >= 24) warnings.push(`1un=${Math.round(netOne.effPct)}% taxa`);
+    if (gAvg && sellGems > gAvg * 1.20) warnings.push(`venda +${Math.round((sellGems / gAvg - 1) * 100)}% vs 7d`);
 
     const coinsPerGem = buyCoins / netLot.netPerUnit;
     const minEntryCoins = lot > 1 && netOne.effPct >= 24 ? buyCoins * lot : buyCoins;
@@ -185,6 +223,7 @@ const PK_RMT = (() => {
     if (gemasOffer.skippedTroll > 0) reverseWarnings.push('troll Gemas ignorado');
     if (source === 'book' && (gemasOffer.totalFreeUnits || 0) < 15 && (gemasOffer.unitsAtBest || 0) < 5) reverseWarnings.push('book Gemas raso');
     if (source === 'book' && (coinsOffer.totalFreeUnits || 0) > 0 && (coinsOffer.totalFreeUnits || 0) < 5) reverseWarnings.push('poucos anúncios Coins');
+    if (cAvg && sellCoins > cAvg * 1.20) reverseWarnings.push(`venda +${Math.round((sellCoins / cAvg - 1) * 100)}% vs 7d`);
 
     return {
       id: item.id,
@@ -221,6 +260,11 @@ const PK_RMT = (() => {
       bestGemsSeller: gemasOffer.bestOffer?.seller || null,
       canAffordGems: gems >= buyGems,
       reverseWarnings,
+      // Referências de liquidez/preço histórico (7 dias, do .cmp-media)
+      coinsAvg7d: cAvg,
+      coinsVol7d: cVol,
+      gemsAvg7d: gAvg,
+      gemsVol7d: gVol,
     };
   }
 
@@ -607,10 +651,411 @@ const PK_RMT = (() => {
     return lines.join('\n');
   }
 
+  function formatPct(n, signed = true) {
+    if (!Number.isFinite(n)) return '0%';
+    const sign = signed && n > 0 ? '+' : '';
+    const abs = Math.abs(n);
+    const txt = abs >= 10 ? n.toFixed(1) : n.toFixed(1);
+    return sign + txt.replace('.', ',') + '%';
+  }
+
+  function groupPriceLevels(levels) {
+    const out = [];
+    for (const lv of (levels || [])) {
+      if (!lv || !Number.isFinite(lv.price) || lv.price <= 0) continue;
+      const qty = Math.max(1, Math.floor(lv.qty) || 1);
+      const last = out[out.length - 1];
+      if (last && last.price === lv.price) {
+        last.qty += qty;
+        if (lv.seller && !last.sellers.includes(lv.seller) && last.sellers.length < 3) last.sellers.push(lv.seller);
+      } else {
+        out.push({ price: lv.price, qty, sellers: lv.seller ? [lv.seller] : [] });
+      }
+    }
+    return out;
+  }
+
+  function calcMinQtyForTargetGems(sellGems, lot, targetGems) {
+    const minBase = lot > 1 && netItemGems(sellGems, 1).effPct >= 24 ? lot : 1;
+    const perUnitEst = netItemGems(sellGems, Math.max(minBase, 1)).netPerUnit;
+    if (perUnitEst <= 0) return minBase;
+    let q = Math.max(minBase, Math.ceil(targetGems / perUnitEst));
+    while (netItemGems(sellGems, q).net < targetGems && q < 100000) q++;
+    return q;
+  }
+
+  // Analisa se vale a pena fazer trading (arbitragem cruzada Ouro↔Gema e flip na mesma moeda)
+  // Valida spreads contra taxas oficiais (15% + 15% ou 15% no flip), profundidade do book e média/volume 7d.
+  function buildTradingPlan({ routes, gold = 0, gems = 0, source = 'book' } = {}) {
+    const valid = rankRoutes(routes).map(normalizeReverseRoute).filter(Boolean);
+    if (!valid.length) return null;
+
+    const goldBudget = Math.max(0, Number(gold) || 0);
+    const gemsBudget = Math.max(0, Number(gems) || 0);
+    const opportunities = [];
+    let bestSpread = null;
+
+    // 1) Arbitragem cruzada (par itemA Ouro->Gema + itemB Gema->Ouro, itemA !== itemB)
+    for (const a of valid) {
+      for (const b of valid) {
+        if (a.id === b.id) continue;
+        const roiPct = (b.netCoinsPerGem / a.coinsPerGem - 1) * 100;
+        if (!Number.isFinite(roiPct)) continue;
+
+        if (!bestSpread || roiPct > bestSpread.roiPct) {
+          bestSpread = {
+            kind: 'cross',
+            buyId: a.id,
+            buyLabel: a.label,
+            sellId: b.id,
+            sellLabel: b.label,
+            roiPct,
+            coinsPerGemIn: a.coinsPerGem,
+            netCoinsPerGemOut: b.netCoinsPerGem,
+          };
+        }
+
+        if (roiPct <= 0) continue;
+
+        // ROI conservador usando média 7d nas pontas de venda (se book estiver acima da média)
+        const hasAnyAvg = (Number.isFinite(b.coinsAvg7d) && b.coinsAvg7d > 0) || (Number.isFinite(a.gemsAvg7d) && a.gemsAvg7d > 0);
+        let roiAtAvg7dPct = null;
+        if (hasAnyAvg) {
+          const consSellGems = (a.gemsAvg7d && a.gemsAvg7d < a.sellGems) ? a.gemsAvg7d : a.sellGems;
+          const consNetGemsU = netItemGems(Math.max(2, consSellGems), a.lot || 1).netPerUnit;
+          const consCpgIn = consNetGemsU > 0 ? a.buyCoins / consNetGemsU : Infinity;
+          const consSellCoins = (b.coinsAvg7d && b.coinsAvg7d < b.sellCoins) ? b.coinsAvg7d : b.sellCoins;
+          const consNetCoinsU = netItemCoins(Math.max(2, consSellCoins), 1).netPerUnit;
+          const consCpgOut = b.buyGems > 0 ? consNetCoinsU / b.buyGems : 0;
+          if (Number.isFinite(consCpgIn) && consCpgIn > 0 && consCpgOut > 0) {
+            roiAtAvg7dPct = (consCpgOut / consCpgIn - 1) * 100;
+          }
+        }
+
+        const risks = [];
+        let confidence = source === 'book' ? 'high' : 'low';
+        if (source !== 'book') risks.push('estimativa da lista (clique Escanear)');
+
+        if (b.coinsAvg7d && b.sellCoins > b.coinsAvg7d * 1.15) {
+          const overPct = Math.round((b.sellCoins / b.coinsAvg7d - 1) * 100);
+          risks.push(`venda Coins de ${b.label} +${overPct}% acima da média 7d (${formatCoins(b.coinsAvg7d)})`);
+        }
+        if (a.gemsAvg7d && a.sellGems > a.gemsAvg7d * 1.15) {
+          const overPct = Math.round((a.sellGems / a.gemsAvg7d - 1) * 100);
+          risks.push(`venda Gemas de ${a.label} +${overPct}% acima da média 7d (${formatGems(a.gemsAvg7d)})`);
+        }
+        if (roiAtAvg7dPct != null && roiAtAvg7dPct <= 0) {
+          risks.push(`na média 7d dá ${formatPct(roiAtAvg7dPct)} (prejuízo)`);
+          confidence = 'low';
+        }
+        if (b.coinsVol7d != null && b.coinsVol7d < 5) {
+          risks.push(`${b.label}: só ${b.coinsVol7d} vendas Coins em 7d`);
+          if (b.coinsVol7d < 3) confidence = 'low';
+        }
+        if (a.gemsVol7d != null && a.gemsVol7d < 5) {
+          risks.push(`${a.label}: só ${a.gemsVol7d} vendas Gemas em 7d`);
+          if (a.gemsVol7d < 3) confidence = 'low';
+        }
+        if (source === 'book') {
+          if ((a.totalFreeCoinsUnits || 0) < 15 && (a.unitsAtBestCoins || 0) < 5) risks.push(`book Coins raso em ${a.label}`);
+          if ((b.totalFreeGemsUnits || 0) < 15 && (b.unitsAtBestGems || 0) < 5) risks.push(`book Gemas raso em ${b.label}`);
+          if ((b.totalFreeCoinsUnits || 0) > 0 && (b.totalFreeCoinsUnits || 0) < 5) risks.push(`poucos anúncios Coins em ${b.label}`);
+        }
+        if (confidence === 'high' && risks.length > 0) confidence = 'medium';
+
+        // Capital mínimo para fechar 1 ciclo completo em Coins ou em Gemas
+        const minQtyA = calcMinQtyForTargetGems(a.sellGems, a.lot || 1, b.buyGems);
+        const minCapitalCoins = a.buyCoins * minQtyA;
+        const entryCoinsA = a.minEntryCoins || a.buyCoins;
+        const minQtyB = Math.max(1, Math.ceil(entryCoinsA / b.netCoinsUnit));
+        const minCapitalGems = b.buyGems * minQtyB;
+
+        const canRunGold = goldBudget >= minCapitalCoins;
+        const canRunGems = gemsBudget >= minCapitalGems;
+
+        let startCurrency = 'coins';
+        if (canRunGems && !canRunGold) startCurrency = 'gems';
+        else if (!canRunGold && !canRunGems && gemsBudget > 0 && (gemsBudget / minCapitalGems) > (goldBudget / minCapitalCoins)) {
+          startCurrency = 'gems';
+        }
+
+        let step1, step2, profitText, capitalText, affordable, missingText = '', effectiveRoiPct = roiPct;
+        if (startCurrency === 'coins') {
+          affordable = canRunGold;
+          const qA = affordable
+            ? planBuyFromLevels(a.coinsLevels, goldBudget, a.buyCoins * 1.04, a.buyCoins).qty || minQtyA
+            : minQtyA;
+          const pA = affordable
+            ? planBuyFromLevels(a.coinsLevels, goldBudget, a.buyCoins * 1.04, a.buyCoins)
+            : { qty: minQtyA, totalCost: minCapitalCoins, maxPricePaid: a.buyCoins };
+          const netGemsMid = netItemGems(a.sellGems, pA.qty).net;
+          const pB = planBuyFromLevels(b.gemsLevels, netGemsMid, b.buyGems * 1.04, b.buyGems);
+          const qB = pB.qty >= 1 ? pB.qty : 1;
+          const spentGemsB = pB.qty >= 1 ? pB.totalCost : b.buyGems;
+          const netCoinsEnd = netItemCoins(b.sellCoins, qB).net;
+          const leftoverGems = Math.max(0, netGemsMid - spentGemsB);
+          const equivEndCoins = netCoinsEnd + leftoverGems * b.netCoinsPerGem;
+          const equivProfitCoins = equivEndCoins - pA.totalCost;
+          if (affordable && pA.totalCost > 0) effectiveRoiPct = (equivProfitCoins / pA.totalCost) * 100;
+
+          step1 = `Ouro→Gema: compre ${pA.qty}× ${a.marketName} (${formatCoins(pA.totalCost)}) e anuncie por ${a.sellGems}G/un → ${formatGems(netGemsMid)} líq.`;
+          step2 = `Gema→Ouro: compre ${qB}× ${b.marketName} (${formatGems(spentGemsB)}) e anuncie por ${formatCoinsExact(b.sellCoins)} Coins/un → ${formatCoins(netCoinsEnd)} líq.${leftoverGems > 0 ? ` (+${formatGems(leftoverGems)} sobra)` : ''}`;
+          capitalText = affordable ? `Capital usado: ${formatCoins(pA.totalCost)}` : `Capital mín.: ${formatCoins(minCapitalCoins)}`;
+          missingText = affordable ? '' : `falta +${formatCoins(Math.max(0, minCapitalCoins - goldBudget))}`;
+          profitText = `${equivProfitCoins >= 0 ? '+' : ''}${formatCoins(Math.abs(equivProfitCoins))} líq. (${formatPct(effectiveRoiPct)})`;
+        } else {
+          affordable = canRunGems;
+          const pB = affordable
+            ? planBuyFromLevels(b.gemsLevels, gemsBudget, b.buyGems * 1.04, b.buyGems)
+            : { qty: minQtyB, totalCost: minCapitalGems, maxPricePaid: b.buyGems };
+          const netCoinsMid = netItemCoins(b.sellCoins, pB.qty).net;
+          const pA = planBuyFromLevels(a.coinsLevels, netCoinsMid, a.buyCoins * 1.04, a.buyCoins);
+          const qA = pA.qty >= 1 ? pA.qty : 1;
+          const spentCoinsA = pA.qty >= 1 ? pA.totalCost : a.buyCoins;
+          const netGemsEnd = netItemGems(a.sellGems, qA).net;
+          const leftoverCoins = Math.max(0, netCoinsMid - spentCoinsA);
+          const equivEndGems = netGemsEnd + leftoverCoins / a.coinsPerGem;
+          const equivProfitGems = equivEndGems - pB.totalCost;
+          if (affordable && pB.totalCost > 0) effectiveRoiPct = (equivProfitGems / pB.totalCost) * 100;
+
+          step1 = `Gema→Ouro: compre ${pB.qty}× ${b.marketName} (${formatGems(pB.totalCost)}) e anuncie por ${formatCoinsExact(b.sellCoins)} Coins/un → ${formatCoins(netCoinsMid)} líq.`;
+          step2 = `Ouro→Gema: compre ${qA}× ${a.marketName} (${formatCoins(spentCoinsA)}) e anuncie por ${a.sellGems}G/un → ${formatGems(netGemsEnd)} líq.${leftoverCoins >= 1e6 ? ` (+${formatCoins(leftoverCoins)} sobra)` : ''}`;
+          capitalText = affordable ? `Capital usado: ${formatGems(pB.totalCost)}` : `Capital mín.: ${formatGems(minCapitalGems)}`;
+          missingText = affordable ? '' : `falta +${formatGems(Math.max(0, minCapitalGems - gemsBudget))}`;
+          const profAbs = Math.abs(equivProfitGems);
+          const profStr = profAbs >= 10 ? `${Math.round(profAbs)}G` : `${profAbs.toFixed(1).replace('.', ',')}G`;
+          profitText = `${equivProfitGems >= 0 ? '+' : '-'}${profStr} líq. (${formatPct(effectiveRoiPct)})`;
+        }
+
+        if (effectiveRoiPct <= 0) continue;
+
+        opportunities.push({
+          kind: 'cross',
+          id: `cross:${a.id}->${b.id}`,
+          title: `${a.label} → ${b.label}`,
+          subtitle: startCurrency === 'coins' ? 'Ciclo Ouro → Gema → Ouro' : 'Ciclo Gema → Ouro → Gema',
+          startCurrency,
+          buyId: a.id,
+          sellId: b.id,
+          roiPct: effectiveRoiPct,
+          baseRoiPct: roiPct,
+          roiAtAvg7dPct,
+          confidence,
+          affordable,
+          minCapitalCoins,
+          minCapitalGems,
+          capitalText,
+          missingText,
+          step1,
+          step2,
+          profitText,
+          risks,
+        });
+      }
+    }
+
+    // 2) Flip / Snipe na mesma moeda (somente em modo 'book' com degraus reais)
+    if (source === 'book') {
+      for (const r of valid) {
+        const itemDef = LIQUID_ITEMS.find(it => it.id === r.id);
+
+        // 2a) Flip em Coins
+        const cGroups = groupPriceLevels(r.coinsLevels);
+        if (cGroups.length >= 2) {
+          const g0 = cGroups[0], g1 = cGroups[1];
+          const sellPrice = Math.max(2, g1.price - 1);
+          const affordable = goldBudget >= g0.price;
+          const qty = affordable ? Math.min(g0.qty, Math.floor(goldBudget / g0.price)) : 1;
+          const cost = g0.price * qty;
+          const net = netItemCoins(sellPrice, qty).net;
+          const profit = net - cost;
+          const roiPct = cost > 0 ? (profit / cost) * 100 : 0;
+          if (profit > 0) {
+            const risks = [];
+            let confidence = 'high';
+            let roiAtAvg7dPct = null;
+            if (r.coinsAvg7d) {
+              const consNet = netItemCoins(r.coinsAvg7d, qty).net;
+              roiAtAvg7dPct = cost > 0 ? ((consNet - cost) / cost) * 100 : null;
+              if (sellPrice > r.coinsAvg7d * 1.15) {
+                const overPct = Math.round((sellPrice / r.coinsAvg7d - 1) * 100);
+                risks.push(`revenda +${overPct}% acima da média 7d (${formatCoins(r.coinsAvg7d)})`);
+              }
+              if (roiAtAvg7dPct != null && roiAtAvg7dPct <= 0) {
+                risks.push(`na média 7d dá ${formatPct(roiAtAvg7dPct)} (prejuízo)`);
+                confidence = 'low';
+              }
+            }
+            if (r.coinsVol7d != null && r.coinsVol7d < 5) {
+              risks.push(`só ${r.coinsVol7d} vendas Coins em 7d`);
+              if (r.coinsVol7d < 3) confidence = 'low';
+            }
+            if ((r.totalFreeCoinsUnits || 0) - g0.qty < 3) risks.push('poucos anúncios acima do nível 1');
+            if (confidence === 'high' && risks.length > 0) confidence = 'medium';
+
+            opportunities.push({
+              kind: 'flip-coins',
+              id: `flip-coins:${r.id}`,
+              title: `Flip Coins · ${r.label}`,
+              subtitle: `Snipe no book de Coins (${g0.qty} un. no nível 1)`,
+              startCurrency: 'coins',
+              buyId: r.id,
+              sellId: r.id,
+              roiPct,
+              baseRoiPct: roiPct,
+              roiAtAvg7dPct,
+              confidence,
+              affordable,
+              minCapitalCoins: g0.price,
+              minCapitalGems: 0,
+              capitalText: affordable ? `Capital usado: ${formatCoins(cost)}` : `Capital mín.: ${formatCoins(g0.price)}`,
+              missingText: affordable ? '' : `falta +${formatCoins(Math.max(0, g0.price - goldBudget))}`,
+              step1: `Compre ${qty}× ${r.marketName} em Coins a ${formatCoins(g0.price)}/un${qty > 1 ? ` (total ${formatCoins(cost)})` : ''}`,
+              step2: `Revenda ${qty}× em Coins por ${formatCoinsExact(sellPrice)}/un → ${formatCoins(net)} líq.`,
+              profitText: `+${formatCoins(profit)} líq. (${formatPct(roiPct)})`,
+              risks,
+            });
+          }
+        }
+
+        // 2b) Flip em Gemas
+        const gGroups = groupPriceLevels(r.gemsLevels);
+        if (gGroups.length >= 2) {
+          const g0 = gGroups[0], g1 = gGroups[1];
+          const cut = itemDef && itemDef.minUndercutAsk
+            ? (g1.price >= itemDef.minUndercutAsk ? (itemDef.undercut || 0) : 0)
+            : (itemDef ? (itemDef.undercut || 0) : 1);
+          const sellPrice = Math.max(2, g1.price - cut);
+          const affordable = gemsBudget >= g0.price;
+          const minLot = Math.min(g0.qty, r.lot || 1);
+          const qty = affordable ? Math.min(g0.qty, Math.floor(gemsBudget / g0.price)) : minLot;
+          const cost = g0.price * qty;
+          const net = netItemGems(sellPrice, qty).net;
+          const profit = net - cost;
+          const roiPct = cost > 0 ? (profit / cost) * 100 : 0;
+          if (profit > 0) {
+            const risks = [];
+            let confidence = 'high';
+            let roiAtAvg7dPct = null;
+            if (r.gemsAvg7d) {
+              const consNet = netItemGems(r.gemsAvg7d, qty).net;
+              roiAtAvg7dPct = cost > 0 ? ((consNet - cost) / cost) * 100 : null;
+              if (sellPrice > r.gemsAvg7d * 1.15) {
+                const overPct = Math.round((sellPrice / r.gemsAvg7d - 1) * 100);
+                risks.push(`revenda +${overPct}% acima da média 7d (${formatGems(r.gemsAvg7d)})`);
+              }
+              if (roiAtAvg7dPct != null && roiAtAvg7dPct <= 0) {
+                risks.push(`na média 7d dá ${formatPct(roiAtAvg7dPct)} (prejuízo)`);
+                confidence = 'low';
+              }
+            }
+            if (r.gemsVol7d != null && r.gemsVol7d < 5) {
+              risks.push(`só ${r.gemsVol7d} vendas Gemas em 7d`);
+              if (r.gemsVol7d < 3) confidence = 'low';
+            }
+            if ((r.totalFreeGemsUnits || 0) - g0.qty < 3) risks.push('poucos anúncios acima do nível 1');
+            if (confidence === 'high' && risks.length > 0) confidence = 'medium';
+
+            opportunities.push({
+              kind: 'flip-gems',
+              id: `flip-gems:${r.id}`,
+              title: `Flip Gemas · ${r.label}`,
+              subtitle: `Snipe no book de Gemas (${g0.qty} un. no nível 1)`,
+              startCurrency: 'gems',
+              buyId: r.id,
+              sellId: r.id,
+              roiPct,
+              baseRoiPct: roiPct,
+              roiAtAvg7dPct,
+              confidence,
+              affordable,
+              minCapitalCoins: 0,
+              minCapitalGems: g0.price,
+              capitalText: affordable ? `Capital usado: ${formatGems(cost)}` : `Capital mín.: ${formatGems(g0.price)}`,
+              missingText: affordable ? '' : `falta +${formatGems(Math.max(0, g0.price - gemsBudget))}`,
+              step1: `Compre ${qty}× ${r.marketName} em Gemas a ${formatGems(g0.price)}/un${qty > 1 ? ` (total ${formatGems(cost)})` : ''}`,
+              step2: `Revenda ${qty}× em Gemas por ${formatGems(sellPrice)}/un → ${formatGems(net)} líq.`,
+              profitText: `+${formatGems(profit)} líq. (${formatPct(roiPct)})`,
+              risks,
+            });
+          }
+        }
+      }
+    }
+
+    const confRank = { high: 2, medium: 1, low: 0 };
+    opportunities.sort((x, y) => (confRank[y.confidence] - confRank[x.confidence]) || (y.roiPct - x.roiPct));
+
+    if (!opportunities.length) {
+      const gapTxt = bestSpread
+        ? `Melhor ciclo: ${formatPct(bestSpread.roiPct)} após taxas 15%+15% (${bestSpread.buyLabel} → ${bestSpread.sellLabel})`
+        : 'Nenhuma rota cobre a comissão de 15%';
+      return {
+        direction: 'trading',
+        verdict: 'NO_TRADE',
+        headline: 'NÃO VALE TRADING AGORA',
+        summary: `${gapTxt} · sem flip lucrativo`,
+        source,
+        gold: goldBudget,
+        gems: gemsBudget,
+        best: null,
+        bestSpread,
+        opportunities: [],
+      };
+    }
+
+    const best = opportunities[0];
+    const isFlip = best.kind.startsWith('flip-');
+    if (best.confidence !== 'low' && best.roiPct >= 3) {
+      return {
+        direction: 'trading',
+        verdict: 'PROFITABLE',
+        headline: isFlip
+          ? `VALE FLIP (${formatPct(best.roiPct)} líq.)`
+          : `VALE TRADING (${formatPct(best.roiPct)} / ciclo)`,
+        summary: `${best.title} · ${best.profitText}${best.missingText ? ` · ${best.missingText}` : ''}`,
+        source,
+        gold: goldBudget,
+        gems: gemsBudget,
+        best,
+        bestSpread,
+        opportunities: opportunities.slice(0, 8),
+      };
+    }
+
+    return {
+      direction: 'trading',
+      verdict: 'RISKY',
+      headline: `TRADING COM RISCO (${formatPct(best.roiPct)} teórico)`,
+      summary: `${best.title} · ${best.risks[0] || 'margem apertada (<3%)'}`,
+      source,
+      gold: goldBudget,
+      gems: gemsBudget,
+      best,
+      bestSpread,
+      opportunities: opportunities.slice(0, 8),
+    };
+  }
+
+  function formatTradingPlanText(plan) {
+    if (!plan) return 'Abra RMT → Itens ou clique Escanear.';
+    const lines = [plan.headline, plan.summary];
+    if (plan.best) {
+      lines.push(`1. ${plan.best.step1}`);
+      lines.push(`2. ${plan.best.step2}`);
+      lines.push(`LUCRO: ${plan.best.profitText} (${plan.best.capitalText})`);
+      if (plan.best.risks && plan.best.risks.length) {
+        lines.push(`RISCOS: ${plan.best.risks.join(' · ')}`);
+      }
+    }
+    return lines.join('\n');
+  }
+
   // Formata o plano de ação em texto claro (usado em logs, testes e fallback)
   function formatActionPlanText(plan) {
     if (!plan) return 'Abra RMT → Itens ou clique Escanear.';
     if (plan.direction === 'gem-to-gold') return formatGemToGoldPlanText(plan);
+    if (plan.direction === 'trading') return formatTradingPlanText(plan);
     const lines = [plan.headline, plan.summary];
     if (plan.verdict === 'BUY_NOW' && plan.primary) {
       lines.push(`1. COMPRAR (${plan.primary.where}): ${plan.primary.buyText}`);
@@ -637,6 +1082,7 @@ const PK_RMT = (() => {
     LIQUID_ITEMS,
     matchLiquidItem,
     parseCompactNum,
+    parseAvg7d,
     netItemGems,
     netItemCoins,
     pickBestFreeOffer,
@@ -646,7 +1092,9 @@ const PK_RMT = (() => {
     buildActionPlan,
     buildGemToGoldInstruction,
     buildGemToGoldActionPlan,
+    buildTradingPlan,
     formatGemToGoldPlanText,
+    formatTradingPlanText,
     formatActionPlanText,
     rankRoutes,
     rankReverseRoutes,

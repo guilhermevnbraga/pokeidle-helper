@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "PokeIdle Helper",
-  "version": "0.8.1",
-  "description": "Captura, reposição de bolas/poções, gerenciador de hunt, radar RMT (Ouro↔Gema), venda otimizada de pedras, analisador de venda de inventário (Gold vs Gema) e analisador de pokébola para o pokeidle.io (só cliques no DOM).",
+  "version": "0.8.2",
+  "description": "Captura, reposição de bolas/poções, gerenciador de hunt, radar RMT (Ouro↔Gema + Trading), venda otimizada de pedras, analisador de venda de inventário (Gold vs Gema) e analisador de pokébola para o pokeidle.io (só cliques no DOM).",
   "permissions": ["alarms"],
   "host_permissions": ["https://pokeidle.io/*"],
   "background": { "service_worker": "background.js" },

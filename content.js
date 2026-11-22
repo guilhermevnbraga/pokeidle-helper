@@ -20,7 +20,7 @@
   CFG.potType = 'auto';
   CFG.fps = globalThis.__pkServer ? 0.2 : 10; // quadros/s só do mapa (0 = sem limite); UI sempre fica em 60 FPS
   CFG.huntFocus = 'balanced'; // balanced | xp | lucro | shiny
-  CFG.rmtDir = 'both'; // both | gold-to-gem | gem-to-gold
+  CFG.rmtDir = 'both'; // both | gold-to-gem | gem-to-gold | trading
   CFG.lite = !!globalThis.__pkServer; // modo servidor: desativa animações CSS/transições/sombras que forçam repintura a 60 Hz
   const CFG_KEY = 'pkbot-cfg', EDITABLE = ['ball', 'ballMin', 'ballBuy', 'potType', 'potMin', 'potBuy', 'fps', 'huntFocus', 'rmtDir', 'lite'];
   const applyFps = () => document.dispatchEvent(new CustomEvent('pk-fps', { detail: +CFG.fps || 0 }));
@@ -34,7 +34,7 @@
   document.addEventListener('pk-stat', e => console.log('[pkbot]', new Date().toLocaleTimeString(), 'cena:', e.detail.fps + ' fps reais (limite ' + (e.detail.limite || 'nenhum') + '),', e.detail.ms + ' ms/s de JS'));
   try { const o = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; EDITABLE.forEach(k => { if (k in o) CFG[k] = o[k]; }); } catch (e) {}
   if (!['balanced', 'xp', 'lucro', 'shiny'].includes(CFG.huntFocus)) CFG.huntFocus = 'balanced';
-  if (!['both', 'gold-to-gem', 'gem-to-gold'].includes(CFG.rmtDir)) CFG.rmtDir = 'both';
+  if (!['both', 'gold-to-gem', 'gem-to-gold', 'trading'].includes(CFG.rmtDir)) CFG.rmtDir = 'both';
   const saveCfg = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(Object.fromEntries(EDITABLE.map(k => [k, CFG[k]])))); } catch (e) {} };
   const BALLS = ['Poke Ball', 'Great Ball', 'Super Ball', 'Ultra Ball'];
   const POTIONS = ['Small Potion', 'Great Potion', 'Ultra Potion', 'Hyper Potion', 'Ultimate Potion', 'Golden Potion'];
@@ -252,9 +252,9 @@
     rmtTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#fd8';
     rmtDirEl = document.createElement('select');
     rmtDirEl.id = 'pkbot-rmt-dir';
-    rmtDirEl.title = 'Sentido do Radar RMT: Ambos (Ouro→Gema e Gema→Ouro), só Ouro→Gema ou só Gema→Ouro';
+    rmtDirEl.title = 'Sentido do Radar RMT: Tudo (Ouro→Gema, Gema→Ouro e Trading), só Ouro→Gema, só Gema→Ouro ou só Trading';
     rmtDirEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
-    [['both', 'Ambos'], ['gold-to-gem', 'Ouro→Gema'], ['gem-to-gold', 'Gema→Ouro']].forEach(([v, t]) => {
+    [['both', 'Tudo'], ['gold-to-gem', 'Ouro→Gema'], ['gem-to-gold', 'Gema→Ouro'], ['trading', 'Trading']].forEach(([v, t]) => {
       const o = document.createElement('option'); o.value = v; o.textContent = t; rmtDirEl.append(o);
     });
     rmtDirEl.value = CFG.rmtDir;
@@ -262,7 +262,7 @@
     rmtBtnEl = document.createElement('button');
     rmtBtnEl.id = 'pkbot-rmt-scan';
     rmtBtnEl.textContent = 'Escanear';
-    rmtBtnEl.title = 'Lê books livres dos 8 itens fungíveis líquidos e mostra as melhores rotas Ouro→Gema e Gema→Ouro';
+    rmtBtnEl.title = 'Lê books livres + média 7d dos 8 itens líquidos e analisa Ouro→Gema, Gema→Ouro e Trading';
     rmtBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#fd83;border:1px solid #fd86;font-size:10px;color:#fff';
     rmtBtnEl.onclick = () => scanRmt();
     rmtHead.append(rmtTit, rmtDirEl, rmtBtnEl);
@@ -1150,6 +1150,7 @@
   let lastRmtGems = -1;
   let rmtRankingOpen = false;
   let rmtReverseRankingOpen = false;
+  let rmtTradeListOpen = false;
   function renderRmt(statusMsg) {
     if (!rmtOutEl || typeof PK_RMT === 'undefined') return;
     if (rmtBtnEl) rmtBtnEl.textContent = rmtState.scanning ? 'Lendo...' : 'Escanear';
@@ -1167,24 +1168,26 @@
     }
     const d = rmtState.last;
     if (!d || !d.routes || !d.routes.length) {
-      rmtOutEl.append(mk('div', 'color:#aab', 'Clique em Escanear para ver as melhores rotas Ouro→Gema e Gema→Ouro (itens fungíveis).'));
+      rmtOutEl.append(mk('div', 'color:#aab', 'Clique em Escanear para ver Ouro→Gema, Gema→Ouro e oportunidades de Trading (itens fungíveis).'));
       return;
     }
     const curGold = gold();
     const curGems = gems();
     lastRmtGold = curGold;
     lastRmtGems = curGems;
-    const showG2Gem = CFG.rmtDir !== 'gem-to-gold';
-    const showGem2G = CFG.rmtDir !== 'gold-to-gem';
+    const showG2Gem = CFG.rmtDir === 'both' || CFG.rmtDir === 'gold-to-gem';
+    const showGem2G = CFG.rmtDir === 'both' || CFG.rmtDir === 'gem-to-gold';
+    const showTrade = CFG.rmtDir === 'both' || CFG.rmtDir === 'trading';
     const plan = showG2Gem ? PK_RMT.buildActionPlan({ routes: d.routes, gold: curGold, source: d.source }) : null;
     const revPlan = showGem2G ? PK_RMT.buildGemToGoldActionPlan({ routes: d.routes, gems: curGems, source: d.source }) : null;
-    if (!plan && !revPlan) {
+    const tradePlan = showTrade ? PK_RMT.buildTradingPlan({ routes: d.routes, gold: curGold, gems: curGems, source: d.source }) : null;
+    if (!plan && !revPlan && !tradePlan) {
       rmtOutEl.append(mk('div', 'color:#aab', 'Sem rotas válidas no último scan.'));
       return;
     }
     const ageMin = Math.max(0, Math.round((Date.now() - d.at) / 60000));
     const tag = d.source === 'book' ? 'books livres' : '~estimado (clique Escanear)';
-    const both = showG2Gem && showGem2G;
+    const both = CFG.rmtDir === 'both';
 
     const renderStepCard = (title, inst, accent, bg) => {
       const box = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
@@ -1332,6 +1335,51 @@
       wrap.append(det);
       rmtOutEl.append(wrap);
     }
+
+    if (tradePlan) {
+      const wrap = mk('div', both ? 'margin-top:5px;padding-top:5px;border-top:1px dashed #c9f5' : '');
+      if (both) wrap.append(mk('div', 'font-weight:bold;color:#d9f;font-size:10px;letter-spacing:.3px;margin-bottom:1px', 'TRADING (arbitragem & flip)'));
+      const headColor = tradePlan.verdict === 'PROFITABLE' ? '#6f9' : (tradePlan.verdict === 'RISKY' ? '#fd8' : '#aab');
+      wrap.append(mk('div', `font-weight:bold;color:${headColor}`, tradePlan.headline));
+      wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? tradePlan.summary : `${tradePlan.summary} · ${tag}, ${ageMin}m`));
+
+      if (tradePlan.best) {
+        const b = tradePlan.best;
+        const accent = tradePlan.verdict === 'PROFITABLE' ? '#6f9' : '#fd8';
+        const bg = tradePlan.verdict === 'PROFITABLE' ? '#16332288' : '#332b1488';
+        const box = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
+        const capTag = b.affordable ? b.capitalText : `${b.capitalText} (${b.missingText})`;
+        box.append(mk('div', `font-weight:bold;color:${accent};margin-bottom:2px`, `${b.subtitle} · ${capTag}`));
+        const row = (lbl, val, valCss = 'color:#fff') => {
+          const line = mk('div', 'margin-top:1px;word-break:break-word');
+          line.append(mk('span', 'color:#aab;font-weight:bold', lbl + ' '), mk('span', valCss, val));
+          return line;
+        };
+        box.append(row('1:', b.step1, 'color:#fff'));
+        box.append(row('2:', b.step2, 'color:#bfa'));
+        box.append(row('LUCRO:', b.profitText + (b.roiAtAvg7dPct != null ? ` · média 7d: ${b.roiAtAvg7dPct >= 0 ? '+' : ''}${b.roiAtAvg7dPct.toFixed(1).replace('.', ',')}%` : ''), `color:${accent};font-weight:bold`));
+        if (b.risks && b.risks.length) {
+          box.append(mk('div', 'margin-top:2px;color:#fc9;font-size:9px', '⚠ ' + b.risks.join(' · ')));
+        }
+        wrap.append(box);
+      }
+
+      if (tradePlan.opportunities && tradePlan.opportunities.length > 1) {
+        const det = document.createElement('details');
+        det.open = rmtTradeListOpen;
+        det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
+        det.ontoggle = () => { rmtTradeListOpen = det.open; };
+        det.append(mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Outras rotas de trading (${tradePlan.opportunities.length})`));
+        for (const op of tradePlan.opportunities) {
+          const badge = op.confidence === 'high' ? '●' : (op.confidence === 'medium' ? '◐' : '○');
+          const c = op.confidence === 'low' ? '#9aa' : '#dfd';
+          det.append(mk('div', `color:${c};font-size:9.5px;margin-top:1px`,
+            `${badge} ${op.title}: ${op.profitText}${op.risks.length ? ' !' + op.risks[0] : ''}`));
+        }
+        wrap.append(det);
+      }
+      rmtOutEl.append(wrap);
+    }
   }
 
   // Leitura passiva (0 cliques): só lê .cmi-linha já visíveis quando o usuário abre RMT → Itens
@@ -1399,6 +1447,12 @@
     return out;
   }
 
+  function parseRmtItemMedia(painel) {
+    if (!painel || typeof PK_RMT === 'undefined' || !PK_RMT.parseAvg7d) return { avg7d: null, vol7d: null };
+    const mediaText = ($('.cmp-media', painel) || {}).textContent || '';
+    return PK_RMT.parseAvg7d(mediaText);
+  }
+
   async function waitForItemBook(wantGems, prevSig, maxMs = 2400) {
     const t0 = Date.now();
     const wantRe = wantGems ? /gema|gem/i : /coins/i;
@@ -1410,15 +1464,16 @@
       if (painel) {
         const opOn = $$('button.cmp-op.on', painel).some(b => wantRe.test(b.textContent));
         const list = parseRmtItemBook(painel);
+        const media = parseRmtItemMedia(painel);
         const sig = sigOf(list);
-        if (opOn && list.length && (!prevSig || sig !== prevSig || Date.now() - t0 >= 850)) return list;
-        if (opOn && list.length === 0 && !/carregando|loading/i.test(painel.textContent || '') && Date.now() - t0 >= 900) return [];
+        if (opOn && list.length && (!prevSig || sig !== prevSig || Date.now() - t0 >= 850)) return { list, ...media };
+        if (opOn && list.length === 0 && !/carregando|loading/i.test(painel.textContent || '') && Date.now() - t0 >= 900) return { list: [], ...media };
       }
       await sleep(200);
     }
     const m = $('.modal-caixa[data-modal="community"]');
     const painel = m && $('.cmi-painel', $('#modal-corpo', m) || m);
-    return parseRmtItemBook(painel);
+    return { list: parseRmtItemBook(painel), ...parseRmtItemMedia(painel) };
   }
 
   async function scanRmt({ nested = false } = {}) {
@@ -1481,26 +1536,26 @@
         const gemsFirst = !!(btnG && btnG.classList.contains('on'));
 
         if (gemsFirst) {
-          const gList = await waitForItemBook(true, beforeItemSig);
-          gemasOffer = PK_RMT.pickBestFreeOffer(gList, 2);
-          const gSig = gList.slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join('|');
+          const gRes = await waitForItemBook(true, beforeItemSig);
+          gemasOffer = Object.assign(PK_RMT.pickBestFreeOffer(gRes.list, 2), { avg7d: gRes.avg7d, vol7d: gRes.vol7d });
+          const gSig = gRes.list.slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join('|');
           const bC2 = $$('button.cmp-op', $('.cmi-painel', getCorpo() || document) || document).find(b => /coins/i.test(b.textContent));
           if (bC2) {
             bC2.click();
-            const cList = await waitForItemBook(false, gSig);
-            coinsOffer = PK_RMT.pickBestFreeOffer(cList, item.minSanityCoins);
+            const cRes = await waitForItemBook(false, gSig);
+            coinsOffer = Object.assign(PK_RMT.pickBestFreeOffer(cRes.list, item.minSanityCoins), { avg7d: cRes.avg7d, vol7d: cRes.vol7d });
           }
         } else {
           if (btnC) {
             if (!btnC.classList.contains('on')) btnC.click();
-            const cList = await waitForItemBook(false, beforeItemSig);
-            coinsOffer = PK_RMT.pickBestFreeOffer(cList, item.minSanityCoins);
-            const cSig = cList.slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join('|');
+            const cRes = await waitForItemBook(false, beforeItemSig);
+            coinsOffer = Object.assign(PK_RMT.pickBestFreeOffer(cRes.list, item.minSanityCoins), { avg7d: cRes.avg7d, vol7d: cRes.vol7d });
+            const cSig = cRes.list.slice(0, 3).map(o => `${o.price}:${o.qty}:${o.held ? 1 : 0}`).join('|');
             const bG2 = $$('button.cmp-op', $('.cmi-painel', getCorpo() || document) || document).find(b => /gema|gem/i.test(b.textContent));
             if (bG2) {
               bG2.click();
-              const gList = await waitForItemBook(true, cSig);
-              gemasOffer = PK_RMT.pickBestFreeOffer(gList, 2);
+              const gRes = await waitForItemBook(true, cSig);
+              gemasOffer = Object.assign(PK_RMT.pickBestFreeOffer(gRes.list, 2), { avg7d: gRes.avg7d, vol7d: gRes.vol7d });
             }
           }
         }
@@ -1514,9 +1569,12 @@
       if (ranked.length) {
         const plan = PK_RMT.buildActionPlan({ routes: ranked, gold: curGold, source: 'book' });
         const revPlan = PK_RMT.buildGemToGoldActionPlan({ routes: ranked, gems: curGems, source: 'book' });
+        const tradePlan = PK_RMT.buildTradingPlan({ routes: ranked, gold: curGold, gems: curGems, source: 'book' });
         const revTop = revPlan?.ranked?.[0];
-        const revTxt = revTop ? ` | Gema→Ouro: ${revTop.label} (${PK_RMT.formatCoins(revTop.netCoinsPerGem)}/G líq.)` : '';
-        log('RMT:', plan.headline, '|', plan.primary?.buyText || ranked[0].label, revTxt);
+        const parts = ['RMT:', plan.headline, '|', plan.primary?.buyText || ranked[0].label];
+        if (revTop) parts.push('| Gema→Ouro:', `${revTop.label} (${PK_RMT.formatCoins(revTop.netCoinsPerGem)}/G líq.)`);
+        if (tradePlan) parts.push('| Trading:', tradePlan.headline);
+        log(...parts);
       } else {
         log('RMT: nenhuma rota válida lida');
       }
@@ -3302,7 +3360,10 @@
   const rmtReversePlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
     ? PK_RMT.buildGemToGoldActionPlan({ routes: rmtState.last.routes, gems: gems(), source: rmtState.last.source })
     : null;
-  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, rmtReversePlan, scanRmt, stoneState, planSellStones, sellAllStones, sellState, loadSellInventory, analyzeSelectedSale, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, gold, gems, scanHunts, switchTo, closeModal, applyLite };
+  const rmtTradingPlan = () => (rmtState.last && typeof PK_RMT !== 'undefined')
+    ? PK_RMT.buildTradingPlan({ routes: rmtState.last.routes, gold: gold(), gems: gems(), source: rmtState.last.source })
+    : null;
+  window.__pkBot = { CFG, st, log, buy, checkSupplies, captureTick, huntState, analyzeHunts, runHuntCheck, rmtState, rmtPlan, rmtReversePlan, rmtTradingPlan, scanRmt, stoneState, planSellStones, sellAllStones, sellState, loadSellInventory, analyzeSelectedSale, ballState, analyzeCurrentHuntBalls, applyRecommendedBall, xpEvents, potChips, ballQty, gold, gems, scanHunts, switchTo, closeModal, applyLite };
   const boot = () => {
     // o painel continua visível no ULTRA Economia (que esconde o resto do jogo)
     const css = document.createElement('style'); css.textContent = 'html.modo-ultra body #pkbot-panel:not(.pk-oculto){display:flex!important;visibility:visible!important}'; document.head.append(css);

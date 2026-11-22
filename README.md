@@ -41,15 +41,15 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
   - **Raro/Shiny:** maximiza a taxa de captura (e chances de Forte/P5/Shiny) mantendo a hunt sustentável.
 - **Aplicação automática na reposição:** toda vez que o analisador roda (ou ao clicar em **`Usar`**), atualiza automaticamente a Pokébola da reposição (`CFG.ball`) com **mínimo `10`** e **reposição `100`**, sobrescrevendo os valores anteriores.
 
-### Radar RMT (Ouro ↔ Gema)
+### Radar RMT (Ouro ↔ Gema + Trading)
 
-- Funciona **100% sob demanda ou passivamente** (não varre em segundo plano, não compra nem anuncia nada e não sai do modo ULTRA sozinho), cobrindo os **dois sentidos** na mesma varredura: **Ouro → Gema** (menor Coins/Gema) e **Gema → Ouro** (maior Coins líquido por Gema).
-- **Seletor de sentido:** escolha **`Ambos`** (padrão), **`Ouro→Gema`** ou **`Gema→Ouro`** no cabeçalho da seção.
+- Funciona **100% sob demanda ou passivamente** (não varre em segundo plano, não compra nem anuncia nada e não sai do modo ULTRA sozinho), cobrindo **Ouro → Gema**, **Gema → Ouro** e **Trading (arbitragem & flip)** na mesma varredura.
+- **Seletor de modo:** escolha **`Tudo`** (padrão), **`Ouro→Gema`**, **`Gema→Ouro`** ou **`Trading`** no cabeçalho da seção.
 - **Passivo:** ao abrir `RMT → Itens`, lê os preços da lista na hora e calcula o plano de ação apenas para itens com liquidez real comprovada (ignora Pedras/Stones, que não têm demanda orgânica em Gemas).
-- **Botão `Escanear`:** percorre suavemente os books livres (Coins e Gemas) dos **8 itens fungíveis líquidos** (Fragmentos de Bicicleta, Chave, Shiny, Z-Move, MEGA, MEGA Shiny, AoE TM Piece e Bronze Boss Token — sem Pokémon, pois ativos únicos dependem de espécie, IV, meta e liquidez), descarta anúncios `Retido` e preços trolls, aplica a comissão oficial (`15%` com arredondamento para cima tanto em Gemas quanto em Coins) e entrega **instruções prontas sem precisar analisar o mercado**:
+- **Botão `Escanear`:** percorre suavemente os books livres + **média 7d e volume 7d** (Coins e Gemas) dos **8 itens fungíveis líquidos** (Fragmentos de Bicicleta, Chave, Shiny, Z-Move, MEGA, MEGA Shiny, AoE TM Piece e Bronze Boss Token — sem Pokémon, pois ativos únicos dependem de espécie, IV, meta e liquidez), descarta anúncios `Retido` e preços trolls, aplica a comissão oficial (`15%` com arredondamento para cima tanto em Gemas quanto em Coins) e entrega **instruções prontas sem precisar analisar o mercado**:
   - **Veredito automático (Ouro → Gema e Gema → Ouro):** lê seus saldos de Coins (`#tr-gold`) e Gemas (`#tr-gemas`) no HUD e diz se compensa **COMPRAR AGORA** ou **JUNTAR** para a próxima meta eficiente (mostrando quantos % a mais rende e quanto falta juntar, sempre com a **META ÓTIMA** em destaque antes da **1ª ENTRADA**).
-  - **Passo a passo (`ONDE` / `COMPRAR` / `VENDER`):** indica quantas unidades comprar no book real (respeitando degraus até +4%), por qual preço anunciar (undercut conservador em Gemas ou 1 Coin abaixo do menor livre em Coins) e quanto você recebe líquido.
-  - **Alternativa imediata:** quando compensa juntar, ainda mostra a melhor jogada real com o saldo atual (evitando armadilhas como taxa de 25% em lotes pequenos de Gemas) + rankings completos dobráveis dos 8 itens para cada sentido.
+  - **Detector de Trading (`VALE TRADING` / `VALE FLIP` / `TRADING COM RISCO` / `NÃO VALE TRADING AGORA`):** avalia tanto **arbitragem cruzada** (`Ouro → Gema → Ouro` e `Gema → Ouro → Gema`, cobrindo as duas comissões de `15%`) quanto **flip/snipe na mesma moeda** (`Coins → Coins` e `Gema → Gema`, quando o nível 1 do book está muito abaixo do nível 2). Compara o preço de revenda contra a **média 7d e volume 7d** para alertar quando o lucro teórico depende de um book inflado/raso.
+  - **Passo a passo (`ONDE` / `COMPRAR` / `VENDER`):** indica quantas unidades comprar no book real (respeitando degraus até +4%), por qual preço anunciar (undercut conservador em Gemas ou 1 Coin abaixo do menor livre em Coins) e quanto você recebe líquido + rankings dobráveis dos 8 itens.
 
 ### Venda de Pedras (RMT — Coins)
 
@@ -192,7 +192,7 @@ Os [Termos do Pokeidle](https://pokeidle.io/terms) (seção 5, "Automação") pe
 - `fps.js`: limitador de FPS e espelhamento de timers em Worker (`world: MAIN`).
 - `types.js`: tabela de tipos e cálculo de vantagem.
 - `hunt.js`: lógica pura do gerenciador de hunt.
-- `rmt.js`: lógica pura do Radar RMT (Ouro ↔ Gema).
+- `rmt.js`: lógica pura do Radar RMT (Ouro ↔ Gema e detector de Trading).
 - `ball.js`: lógica pura do Analisador Otimizado de Pokébola.
 - `content.js`: interface do painel e interação com o DOM.
 - `background.js`: service worker (alarme de 30 s e `autoDiscardable: false`).

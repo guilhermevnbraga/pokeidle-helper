@@ -382,3 +382,109 @@ test('buildGemToGoldActionPlan decide SAVE_ONLY com 0 Gemas e mostra melhor rota
   const txt = PK_RMT.formatActionPlanText(plan);
   assert.ok(txt.indexOf('META ÓTIMA') < txt.indexOf('1ª ENTRADA'));
 });
+
+test('parseAvg7d lê média 7d e volume em PT e EN preservando 0 vendas', () => {
+  assert.deepEqual(PK_RMT.parseAvg7d('Média 7d: 702.500.000/un · 18 un. vendidas'), { avg7d: 702500000, vol7d: 18 });
+  assert.deepEqual(PK_RMT.parseAvg7d('7d avg: 145/ea · 0 units sold'), { avg7d: 145, vol7d: 0 });
+  assert.deepEqual(PK_RMT.parseAvg7d(''), { avg7d: null, vol7d: null });
+});
+
+test('buildTradingPlan detecta arbitragem cruzada lucrativa confirmada pela média 7d (PROFITABLE)', () => {
+  const bike = PK_RMT.matchLiquidItem('Fragmento de Bicicleta');
+  const mega = PK_RMT.matchLiquidItem('Fragmento de MEGA Stone');
+
+  // Bicicleta: compra 680M -> vende 148G (125G líq.) => 5,44M/G
+  const rBike = PK_RMT.evaluateItemRoute({
+    item: bike,
+    coinsOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 680e6, qty: 20, held: false }], bike.minSanityCoins), { avg7d: 690e6, vol7d: 25 }),
+    gemasOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 149, qty: 20, held: false }], 2), { avg7d: 148, vol7d: 30 }),
+    gold: 1e9,
+    gems: 0,
+  });
+  // MEGA Stone: compra 115G -> vende 819.999.999 (697M líq.) => 6,06M/G (+11,4% ciclo!), média 7d = 810M (ainda +10%!)
+  const rMega = PK_RMT.evaluateItemRoute({
+    item: mega,
+    coinsOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 820e6, qty: 20, held: false }], mega.minSanityCoins), { avg7d: 810e6, vol7d: 15 }),
+    gemasOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 115, qty: 20, held: false }], 2), { avg7d: 115, vol7d: 20 }),
+    gold: 1e9,
+    gems: 0,
+  });
+
+  const trade = PK_RMT.buildTradingPlan({ routes: [rBike, rMega], gold: 1e9, gems: 0, source: 'book' });
+  assert.equal(trade.verdict, 'PROFITABLE');
+  assert.equal(trade.best.kind, 'cross');
+  assert.equal(trade.best.confidence, 'high');
+  assert.equal(trade.best.affordable, true);
+  assert.ok(trade.best.roiPct > 10);
+  assert.ok(trade.best.roiAtAvg7dPct > 8);
+  assert.match(trade.headline, /VALE TRADING/);
+  assert.match(PK_RMT.formatActionPlanText(trade), /LUCRO:/);
+});
+
+test('buildTradingPlan rebaixa para RISKY quando book de venda está inflado acima da média 7d (anti-armadilha)', () => {
+  const bike = PK_RMT.matchLiquidItem('Fragmento de Bicicleta');
+  const mega = PK_RMT.matchLiquidItem('Fragmento de MEGA Stone');
+
+  const rBike = PK_RMT.evaluateItemRoute({
+    item: bike,
+    coinsOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 693.5e6, qty: 20, held: false }], bike.minSanityCoins), { avg7d: 700e6, vol7d: 25 }),
+    gemasOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 145, qty: 20, held: false }], 2), { avg7d: 144, vol7d: 25 }),
+    gold: 1e9,
+  });
+  // Book Coins de MEGA Stone inflado a 810M, mas média 7d real é 620M (daria prejuízo de -19%!)
+  const rMega = PK_RMT.evaluateItemRoute({
+    item: mega,
+    coinsOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 810e6, qty: 2, held: false }], mega.minSanityCoins), { avg7d: 620e6, vol7d: 10 }),
+    gemasOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 115, qty: 20, held: false }], 2), { avg7d: 115, vol7d: 15 }),
+    gold: 1e9,
+  });
+
+  const trade = PK_RMT.buildTradingPlan({ routes: [rBike, rMega], gold: 1e9, gems: 0, source: 'book' });
+  assert.equal(trade.verdict, 'RISKY');
+  assert.equal(trade.best.confidence, 'low');
+  assert.ok(trade.best.roiAtAvg7dPct < 0);
+  assert.ok(trade.best.risks.some(w => /acima da média 7d/.test(w)));
+});
+
+test('buildTradingPlan detecta flip/snipe lucrativo no mesmo book de Coins quando nível 1 está muito abaixo do nível 2', () => {
+  const bike = PK_RMT.matchLiquidItem('Fragmento de Bicicleta');
+  const rBike = PK_RMT.evaluateItemRoute({
+    item: bike,
+    coinsOffer: Object.assign(PK_RMT.pickBestFreeOffer([
+      { price: 500e6, qty: 2, held: false, seller: 'snipe' },
+      { price: 700e6, qty: 10, held: false, seller: 'norm1' },
+    ], bike.minSanityCoins), { avg7d: 695e6, vol7d: 22 }),
+    gemasOffer: Object.assign(PK_RMT.pickBestFreeOffer([{ price: 150, qty: 15, held: false }], 2), { avg7d: 150, vol7d: 20 }),
+    gold: 1.2e9,
+  });
+
+  const trade = PK_RMT.buildTradingPlan({ routes: [rBike], gold: 1.2e9, gems: 0, source: 'book' });
+  assert.equal(trade.verdict, 'PROFITABLE');
+  assert.equal(trade.best.kind, 'flip-coins');
+  assert.equal(trade.best.confidence, 'high');
+  assert.ok(trade.best.roiPct > 18); // 2x 500M = 1B -> revende 699.999.999 -> líq 1.19B (+19%)
+  assert.match(trade.headline, /VALE FLIP/);
+});
+
+test('buildTradingPlan retorna NO_TRADE quando nenhuma rota cobre as comissões de 15%', () => {
+  const bike = PK_RMT.matchLiquidItem('Fragmento de Bicicleta');
+  const shiny = PK_RMT.matchLiquidItem('Fragmento de Shiny Stone');
+
+  // Ambos perto de 5,0M/G bruto: após 15%+15% qualquer ciclo perde ~28%
+  const rBike = PK_RMT.evaluateItemRoute({
+    item: bike,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 750e6, qty: 10, held: false }], bike.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 150, qty: 10, held: false }], 2),
+  });
+  const rShiny = PK_RMT.evaluateItemRoute({
+    item: shiny,
+    coinsOffer: PK_RMT.pickBestFreeOffer([{ price: 450e6, qty: 10, held: false }], shiny.minSanityCoins),
+    gemasOffer: PK_RMT.pickBestFreeOffer([{ price: 90, qty: 10, held: false }], 2),
+  });
+
+  const trade = PK_RMT.buildTradingPlan({ routes: [rBike, rShiny], gold: 1e9, gems: 500, source: 'book' });
+  assert.equal(trade.verdict, 'NO_TRADE');
+  assert.equal(trade.best, null);
+  assert.ok(trade.bestSpread && trade.bestSpread.roiPct < 0);
+  assert.match(trade.headline, /NÃO VALE TRADING AGORA/);
+});

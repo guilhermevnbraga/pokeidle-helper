@@ -1,14 +1,14 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-22. Versão da extensão: `0.8.1`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 62 passando (`types.js` + `hunt.js` + `rmt.js` + `stones.js` + `sell.js` + `ball.js`). Histórico em `docs/archive/` (só Grep).
+Atualizado: 2026-11-22. Versão da extensão: `0.8.2`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 67 passando (`types.js` + `hunt.js` + `rmt.js` + `stones.js` + `sell.js` + `ball.js`). Histórico em `docs/archive/` (só Grep).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
 Vivem no `AGENTS.md` (não repetir aqui). Respeitar Termos §5 do PokeIdle (só cliques no DOM, sem API direta, sem mexer em login/anti-robô).
 
 ## Estado atual (2026-11-22)
-- Extensão MV3 (`0.8.1`) com 4 modos (Captura, Repor bolas/poções, Captura eterna, **Gerenciador de hunt v3** automático + `Verificar`) + **Analisador de Pokébola** (`ball.js`) + **Radar RMT bidirecional** (`rmt.js`) + **Venda de Pedras** (`stones.js`) + **Analisador de Venda de Inventário** (`sell.js`).
-- **Radar RMT bidirecional Ouro↔Gema (`rmt.js` + `content.js`, `v0.8.1`):** além de **Ouro → Gema** (menor Coins/Gema), agora calcula e exibe **Gema → Ouro** (maior Coins líq./Gema, compra no book de Gemas com teto +4%, vende 1 Coin abaixo do menor livre com 15% `Math.ceil`, saldo via `#tr-gemas`, seletor `Ambos | Ouro→Gema | Gema→Ouro` + retrocompatibilidade com cache antigo). Validado em Node (62/62) e ao vivo no Chrome (scan real 8/8 itens, 204G → Frag. MEGA Stone 115G→688,5M líq., 6,0M/G).
+- Extensão MV3 (`0.8.2`) com 4 modos (Captura, Repor bolas/poções, Captura eterna, **Gerenciador de hunt v3** automático + `Verificar`) + **Analisador de Pokébola** (`ball.js`) + **Radar RMT (Ouro↔Gema + Trading)** (`rmt.js`) + **Venda de Pedras** (`stones.js`) + **Analisador de Venda de Inventário** (`sell.js`).
+- **Radar RMT bidirecional + Trading (`rmt.js` + `content.js`, `v0.8.2`):** calcula **Ouro → Gema**, **Gema → Ouro** e **Trading** (arbitragem cruzada `Ouro→Gema→Ouro`/`Gema→Ouro→Gema` e flip/snipe na mesma moeda) na mesma varredura; lê média e volume 7d (`.cmp-media`) dos 8 itens para separar trading lucrativo real (`PROFITABLE`) de book inflado/raso (`RISKY`, ex.: Frag. MEGA Stone +52% acima da média 7d → `-30,6%` na média 7d) e `NO_TRADE`. Seletor `Tudo | Ouro→Gema | Gema→Ouro | Trading`. Validado em Node (67/67) e ao vivo no Chrome (scan real 8/8 itens com `.cmp-media`).
 - **Analisador de Venda de Inventário — Gold vs Gema (`sell.js` + `content.js`, `71212f7`, `v0.8.0`):** seção `Analisador Venda (Gold×Gema)` (`Carregar` + seletor de itens RMT e Pokémons Depot/Equipe + qtd simulada + `Analisar`). Validado em Node e ao vivo no Chrome (Bronze Boss Token ×14 → Gold +35%; Charizard Nv 548 → Gemas +47%); **NÃO validado ao vivo** com Pokémon Shiny/P5 ou grade `#cm-pks` populada do Depot.
 - **Gerenciador de hunt v3 calibrado + desempate secundário (`hunt.js` + `content.js`, `e7c3677`, `v0.7.8`):** física calibrada (`1.0`/`2.9s`), XP puro + `TIE_BAND = 3%` com desempate secundário. Validado em Node; **NÃO validado ao vivo no Chrome**.
 - **Venda de Pedras (`8656492`, `v0.7.7`), Cadeia `Hunt → RMT → Pokébola` (`fa7365c`, `v0.7.6`), Radar RMT fungíveis (`f56c5c8`, `v0.7.5`) e FPS `0.2`/Modo servidor (`7633b2b`, `v0.7.4`):** validados em Node e ao vivo.
@@ -21,7 +21,7 @@ Vivem no `AGENTS.md` (não repetir aqui). Respeitar Termos §5 do PokeIdle (só 
 4. Validar **Analisador de Pokébola** em hunt mista/Shiny+Lure e pendências via `/study-game` (`captureRe` com captura real, compra real no `ultraSupplyTick`, seletores EN).
 
 ## Pendente do usuário
-- Recarregar a extensão (`v0.8.1`) em `chrome://extensions` (e `F5` em `pokeidle.io/app`) nos perfis secundários do Chrome e atualizar o container no CT 104 se quiser a `v0.8.1` lá.
+- Recarregar a extensão (`v0.8.2`) em `chrome://extensions` (e `F5` em `pokeidle.io/app`) nos perfis secundários do Chrome e atualizar o container no CT 104 se quiser a `v0.8.2` lá.
 - No CT 104 (`https://192.168.0.104:3001`), conferir `FPS = 0.2` (ou `ULTRA Economia`), minimizar na barra inferior e dar **Shutdown** no CT 104 pelo Proxmox quando for jogar no PC local.
 
 ## Armadilhas
