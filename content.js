@@ -11,7 +11,7 @@
     huntEvalMs: 10 * 60000,  // reavalia a cada 10 min (a leitura do Hunt Analyser é instantânea)
     huntRetryMs: 2 * 60000,  // se não houve brecha de 3s fora de combate, tenta de novo mais cedo
     combatWaitMs: 45000,     // tempo máximo esperando a brecha de 3s sem dano p/ ir ao Centro Pokémon
-    huntGain: 1.10,          // só troca de hunt se a melhor render >10% mais que a atual
+    huntGain: 1.06,          // só troca de hunt se a melhor render >6% mais que a atual (acima da banda de empate de 3%)
     minRatio: 0.5,           // descarta hunts em que (ataque amplificado / dano recebido amplificado) < 0.5
     captureRe: /captur(ou|ad[oa]|a!|ed)|caught|gotcha/i,
     dry: false,
@@ -703,9 +703,9 @@
           capturing: !!autoCtx?.capturing,
           curSlug,
           curName,
-          maxCandidates: 16,
+          maxCandidates: 24,
         })
-      : Object.keys(all).slice(0, 20);
+      : Object.keys(all).slice(0, 24);
     const candSet = new Set(candSlugs);
 
     for (const rb of (regions.length ? regions : [null])) {
@@ -713,6 +713,7 @@
       const regSlugs = (byRegion.get(regId) || []).filter(s => candSet.has(s));
       if (!regSlugs.length) continue;
       if (rb) { rb.click(); await sleep(380); }
+      if (regId === 'outland') { selectBestOutlandTier(); await sleep(150); }
       for (const slug of regSlugs) {
         const row = $(`#mapa-lista [data-slug="${CSS.escape(slug)}"]`);
         if (!row) continue;
@@ -920,9 +921,10 @@
     const fmt = PK_HUNT.formatCompact;
     const bs = best.sim || {};
     const badge = best.isOutland ? ' [OUT]' : '';
+    const tieTag = dec.tieBroken ? ' · desempate' : '';
     const potTxt = (bs.potionsH || 0) >= 1 ? ` · ${Math.round(bs.potionsH)}pot` : '';
     huntOutEl.append(mk('div', 'color:#8f9',
-      `${st.hunt ? 'Auto' : 'Melhor'}: ${best.displayName || best.nome} Nv${best.level || '?'}${badge}`));
+      `${st.hunt ? 'Auto' : 'Melhor'}: ${best.displayName || best.nome} Nv${best.level || '?'}${badge}${tieTag}`));
     huntOutEl.append(mk('div', 'color:#bcd;font-size:9px',
       `${fmt(bs.xpH)} xp/h · ${fmt(bs.netGoldH)} líq/h · ${bs.kph || 0}/h${potTxt}`));
     if (top.length > 1) {
@@ -994,7 +996,8 @@
       const fmt = PK_HUNT.formatCompact;
       if (best) {
         const bs = best.sim || {}, cs = current?.sim || {};
-        log(`hunt[${CFG.huntFocus}] ${player.name} Nv${player.level} | melhor: ${best.displayName || best.nome} Nv${best.level} (${fmt(bs.xpH)} xp/h, ${fmt(bs.netGoldH)} líq/h, ${bs.kph}/h, ${Math.round(bs.potionsH || 0)} pot/h)`
+        const tieNote = dec.tieBroken ? ' [desempate]' : '';
+        log(`hunt[${CFG.huntFocus}] ${player.name} Nv${player.level} | melhor: ${best.displayName || best.nome} Nv${best.level}${tieNote} (${fmt(bs.xpH)} xp/h, ${fmt(bs.netGoldH)} líq/h, ${bs.kph}/h, ${Math.round(bs.potionsH || 0)} pot/h)`
           + ` | atual: ${onCenter ? 'Centro' : (cur || '?')}${current ? ` (${fmt(cs.xpH)} xp/h, ${fmt(cs.netGoldH)} líq/h, ${cs.kph}/h)` : ''}`);
       }
       renderHunt();

@@ -458,3 +458,171 @@ test('scoreSimulatedPool (balanced) protege contra hunts deficitárias e premia 
   assert.equal(scored[0].slug, 'lucrativa');
   assert.ok(scored[0].score > scored[1].score * 1.5);
 });
+
+test('pickBestHunt v3 (regressão SuperShaolas Nv 541): Scizor 470 vence em XP sobre Sunkern 200; Furious Scizor vence em Equilibrado/Lucro', () => {
+  const scale = 14064 / 10920;
+  const char541 = {
+    ...CHARIZARD_420,
+    level: 541,
+    hpMax: 14064,
+    atk: Math.round(CHARIZARD_420.atk * scale),
+    def: Math.round(CHARIZARD_420.def * scale),
+    spAtk: Math.round(CHARIZARD_420.spAtk * scale),
+    spDef: Math.round(CHARIZARD_420.spDef * scale),
+  };
+  const potion = { name: 'Golden Potion', heal: 7032, price: 2500 };
+  const ball = { name: 'Ultra Ball', price: 130, active: true };
+  const hunts541 = {
+    furious_scizor: {
+      nome: 'furious scizor', regiao: 'outland', isOutland: true, level: 150, types: ['BUG', 'STEEL'],
+      baseStats: [70, 130, 100, 55, 80, 65], baseNpcPrice: 60000, captureLevel: 100, canShiny: false, stoneProbSum: 0.01,
+      balls: [{ name: 'Ultra Ball', catchChance: 0.0094 }],
+      xp: 20282 * PK_HUNT.ANALYSER_KPH, gold: 850 * PK_HUNT.ANALYSER_KPH,
+    },
+    sunkern: {
+      nome: 'sunkern', regiao: 'johto', level: 200, types: ['GRASS'],
+      baseStats: [30, 30, 30, 30, 30, 30], baseNpcPrice: 14261, captureLevel: 100, canShiny: true, stoneProbSum: 0.002,
+      balls: [{ name: 'Ultra Ball', catchChance: 0.0118 }],
+      xp: 29042 * PK_HUNT.ANALYSER_KPH, gold: 1011 * PK_HUNT.ANALYSER_KPH,
+    },
+    pineco: {
+      nome: 'pineco', regiao: 'johto', level: 230, types: ['BUG'],
+      baseStats: [50, 65, 90, 35, 35, 15], baseNpcPrice: 15000, captureLevel: 100, canShiny: true, stoneProbSum: 0.002,
+      balls: [{ name: 'Ultra Ball', catchChance: 0.0118 }],
+      xp: PK_HUNT.xpPerKillForLevel(230) * 1.502 * PK_HUNT.ANALYSER_KPH,
+      gold: PK_HUNT.goldPerKillForLevel(230) * PK_HUNT.ANALYSER_KPH,
+    },
+    yanma: {
+      nome: 'yanma', regiao: 'johto', level: 350, types: ['BUG', 'FLYING'],
+      baseStats: [65, 65, 45, 75, 45, 95], baseNpcPrice: 28000, captureLevel: 100, canShiny: true, stoneProbSum: 0.004,
+      balls: [{ name: 'Ultra Ball', catchChance: 0.0094 }],
+      xp: PK_HUNT.xpPerKillForLevel(350) * 1.502 * PK_HUNT.ANALYSER_KPH,
+      gold: PK_HUNT.goldPerKillForLevel(350) * PK_HUNT.ANALYSER_KPH,
+    },
+    scizor_470: {
+      nome: 'scizor', regiao: 'johto', level: 470, types: ['BUG', 'STEEL'],
+      baseStats: [70, 130, 100, 55, 80, 65], baseNpcPrice: 60000, captureLevel: 100, canShiny: true, stoneProbSum: 0.01,
+      balls: [{ name: 'Ultra Ball', catchChance: 0.0094 }],
+      xp: 84501 * PK_HUNT.ANALYSER_KPH, gold: 1689 * PK_HUNT.ANALYSER_KPH,
+    },
+  };
+
+  const baseArgs = {
+    hunts: hunts541,
+    player: char541,
+    potion,
+    ball,
+    outlandMult: 1.1,
+    capturing: true,
+    curSlug: 'sunkern',
+    curName: 'Sunkern · nível 200',
+    inHunt: true,
+    huntGain: 1.06,
+  };
+
+  // Preset XP: Scizor Nv 470 vence Sunkern Nv 200 (real: 35,8M vs 30,1M XP/h) e manda sair do Sunkern
+  const xp = PK_HUNT.pickBestHunt({ ...baseArgs, focus: 'xp' });
+  assert.equal(xp.action, 'switch');
+  assert.equal(xp.best.slug, 'scizor_470');
+  assert.ok(xp.best.sim.xpH > 35_000_000, `esperava Scizor 470 > 35M XP/h, veio ${xp.best.sim.xpH}`);
+  assert.ok(xp.best.sim.kph >= 400 && xp.best.sim.kph <= 460, `esperava Scizor 470 ~423 kph, veio ${xp.best.sim.kph}`);
+
+  // Preset Equilibrado: Furious Scizor vence (Outland + alto lucro + abates/h + bom XP)
+  const bal = PK_HUNT.pickBestHunt({ ...baseArgs, focus: 'balanced' });
+  assert.equal(bal.best.slug, 'furious_scizor');
+  assert.ok(bal.best.sim.kph >= 1100, `esperava Furious Scizor >1100 kph, veio ${bal.best.sim.kph}`);
+
+  // Preset Lucro: Furious Scizor vence
+  const lucro = PK_HUNT.pickBestHunt({ ...baseArgs, focus: 'lucro' });
+  assert.equal(lucro.best.slug, 'furious_scizor');
+
+  // Preset Shiny: exclui Outland e escolhe Sunkern
+  const shiny = PK_HUNT.pickBestHunt({ ...baseArgs, focus: 'shiny' });
+  assert.equal(shiny.best.slug, 'sunkern');
+  assert.equal(shiny.best.sim.canShiny, true);
+});
+
+test('rankScoredPool e pickBestHunt desempatam hunts no topo do objetivo por critério secundário (lucro/shiny/outland)', () => {
+  const mkItem = (slug, sim) => ({ slug, nome: slug, m: { off: 2, def: 0.5, ratio: 4 }, sim });
+
+  // Caso 1 (foco XP): duas hunts praticamente empatadas em XP (35,6M vs 35,0M -> 1,7% <= TIE_BAND 3%),
+  // mas a segunda tem muito mais lucro + shiny -> deve vencer no desempate.
+  // A terceira tem 10% menos XP (32,0M) e lucro absurdo -> NÃO pode vencer no foco XP!
+  const xpPool = [
+    mkItem('xp_puro', { kph: 420, xpH: 35_600_000, netGoldH: 250_000, stonesH: 1.0, outlandScore: 0, shinyScore: 0, isOutland: false, canShiny: false, potionRatio: 0.5, safetyMult: 1, dangerous: false }),
+    mkItem('xp_lucro_shiny', { kph: 500, xpH: 35_000_000, netGoldH: 900_000, stonesH: 3.0, outlandScore: 0, shinyScore: 10, isOutland: false, canShiny: true, potionRatio: 0.1, safetyMult: 1, dangerous: false }),
+    mkItem('menos_xp_muito_gold', { kph: 1100, xpH: 32_000_000, netGoldH: 3_000_000, stonesH: 8.0, outlandScore: 1200, shinyScore: 0, isOutland: true, canShiny: false, potionRatio: 0, safetyMult: 1, dangerous: false }),
+  ];
+  const xpRanked = PK_HUNT.rankScoredPool(PK_HUNT.scoreSimulatedPool(xpPool, 'xp'));
+  assert.equal(xpRanked[0].slug, 'xp_lucro_shiny');
+  assert.equal(xpRanked[0].tiedTop, true);
+  assert.equal(xpRanked[1].slug, 'xp_puro');
+  assert.equal(xpRanked[1].tiedTop, true);
+  assert.equal(xpRanked[2].slug, 'menos_xp_muito_gold');
+  assert.equal(xpRanked[2].tiedTop, false);
+
+  // Caso 2 (foco XP): sem empate no topo (diferença > 3%), a de maior XP vence mesmo com menos lucro
+  const xpNoTie = [
+    mkItem('campeao_xp', { kph: 430, xpH: 36_000_000, netGoldH: 300_000, stonesH: 1.0, outlandScore: 0, shinyScore: 2, isOutland: false, canShiny: true, potionRatio: 0.4, safetyMult: 1, dangerous: false }),
+    mkItem('segundo_xp', { kph: 1050, xpH: 33_500_000, netGoldH: 1_500_000, stonesH: 5.0, outlandScore: 0, shinyScore: 12, isOutland: false, canShiny: true, potionRatio: 0, safetyMult: 1, dangerous: false }),
+  ];
+  const xpNoTieRanked = PK_HUNT.rankScoredPool(PK_HUNT.scoreSimulatedPool(xpNoTie, 'xp'));
+  assert.equal(xpNoTieRanked[0].slug, 'campeao_xp');
+  assert.equal(xpNoTieRanked[1].tiedTop, false);
+
+  // Caso 3 (foco Lucro): duas hunts empatadas em lucro/economia -> desempata pela que dá mais XP/Shiny
+  const lucroPool = [
+    mkItem('lucro_pouco_xp', { kph: 1000, xpH: 15_000_000, netGoldH: 1_000_000, stonesH: 5, outlandScore: 1000, shinyScore: 0, isOutland: true, canShiny: false, potionRatio: 0, safetyMult: 1, dangerous: false }),
+    mkItem('lucro_mais_xp', { kph: 1000, xpH: 25_000_000, netGoldH: 990_000, stonesH: 5, outlandScore: 1000, shinyScore: 0, isOutland: true, canShiny: false, potionRatio: 0, safetyMult: 1, dangerous: false }),
+  ];
+  const lucroRanked = PK_HUNT.rankScoredPool(PK_HUNT.scoreSimulatedPool(lucroPool, 'lucro'));
+  assert.equal(lucroRanked[0].slug, 'lucro_mais_xp');
+  assert.equal(lucroRanked[0].tiedTop, true);
+
+  // Caso 4 (pickBestHunt com empate real em XP): jogador está numa hunt empatada em XP mas inferior no desempate -> troca!
+  const tieHunts = {
+    pineco_a: { nome: 'pineco a', regiao: 'johto', level: 230, types: ['BUG'], baseStats: [50, 65, 90, 35, 35, 15], xp: 26_000_000, gold: 400_000, canShiny: false, stoneProbSum: 0.001 },
+    pineco_b: { nome: 'pineco b', regiao: 'johto', level: 230, types: ['BUG'], baseStats: [50, 65, 90, 35, 35, 15], xp: 26_000_000, gold: 1_100_000, canShiny: true, stoneProbSum: 0.006 },
+  };
+  const dec = PK_HUNT.pickBestHunt({
+    hunts: tieHunts,
+    player: CHARIZARD_420,
+    focus: 'xp',
+    curSlug: 'pineco_a',
+    curName: 'pineco a',
+    inHunt: true,
+    huntGain: 1.1,
+  });
+  assert.equal(dec.tieBroken, true);
+  assert.equal(dec.best.slug, 'pineco_b');
+  assert.equal(dec.action, 'switch');
+});
+
+test('selectCandidatesForDetail inclui hunts high-level boas de XP mesmo sem cache e partindo do foco balanced', () => {
+  const bigPool = { ...REAL_HUNTS_420 };
+  for (let i = 1; i <= 30; i++) {
+    bigPool[`filler_${i}`] = {
+      nome: `filler ${i}`, regiao: 'johto', level: 100 + i * 10, types: ['NORMAL'],
+    };
+  }
+  bigPool.scizor_470 = { nome: 'scizor', regiao: 'johto', level: 470, types: ['BUG', 'STEEL'] };
+  const scale = 14064 / 10920;
+  const char541 = {
+    ...CHARIZARD_420,
+    level: 541,
+    hpMax: 14064,
+    atk: Math.round(CHARIZARD_420.atk * scale),
+    def: Math.round(CHARIZARD_420.def * scale),
+    spAtk: Math.round(CHARIZARD_420.spAtk * scale),
+    spDef: Math.round(CHARIZARD_420.spDef * scale),
+  };
+  const slugs = PK_HUNT.selectCandidatesForDetail({
+    hunts: bigPool,
+    player: char541,
+    focus: 'balanced',
+    curSlug: 'furious_scizor',
+    maxCandidates: 24,
+  });
+  assert.ok(slugs.includes('scizor_470'), `esperava scizor_470 nos candidatos, vieram: ${slugs.join(', ')}`);
+  assert.ok(slugs.includes('furious_scizor'));
+});

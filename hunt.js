@@ -21,16 +21,17 @@ const PK_HUNT = (() => {
   const AVG_QUALITY = 1.176923;
 
   // Constantes de ritmo de combate na hunt (Wiki: Combate — calibrado com sessões reais)
-  const WALK_SEC = 2.6;        // tempo médio andando até o próximo selvagem + travar alvo (~260ms/tile)
+  const WALK_SEC = 2.9;        // tempo médio andando até o próximo selvagem + travar alvo (~260ms/tile)
   const WAVE_SEC = 2.6;        // pausa entre ondas (MS_ONDA = 2600)
   const WAVE_SIZE = 16;        // MAX_MOBS = 16
   const MOB_ATK_INTERVAL = 1.4; // intervalo mínimo entre golpes do selvagem (s)
   const MOB_DMG_MULT = 1.8;    // multiplicador de dano do selvagem na hunt
   const MOB_HP_MULT = 5;       // multiplicador de HP de combate do selvagem na hunt
-  const MOB_STAT_FACTOR = 1.15; // fator médio de qualidade/potência do selvagem
+  const MOB_STAT_FACTOR = 1.0; // selvagem em combate não tem bônus de qualidade (só rola se capturar)
   const MOB_AVG_IV = 16;
   const MOB_AVG_POWER = 65;    // poder médio ponderado dos golpes do selvagem
   const SIM_DURATION_SEC = 300; // 5 min simulados em passos discretos (~<0.3 ms por hunt)
+  const TIE_BAND = 0.03;       // banda de empate técnico (3%) no objetivo primário -> desempata pelo critério secundário
   const DEFAULT_BASE_STATS = [70, 75, 75, 75, 75, 70];
 
   // Catálogo oficial de poções (Market NPC)
@@ -394,16 +395,20 @@ const PK_HUNT = (() => {
       return { d, cd: Math.max(1, (Number(a.cd) || 20) * cdMult), nextAt: 0 };
     }).filter(s => s.d > 0);
 
-    // Dano do selvagem por golpe (×1.8, a cada 1.4 s)
+    // Dano do selvagem por golpe (×1.8, a cada 1.4 s): 75% golpes STAB + 25% cobertura neutra (movesets reais)
     const mIsSpec = mSpAtk > mAtk;
     const mEfs = mobTypes.length ? mobTypes.map(t => ampMult(t, me.types)) : [1];
     const mBestEf = Math.max(...mEfs);
     const mAvgEf = mEfs.reduce((a, b) => a + b, 0) / mEfs.length;
     const mEf = 0.6 * mBestEf + 0.4 * mAvgEf;
-    const mobHitDmg = calcHitDamage(lv, MOB_AVG_POWER, mIsSpec ? mSpAtk : mAtk, mIsSpec ? me.spDef : me.def, true, mEf) * MOB_DMG_MULT;
+    const mobAtkStat = mIsSpec ? mSpAtk : mAtk;
+    const meDefStat = mIsSpec ? me.spDef : me.def;
+    const stabHit = calcHitDamage(lv, MOB_AVG_POWER, mobAtkStat, meDefStat, true, mEf);
+    const covHit = calcHitDamage(lv, MOB_AVG_POWER, mobAtkStat, meDefStat, false, 1);
+    const mobHitDmg = Math.max(stabHit, 0.75 * stabHit + 0.25 * covHit) * MOB_DMG_MULT;
 
     // Simulação discreta de 300 s de hunt contínua
-    let t = 0, kills = 0, dmgTaken = 0, combatTime = 0, nextBasic = 0, nextAct = 0, waveKills = 0;
+    let t = 0, kills = 0, dmgTaken = 0, combatTime = 0, nextBasic = 0, nextAct = 0, waveKills = 0, lastKillAt = 0, dmgAtLastKill = 0;
     const maxEffOff = Math.max(efBasic, ...me.attacks.map(a => ampMult(String(a.type || t1).toUpperCase(), mobTypes)), 0);
 
     if (skills.length > 0 || basicDmg > 0) {
@@ -446,14 +451,19 @@ const PK_HUNT = (() => {
           kills++;
           waveKills++;
           if (waveKills >= WAVE_SIZE) { t += WAVE_SEC; waveKills = 0; }
+          lastKillAt = t;
+          dmgAtLastKill = dmgTaken;
         }
       }
     }
 
-    const kph = Math.round((kills / SIM_DURATION_SEC) * 3600);
+    // Usa o instante exato do último abate completo para evitar viés de truncamento contra hunts de TTK maior
+    const elapsedSec = kills > 0 && lastKillAt > 0 ? lastKillAt : SIM_DURATION_SEC;
+    const effDmgTaken = kills > 0 ? dmgAtLastKill : dmgTaken;
+    const kph = Math.round((kills / elapsedSec) * 3600);
     const ttkSec = kills > 0 ? +(combatTime / kills).toFixed(2) : 999;
-    const dmgPerH = (dmgTaken / SIM_DURATION_SEC) * 3600;
-    const dmgPerKill = kills > 0 ? dmgTaken / kills : mobHitDmg * 10;
+    const dmgPerH = (effDmgTaken / elapsedSec) * 3600;
+    const dmgPerKill = kills > 0 ? effDmgTaken / kills : mobHitDmg * 10;
 
     // XP e Gold por kill: usa o Hunt Analyser se disponível (já inclui VIP/Guild/Eventos/Loot Boost), senão fórmula oficial
     const xpPerKill = (Number(hunt.xp) > 0) ? (hunt.xp / ANALYSER_KPH) : (xpPerKillForLevel(lv) * Math.max(1, xpMult));
@@ -551,7 +561,8 @@ const PK_HUNT = (() => {
     };
   }
 
-  // Pontua um pool já simulado conforme o foco escolhido ('balanced' | 'xp' | 'lucro' | 'shiny')
+  // Pontua um pool já simulado conforme o foco escolhido ('balanced' | 'xp' | 'lucro' | 'shiny').
+  // Separa `primaryScore` (objetivo do foco) e `tieBreakScore` (critério secundário para desempate no topo).
   function scoreSimulatedPool(items, focus = 'balanced') {
     const f = FOCUS_LABELS[focus] ? focus : 'balanced';
     const valid = items.filter(it => it.sim.kph > 0);
@@ -567,36 +578,81 @@ const PK_HUNT = (() => {
 
     return items.map(it => {
       const s = it.sim;
-      if (s.kph <= 0) return { ...it, score: 0, ok: false };
+      if (s.kph <= 0) return { ...it, score: 0, primaryScore: 0, tieBreakScore: 0, ok: false };
       const nXp = Math.min(1.25, s.xpH / maxXp);
       const nNet = s.netGoldH >= 0
         ? Math.min(1.25, s.netGoldH / maxNet)
         : Math.max(-0.8, s.netGoldH / maxNet);
+      const nNetPos = Math.max(0, nNet);
       const nKph = Math.min(1.2, s.kph / maxKph);
       const nStones = Math.min(1.2, s.stonesH / maxStones);
       const nOutland = s.isOutland ? Math.min(1.3, s.outlandScore / maxOutland) : 0;
       const nShiny = s.canShiny ? Math.min(1.2, s.shinyScore / maxShiny) : 0;
+      const potEff = 1 - Math.min(1, s.potionRatio || 0);
 
       let raw = 0;
+      let tie = 0;
       if (f === 'xp') {
-        raw = 0.85 * nXp + 0.10 * nNet + 0.05 * nKph;
+        // Objetivo puro: máximo XP/h sustentável. Lucro/Outland/Shiny/Pedras/KPH atuam no desempate do topo.
+        raw = nXp;
+        tie = 0.45 * nNetPos + 0.25 * Math.max(nOutland, nShiny) + 0.15 * nStones + 0.10 * nKph + 0.05 * potEff;
       } else if (f === 'lucro') {
-        raw = 0.54 * nNet + 0.18 * nKph + 0.10 * nStones + 0.12 * nOutland + 0.06 * nXp;
+        raw = 0.58 * nNet + 0.20 * nOutland + 0.12 * nStones + 0.10 * nKph;
+        tie = 0.50 * nXp + 0.25 * nOutland + 0.25 * nShiny;
       } else if (f === 'shiny') {
-        raw = s.canShiny ? (0.48 * nShiny + 0.25 * nKph + 0.17 * nNet + 0.10 * nXp) : 0;
+        raw = s.canShiny ? (0.72 * nShiny + 0.28 * nKph) : 0;
+        tie = 0.45 * nNetPos + 0.40 * nXp + 0.15 * nStones;
       } else {
-        // balanced (padrão): prioriza XP/h real em hunts sustentáveis (utilidade côncava no lucro positivo evita travar em 1-hit low-level)
-        // Sem Outland liberada no pool, redireciona o peso de Outland para XP/h (progressão até Nv 150)
+        // balanced (padrão): equilíbrio entre XP/h, lucro líquido sustentável (côncavo), pedras e Outland
         const nNetBal = s.netGoldH >= 0 ? Math.sqrt(nNet) : nNet;
         raw = hasOutland
-          ? (0.54 * nXp + 0.23 * nNetBal + 0.04 * nKph + 0.06 * nStones + 0.13 * nOutland)
+          ? (0.50 * nXp + 0.23 * nNetBal + 0.04 * nKph + 0.06 * nStones + 0.17 * nOutland)
           : (0.70 * nXp + 0.20 * nNetBal + 0.04 * nKph + 0.06 * nStones);
+        tie = 0.35 * nNetPos + 0.35 * Math.max(nOutland, nShiny) + 0.30 * nXp;
       }
 
       const score = Math.max(0, +(raw * s.safetyMult).toFixed(4));
+      const tieBreakScore = Math.max(0, +(tie * s.safetyMult).toFixed(4));
       const ok = !s.dangerous && s.safetyMult >= 0.55 && (f !== 'shiny' || s.canShiny);
-      return { ...it, score, ok };
+      return { ...it, score, primaryScore: score, tieBreakScore, ok };
     });
+  }
+
+  // Ordena o pool de forma estritamente transitiva: todas as hunts válidas dentro de `tieBand` (3%) do melhor
+  // objetivo primário formam o grupo de topo empatado e são desempatadas pelo `tieBreakScore` (lucro, shiny, outland, etc.).
+  function rankScoredPool(scored, { currentSlug = null, tieBand = TIE_BAND } = {}) {
+    const pool = scored.some(h => h.ok) ? scored.filter(h => h.ok) : scored.slice();
+    const topPrimary = pool.reduce((m, h) => Math.max(m, h.primaryScore ?? h.score ?? 0), 0);
+    const threshold = topPrimary > 0 ? topPrimary * (1 - Math.max(0, Number(tieBand) || 0)) : 0;
+
+    const tagged = pool.map(h => {
+      const p = h.primaryScore ?? h.score ?? 0;
+      return { ...h, primaryScore: p, tieBreakScore: h.tieBreakScore ?? 0, tiedTop: topPrimary > 0 && p >= threshold };
+    });
+
+    tagged.sort((a, b) => {
+      if (a.tiedTop !== b.tiedTop) return a.tiedTop ? -1 : 1;
+      const aNet = (a.sim && a.sim.netGoldH) || a.gold || 0;
+      const bNet = (b.sim && b.sim.netGoldH) || b.gold || 0;
+      const aRatio = (a.m && a.m.ratio) || (a.sim && a.sim.matchup && a.sim.matchup.ratio) || 0;
+      const bRatio = (b.m && b.m.ratio) || (b.sim && b.sim.matchup && b.sim.matchup.ratio) || 0;
+      const aCur = currentSlug && a.slug === currentSlug ? 1 : 0;
+      const bCur = currentSlug && b.slug === currentSlug ? 1 : 0;
+      if (a.tiedTop) {
+        return (b.tieBreakScore - a.tieBreakScore)
+          || (b.primaryScore - a.primaryScore)
+          || (bNet - aNet)
+          || (bRatio - aRatio)
+          || (bCur - aCur);
+      }
+      return (b.primaryScore - a.primaryScore)
+        || (b.tieBreakScore - a.tieBreakScore)
+        || (bNet - aNet)
+        || (bRatio - aRatio)
+        || (bCur - aCur);
+    });
+
+    return tagged;
   }
 
   // Pré-seleciona as top candidatas da lista do Mapa para detalhar no Hunt Analyser + Pokedex (economia de tempo/cliques).
@@ -611,7 +667,7 @@ const PK_HUNT = (() => {
     capturing = false,
     curSlug = null,
     curName = '',
-    maxCandidates = 16,
+    maxCandidates = 24,
     typesApi = _types,
   }) {
     const entries = Object.entries(hunts || {});
@@ -656,19 +712,20 @@ const PK_HUNT = (() => {
     if (curItem) tryAdd(curItem, { ignoreCaps: true });
 
     // 2. Top do foco principal (com diversificação de bucket para testar vários patamares de nível)
-    const byFocus = scoreSimulatedPool(simulated, focus).sort((a, b) => b.score - a.score);
-    addList(byFocus, 6, { perBucket: 2 });
+    const byFocus = rankScoredPool(scoreSimulatedPool(simulated, focus));
+    addList(byFocus, 8, { perBucket: 2 });
 
-    // 3. Diversidade: top XP (vários níveis, ex. Nv 200, 230, 290, 350), top Lucro/Outland e top Shiny
-    const byXp = scoreSimulatedPool(simulated, 'xp').sort((a, b) => b.score - a.score);
-    const byLucro = scoreSimulatedPool(simulated, 'lucro').sort((a, b) => b.score - a.score);
-    const byShiny = scoreSimulatedPool(simulated, 'shiny').sort((a, b) => b.score - a.score);
-    addList(byXp, 4, { perBucket: 2 });
-    addList(byLucro, 3, { perBucket: 2 });
-    addList(byShiny, 3, { perBucket: 2 });
+    // 3. Diversidade: top XP (vários níveis, ex. Nv 200, 230, 350, 470), top Lucro/Outland e top Shiny
+    const byXp = rankScoredPool(scoreSimulatedPool(simulated, 'xp'));
+    const byLucro = rankScoredPool(scoreSimulatedPool(simulated, 'lucro'));
+    const byShiny = rankScoredPool(scoreSimulatedPool(simulated, 'shiny'));
+    addList(byXp, 6, { perBucket: 2 });
+    addList(byLucro, 4, { perBucket: 2 });
+    addList(byShiny, 4, { perBucket: 2 });
 
-    // 4. Preenche eventual folga com melhores remanescentes do foco principal
-    addList(byFocus, maxCandidates - picked.size, { ignoreCaps: true });
+    // 4. Preenche eventual folga com melhores remanescentes do foco principal e de XP
+    addList(byFocus, Math.max(0, maxCandidates - picked.size), { ignoreCaps: true });
+    addList(byXp, Math.max(0, maxCandidates - picked.size), { ignoreCaps: true });
 
     return simulated.filter(h => picked.has(h.slug)).map(h => h.slug);
   }
@@ -690,11 +747,12 @@ const PK_HUNT = (() => {
     inHunt = true,
     minRatio = 0.5,
     huntGain = 1.1,
+    tieBand = TIE_BAND,
     matchupFn = null,
     typesApi = _types,
   }) {
     const entries = Object.entries(hunts || {});
-    if (!entries.length) return { action: 'none', reason: 'empty', best: null, current: null, ranked: [] };
+    if (!entries.length) return { action: 'none', reason: 'empty', best: null, current: null, ranked: [], tieBroken: false };
 
     const normCur = normalizeHuntName(curName);
     let ranked;
@@ -718,34 +776,53 @@ const PK_HUNT = (() => {
         const score = (h.xp || 0) * Math.min(1, m.ratio);
         const ok = m.off > 0 && m.ratio >= minRatio;
         const nome = normalizeHuntName(h.nome || slug);
-        return { ...h, slug, nome, m, score, ok };
+        return { ...h, slug, nome, m, score, primaryScore: score, tieBreakScore: h.gold || 0, ok };
       });
     }
 
-    const current = inHunt
+    const currentRaw = inHunt
       ? (ranked.find(h => curSlug && h.slug === curSlug)
         || ranked.find(h => normCur && h.nome === normCur)
         || null)
       : null;
 
-    const pool = ranked.some(h => h.ok) ? ranked.filter(h => h.ok) : ranked.slice();
-    pool.sort((a, b) =>
-      (b.score - a.score)
-      || (((b.sim && b.sim.netGoldH) || b.gold || 0) - ((a.sim && a.sim.netGoldH) || a.gold || 0))
-      || (b.m.ratio - a.m.ratio)
-      || ((current && b.slug === current.slug) - (current && a.slug === current.slug))
-    );
+    const pool = player
+      ? rankScoredPool(ranked, { currentSlug: currentRaw ? currentRaw.slug : curSlug, tieBand })
+      : (() => {
+          const p = ranked.some(h => h.ok) ? ranked.filter(h => h.ok) : ranked.slice();
+          p.sort((a, b) =>
+            (b.score - a.score)
+            || ((b.gold || 0) - (a.gold || 0))
+            || (b.m.ratio - a.m.ratio)
+            || ((currentRaw && b.slug === currentRaw.slug) - (currentRaw && a.slug === currentRaw.slug))
+          );
+          return p;
+        })();
 
     const best = pool[0];
+    const current = currentRaw
+      ? (pool.find(h => h.slug === currentRaw.slug) || currentRaw)
+      : null;
+    const tieBroken = pool.filter(h => h.tiedTop).length > 1;
+
     if (isSameHunt({ inHunt, curSlug: current ? current.slug : curSlug, curName: current ? current.nome : normCur, targetSlug: best.slug, targetName: best.nome })) {
-      return { action: 'stay', reason: 'already-best', best, current, ranked: pool };
+      return { action: 'stay', reason: 'already-best', best, current, ranked: pool, tieBroken };
     }
 
-    if (current && current.ok && best.score <= current.score * huntGain) {
-      return { action: 'stay', reason: 'gain-below-threshold', best, current, ranked: pool };
+    if (current && current.ok) {
+      if (player && current.tiedTop && best.tiedTop) {
+        const curTie = current.tieBreakScore || 0;
+        const bestTie = best.tieBreakScore || 0;
+        const tieGainOk = curTie > 0 ? (bestTie > curTie * huntGain) : (bestTie > 0.1);
+        if (!tieGainOk) {
+          return { action: 'stay', reason: 'gain-below-threshold', best, current, ranked: pool, tieBroken };
+        }
+      } else if (best.score <= current.score * huntGain) {
+        return { action: 'stay', reason: 'gain-below-threshold', best, current, ranked: pool, tieBroken };
+      }
     }
 
-    return { action: 'switch', reason: current ? 'better-hunt' : 'enter-hunt', best, current, ranked: pool };
+    return { action: 'switch', reason: current ? 'better-hunt' : 'enter-hunt', best, current, ranked: pool, tieBroken };
   }
 
   // Extrai segundos restantes do contador do botão de Centro Pokémon ("2.4s", "3s", "").
@@ -811,6 +888,7 @@ const PK_HUNT = (() => {
 
   return {
     ANALYSER_KPH,
+    TIE_BAND,
     POTION_CATALOG,
     BALL_PRICES,
     OUTLAND_TIERS,
@@ -830,6 +908,7 @@ const PK_HUNT = (() => {
     resolveBall,
     simulateHunt,
     scoreSimulatedPool,
+    rankScoredPool,
     selectCandidatesForDetail,
     pickBestHunt,
     parseCenterCountdownSec,
