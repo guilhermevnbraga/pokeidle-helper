@@ -83,6 +83,25 @@ test('adviseTiming: todas caras => ESPERE; uma barata => recomenda ela, não o t
   assert.deepEqual(n.waitIds, ['a']);
 });
 
+test('adviseTiming com focusId julga só a rota foco, mesmo que outra esteja mais barata vs o normal', () => {
+  const mix = [route({ id: 'a', label: 'A', buyCoins: 130, coinsPerGem: 13 }), route({ id: 'b', label: 'B', buyCoins: 85, coinsPerGem: 8.5 })];
+  const f = T.adviseTiming(mix, null, 'gold-to-gem', { focusId: 'a' });
+  assert.equal(f.verdict, 'WAIT');
+  assert.equal(f.best.id, 'a');
+  assert.match(f.headline, /A está/);
+  assert.doesNotMatch(f.headline, /B/);
+  const g = T.adviseTiming(mix, null, 'gold-to-gem', { focusId: 'b' });
+  assert.equal(g.verdict, 'NOW');
+  assert.match(g.headline, /^BOM MOMENTO: B/);
+});
+
+test('adviseTiming com focusId sem referência => UNKNOWN nomeando a rota foco', () => {
+  const mix = [route({ id: 'a', label: 'A' }), route({ id: 'b', label: 'B', coinsAvg7d: null, gemsAvg7d: null })];
+  const r = T.adviseTiming(mix, null, 'gold-to-gem', { focusId: 'b' });
+  assert.equal(r.verdict, 'UNKNOWN');
+  assert.match(r.headline, /^B:/);
+});
+
 test('adviseTiming sem referência nenhuma retorna UNKNOWN', () => {
   const r = T.adviseTiming([route({ coinsAvg7d: null, gemsAvg7d: null })], null, 'gold-to-gem');
   assert.equal(r.verdict, 'UNKNOWN');

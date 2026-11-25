@@ -139,6 +139,24 @@ const PK_TIMING = (() => {
     const known = list.filter(x => x.a.scorePct != null);
     const byId = {};
     for (const x of list) byId[x.route.id] = x.a;
+    // Foco: julga só a rota recomendada (a que o usuário vai de fato usar), não a "mais barata vs o normal".
+    if (opts.focusId != null) {
+      const f = list.find(x => x.route.id === opts.focusId);
+      if (f) {
+        const a = f.a, label = f.route.label;
+        const sg = x => `${x >= 0 ? '+' : ''}${x.toFixed(1).replace('.', ',')}%`;
+        const marketPct = known.length ? median(known.map(x => x.a.scorePct)) : null;
+        const best = { id: f.route.id, label, ...a };
+        if (a.scorePct == null) {
+          return { dir, verdict: 'UNKNOWN', focus: true, headline: `${label}: sem referência de preço normal ainda; escaneie algumas vezes ao longo do dia.`, best, byId, marketPct, bestWindow: a.bestWindowText || null, nowIds: [], waitIds: [] };
+        }
+        let verdict = a.verdict, headline;
+        if (verdict === 'NOW') headline = `BOM MOMENTO: ${label} está ${sg(a.scorePct)} vs o normal`;
+        else if (verdict === 'WAIT') headline = `ESPERE: ${label} está ${sg(a.scorePct)} vs o normal${a.medianUpsidePct ? `; voltar à mediana rende ~+${a.medianUpsidePct.toFixed(1).replace('.', ',')}%` : ''}`;
+        else { verdict = 'NEUTRAL'; headline = `PREÇO NORMAL: ${label} está ${sg(a.scorePct)} vs o normal; sem pressa, nem vantagem em esperar muito`; }
+        return { dir, verdict, focus: true, headline, best, byId, marketPct, bestWindow: a.bestWindowText || null, nowIds: verdict === 'NOW' ? [f.route.id] : [], waitIds: verdict === 'WAIT' ? [f.route.id] : [] };
+      }
+    }
     if (!known.length) {
       return { dir, verdict: 'UNKNOWN', headline: 'Sem referência de preço normal ainda: escaneie algumas vezes ao longo do dia.', best: null, byId, marketPct: null };
     }

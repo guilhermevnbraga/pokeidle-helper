@@ -1195,9 +1195,9 @@
     const tag = d.source === 'book' ? 'books livres' : '~estimado (clique Escanear)';
     const both = CFG.rmtDir === 'both';
 
-    const renderTimingBanner = (parent, dir) => {
+    const renderTimingBanner = (parent, dir, focusId) => {
       if (typeof PK_TIMING === 'undefined') return null;
-      const adv = PK_TIMING.adviseTiming(d.routes, rmtHist, dir, { currentAt: d.at });
+      const adv = PK_TIMING.adviseTiming(d.routes, rmtHist, dir, { currentAt: d.at, focusId });
       const color = adv.verdict === 'NOW' ? '#6f9' : (adv.verdict === 'WAIT' ? '#f96' : (adv.verdict === 'NEUTRAL' ? '#8ef' : '#aab'));
       const icon = adv.verdict === 'NOW' ? '▲' : (adv.verdict === 'WAIT' ? '⏳' : (adv.verdict === 'NEUTRAL' ? '●' : '?'));
       const box = mk('div', `margin-top:3px;padding:3px 6px;border-radius:5px;border:1px solid ${color}77;background:${color}18`);
@@ -1205,7 +1205,7 @@
       const extra = [];
       if (adv.best && adv.best.reasons && adv.best.reasons.length) extra.push(adv.best.reasons.join(' · '));
       if (adv.bestWindow) extra.push(`melhor janela do dia: ${adv.bestWindow}`);
-      const nHist = Math.max(0, ...Object.values(adv.byId).map(a => a.n || 0));
+      const nHist = adv.focus && adv.best ? (adv.best.n || 0) : Math.max(0, ...Object.values(adv.byId).map(a => a.n || 0));
       extra.push(`histórico: ${nHist} leitura(s)`);
       box.append(mk('div', 'color:#bcd;font-size:9px;margin-top:1px', extra.join(' · ')));
       parent.append(box);
@@ -1237,13 +1237,13 @@
       const headColor = plan.verdict === 'BUY_NOW' ? '#6f9' : '#fd8';
       wrap.append(mk('div', `font-weight:bold;color:${headColor}`, plan.headline));
       wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? plan.summary : `${plan.summary} · ${tag}, ${ageMin}m`));
-      const advG = renderTimingBanner(wrap, 'gold-to-gem');
+      const advG = renderTimingBanner(wrap, 'gold-to-gem', plan.primary && plan.primary.routeId);
 
       if (plan.verdict === 'BUY_NOW' && plan.primary) {
         wrap.append(renderStepCard(`PLANO COM SEUS ${PK_RMT.formatCoins(curGold)}`, plan.primary, '#6f9', '#16332288'));
         if (plan.goal) {
           wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Topo absoluto: ${plan.goal.label} (${PK_RMT.formatCoins(plan.goal.coinsPerGem)}/G · falta ${PK_RMT.formatCoins(plan.goal.missingCoins)})`));
+            `Taxa bruta maior (outra opção): ${plan.goal.label} (${PK_RMT.formatCoins(plan.goal.coinsPerGem)}/G · falta ${PK_RMT.formatCoins(plan.goal.missingCoins)})`));
         }
       } else if (plan.verdict === 'SAVE_OR_BUY') {
         if (plan.primary) {
@@ -1254,7 +1254,7 @@
         }
         if (plan.bestOverall) {
           wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Topo absoluto: ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
+            `Taxa bruta maior (outra opção): ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
         }
         if (plan.fallback) {
           wrap.append(renderStepCard(
@@ -1271,7 +1271,7 @@
         }
         if (plan.bestOverall) {
           wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Topo absoluto: ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
+            `Taxa bruta maior (outra opção): ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
         }
         if (plan.fallback) {
           wrap.append(renderStepCard(
@@ -1303,13 +1303,13 @@
       const headColor = revPlan.verdict === 'BUY_NOW' ? '#6f9' : '#8ef';
       wrap.append(mk('div', `font-weight:bold;color:${headColor}`, revPlan.headline));
       wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? revPlan.summary : `${revPlan.summary} · ${tag}, ${ageMin}m`));
-      const advR = renderTimingBanner(wrap, 'gem-to-gold');
+      const advR = renderTimingBanner(wrap, 'gem-to-gold', revPlan.primary && revPlan.primary.routeId);
 
       if (revPlan.verdict === 'BUY_NOW' && revPlan.primary) {
         wrap.append(renderStepCard(`PLANO COM SUAS ${PK_RMT.formatGems(curGems)}`, revPlan.primary, '#6f9', '#16332288'));
         if (revPlan.goal) {
           wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Topo absoluto: ${revPlan.goal.label} (${PK_RMT.formatCoins(revPlan.goal.netCoinsPerGem)}/G · falta ${PK_RMT.formatGems(revPlan.goal.missingGems)})`));
+            `Taxa bruta maior (outra opção): ${revPlan.goal.label} (${PK_RMT.formatCoins(revPlan.goal.netCoinsPerGem)}/G · falta ${PK_RMT.formatGems(revPlan.goal.missingGems)})`));
         }
       } else if (revPlan.verdict === 'SAVE_OR_BUY') {
         if (revPlan.primary) {
@@ -1320,7 +1320,7 @@
         }
         if (revPlan.bestOverall) {
           wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Topo absoluto: ${revPlan.bestOverall.label} (${PK_RMT.formatCoins(revPlan.bestOverall.netCoinsPerGem)}/G · falta +${PK_RMT.formatGems(revPlan.bestOverall.missingGems)})`));
+            `Taxa bruta maior (outra opção): ${revPlan.bestOverall.label} (${PK_RMT.formatCoins(revPlan.bestOverall.netCoinsPerGem)}/G · falta +${PK_RMT.formatGems(revPlan.bestOverall.missingGems)})`));
         }
         if (revPlan.fallback) {
           wrap.append(renderStepCard(
@@ -1337,7 +1337,7 @@
         }
         if (revPlan.bestOverall) {
           wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Topo absoluto: ${revPlan.bestOverall.label} (${PK_RMT.formatCoins(revPlan.bestOverall.netCoinsPerGem)}/G · falta +${PK_RMT.formatGems(revPlan.bestOverall.missingGems)})`));
+            `Taxa bruta maior (outra opção): ${revPlan.bestOverall.label} (${PK_RMT.formatCoins(revPlan.bestOverall.netCoinsPerGem)}/G · falta +${PK_RMT.formatGems(revPlan.bestOverall.missingGems)})`));
         }
         if (revPlan.fallback) {
           wrap.append(renderStepCard(
@@ -1606,7 +1606,7 @@
         const parts = ['RMT:', plan.headline, '|', plan.primary?.buyText || ranked[0].label];
         if (revTop) parts.push('| Gema→Ouro:', `${revTop.label} (${PK_RMT.formatCoins(revTop.netCoinsPerGem)}/G líq.)`);
         if (tradePlan) parts.push('| Trading:', tradePlan.headline);
-        parts.push('| Timing O→G:', PK_TIMING.adviseTiming(ranked, rmtHist, 'gold-to-gem', { currentAt: rmtState.last.at }).verdict);
+        parts.push('| Timing O→G:', PK_TIMING.adviseTiming(ranked, rmtHist, 'gold-to-gem', { currentAt: rmtState.last.at, focusId: plan.primary && plan.primary.routeId }).verdict);
         log(...parts);
       } else {
         log('RMT: nenhuma rota válida lida');
