@@ -86,6 +86,11 @@
   const rmtState = { scanning: false, last: null };
   try { rmtState.last = JSON.parse(localStorage.getItem(RMT_KEY) || 'null'); } catch (e) {}
   const saveRmt = () => { try { localStorage.setItem(RMT_KEY, JSON.stringify(rmtState.last)); } catch (e) {} };
+  // Histórico de preços do RMT (um snapshot por scan) para a análise temporal "agir agora x esperar"
+  const RMT_HIST_KEY = 'pkbot-rmt-hist';
+  let rmtHist = null;
+  try { rmtHist = PK_TIMING.normalizeHistory(JSON.parse(localStorage.getItem(RMT_HIST_KEY) || 'null')); } catch (e) { rmtHist = null; }
+  const saveRmtHist = () => { try { localStorage.setItem(RMT_HIST_KEY, JSON.stringify(rmtHist)); } catch (e) {} };
   const STONES_KEY = 'pkbot-stones';
   const stoneState = { running: false, last: null };
   try { stoneState.last = JSON.parse(localStorage.getItem(STONES_KEY) || 'null'); } catch (e) {}
@@ -1180,7 +1185,8 @@
     const showTrade = CFG.rmtDir === 'both' || CFG.rmtDir === 'trading';
     const plan = showG2Gem ? PK_RMT.buildActionPlan({ routes: d.routes, gold: curGold, source: d.source }) : null;
     const revPlan = showGem2G ? PK_RMT.buildGemToGoldActionPlan({ routes: d.routes, gems: curGems, source: d.source }) : null;
-    const tradePlan = showTrade ? PK_RMT.buildTradingPlan({ routes: d.routes, gold: curGold, gems: curGems, source: d.source }) : null;
+    const tradePlanRaw = showTrade ? PK_RMT.buildTradingPlan({ routes: d.routes, gold: curGold, gems: curGems, source: d.source }) : null;
+    const tradePlan = tradePlanRaw && typeof PK_TIMING !== 'undefined' ? PK_TIMING.annotateTrading(tradePlanRaw, d.routes, rmtHist, { currentAt: d.at }) : tradePlanRaw;
     if (!plan && !revPlan && !tradePlan) {
       rmtOutEl.append(mk('div', 'color:#aab', 'Sem rotas válidas no último scan.'));
       return;
@@ -1188,6 +1194,23 @@
     const ageMin = Math.max(0, Math.round((Date.now() - d.at) / 60000));
     const tag = d.source === 'book' ? 'books livres' : '~estimado (clique Escanear)';
     const both = CFG.rmtDir === 'both';
+
+    const renderTimingBanner = (parent, dir) => {
+      if (typeof PK_TIMING === 'undefined') return null;
+      const adv = PK_TIMING.adviseTiming(d.routes, rmtHist, dir, { currentAt: d.at });
+      const color = adv.verdict === 'NOW' ? '#6f9' : (adv.verdict === 'WAIT' ? '#f96' : (adv.verdict === 'NEUTRAL' ? '#8ef' : '#aab'));
+      const icon = adv.verdict === 'NOW' ? '▲' : (adv.verdict === 'WAIT' ? '⏳' : (adv.verdict === 'NEUTRAL' ? '●' : '?'));
+      const box = mk('div', `margin-top:3px;padding:3px 6px;border-radius:5px;border:1px solid ${color}77;background:${color}18`);
+      box.append(mk('div', `font-weight:bold;color:${color}`, `${icon} TIMING: ${adv.headline}`));
+      const extra = [];
+      if (adv.best && adv.best.reasons && adv.best.reasons.length) extra.push(adv.best.reasons.join(' · '));
+      if (adv.bestWindow) extra.push(`melhor janela do dia: ${adv.bestWindow}`);
+      const nHist = Math.max(0, ...Object.values(adv.byId).map(a => a.n || 0));
+      extra.push(`histórico: ${nHist} leitura(s)`);
+      box.append(mk('div', 'color:#bcd;font-size:9px;margin-top:1px', extra.join(' · ')));
+      parent.append(box);
+      return adv;
+    };
 
     const renderStepCard = (title, inst, accent, bg) => {
       const box = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
@@ -1214,6 +1237,7 @@
       const headColor = plan.verdict === 'BUY_NOW' ? '#6f9' : '#fd8';
       wrap.append(mk('div', `font-weight:bold;color:${headColor}`, plan.headline));
       wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? plan.summary : `${plan.summary} · ${tag}, ${ageMin}m`));
+      const advG = renderTimingBanner(wrap, 'gold-to-gem');
 
       if (plan.verdict === 'BUY_NOW' && plan.primary) {
         wrap.append(renderStepCard(`PLANO COM SEUS ${PK_RMT.formatCoins(curGold)}`, plan.primary, '#6f9', '#16332288'));
@@ -1265,8 +1289,9 @@
       for (const r of plan.ranked) {
         const ok = curGold >= r.buyCoins ? '✓' : '○';
         const warn = r.warnings && r.warnings.length ? ' !' + r.warnings[0] : '';
+        const tb = advG ? PK_TIMING.badge(advG.byId[r.id]) : '';
         det.append(mk('div', `color:${ok === '✓' ? '#cfd' : '#9aa'};font-size:9.5px;margin-top:1px`,
-          `${ok} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${warn}`));
+          `${ok} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${tb ? ' ' + tb : ''}${warn}`));
       }
       wrap.append(det);
       rmtOutEl.append(wrap);
@@ -1278,6 +1303,7 @@
       const headColor = revPlan.verdict === 'BUY_NOW' ? '#6f9' : '#8ef';
       wrap.append(mk('div', `font-weight:bold;color:${headColor}`, revPlan.headline));
       wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? revPlan.summary : `${revPlan.summary} · ${tag}, ${ageMin}m`));
+      const advR = renderTimingBanner(wrap, 'gem-to-gold');
 
       if (revPlan.verdict === 'BUY_NOW' && revPlan.primary) {
         wrap.append(renderStepCard(`PLANO COM SUAS ${PK_RMT.formatGems(curGems)}`, revPlan.primary, '#6f9', '#16332288'));
@@ -1329,8 +1355,9 @@
       for (const r of revPlan.ranked) {
         const ok = curGems >= r.buyGems ? '✓' : '○';
         const warn = r.reverseWarnings && r.reverseWarnings.length ? ' !' + r.reverseWarnings[0] : '';
+        const tb = advR ? PK_TIMING.badge(advR.byId[r.id]) : '';
         det.append(mk('div', `color:${ok === '✓' ? '#cef' : '#9aa'};font-size:9.5px;margin-top:1px`,
-          `${ok} ${r.label}: ${PK_RMT.formatCoins(r.netCoinsPerGem)}/G (${r.buyGems}G→${PK_RMT.formatCoins(r.netCoinsUnit)} líq.)${warn}`));
+          `${ok} ${r.label}: ${PK_RMT.formatCoins(r.netCoinsPerGem)}/G (${r.buyGems}G→${PK_RMT.formatCoins(r.netCoinsUnit)} líq.)${tb ? ' ' + tb : ''}${warn}`));
       }
       wrap.append(det);
       rmtOutEl.append(wrap);
@@ -1339,13 +1366,13 @@
     if (tradePlan) {
       const wrap = mk('div', both ? 'margin-top:5px;padding-top:5px;border-top:1px dashed #c9f5' : '');
       if (both) wrap.append(mk('div', 'font-weight:bold;color:#d9f;font-size:10px;letter-spacing:.3px;margin-bottom:1px', 'TRADING (arbitragem & flip)'));
-      const headColor = tradePlan.verdict === 'PROFITABLE' ? '#6f9' : (tradePlan.verdict === 'RISKY' ? '#fd8' : '#aab');
+      const headColor = tradePlan.verdict === 'PROFITABLE' ? '#6f9' : (tradePlan.verdict === 'WAIT' ? '#f96' : (tradePlan.verdict === 'RISKY' ? '#fd8' : '#aab'));
       wrap.append(mk('div', `font-weight:bold;color:${headColor}`, tradePlan.headline));
       wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? tradePlan.summary : `${tradePlan.summary} · ${tag}, ${ageMin}m`));
 
       if (tradePlan.best) {
         const b = tradePlan.best;
-        const accent = tradePlan.verdict === 'PROFITABLE' ? '#6f9' : '#fd8';
+        const accent = tradePlan.verdict === 'PROFITABLE' ? '#6f9' : (tradePlan.verdict === 'WAIT' ? '#f96' : '#fd8');
         const bg = tradePlan.verdict === 'PROFITABLE' ? '#16332288' : '#332b1488';
         const box = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
         const capTag = b.affordable ? b.capitalText : `${b.capitalText} (${b.missingText})`;
@@ -1358,6 +1385,10 @@
         box.append(row('1:', b.step1, 'color:#fff'));
         box.append(row('2:', b.step2, 'color:#bfa'));
         box.append(row('LUCRO:', b.profitText + (b.roiAtAvg7dPct != null ? ` · média 7d: ${b.roiAtAvg7dPct >= 0 ? '+' : ''}${b.roiAtAvg7dPct.toFixed(1).replace('.', ',')}%` : ''), `color:${accent};font-weight:bold`));
+        if (b.timing && b.timing.scorePct != null) {
+          const tc = b.timing.verdict === 'NOW' ? '#6f9' : (b.timing.verdict === 'WAIT' ? '#f96' : '#8ef');
+          box.append(mk('div', `margin-top:2px;color:${tc};font-size:9px`, `${PK_TIMING.badge(b.timing)} TIMING: ${b.timing.reasons.join(' · ')}`));
+        }
         if (b.risks && b.risks.length) {
           box.append(mk('div', 'margin-top:2px;color:#fc9;font-size:9px', '⚠ ' + b.risks.join(' · ')));
         }
@@ -1374,7 +1405,7 @@
           const badge = op.confidence === 'high' ? '●' : (op.confidence === 'medium' ? '◐' : '○');
           const c = op.confidence === 'low' ? '#9aa' : '#dfd';
           det.append(mk('div', `color:${c};font-size:9.5px;margin-top:1px`,
-            `${badge} ${op.title}: ${op.profitText}${op.risks.length ? ' !' + op.risks[0] : ''}`));
+            `${badge} ${op.title}: ${op.profitText}${op.timing && op.timing.scorePct != null ? ' ' + PK_TIMING.badge(op.timing) : ''}${op.risks.length ? ' !' + op.risks[0] : ''}`));
         }
         wrap.append(det);
       }
@@ -1566,6 +1597,7 @@
       const ranked = PK_RMT.rankRoutes(routes);
       rmtState.last = { at: Date.now(), gold: curGold, gems: curGems, source: 'book', routes: ranked };
       saveRmt();
+      if (ranked.length) { rmtHist = PK_TIMING.recordSnapshot(rmtHist, ranked, rmtState.last.at); saveRmtHist(); }
       if (ranked.length) {
         const plan = PK_RMT.buildActionPlan({ routes: ranked, gold: curGold, source: 'book' });
         const revPlan = PK_RMT.buildGemToGoldActionPlan({ routes: ranked, gems: curGems, source: 'book' });
@@ -1574,6 +1606,7 @@
         const parts = ['RMT:', plan.headline, '|', plan.primary?.buyText || ranked[0].label];
         if (revTop) parts.push('| Gema→Ouro:', `${revTop.label} (${PK_RMT.formatCoins(revTop.netCoinsPerGem)}/G líq.)`);
         if (tradePlan) parts.push('| Trading:', tradePlan.headline);
+        parts.push('| Timing O→G:', PK_TIMING.adviseTiming(ranked, rmtHist, 'gold-to-gem', { currentAt: rmtState.last.at }).verdict);
         log(...parts);
       } else {
         log('RMT: nenhuma rota válida lida');
