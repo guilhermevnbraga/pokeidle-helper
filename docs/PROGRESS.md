@@ -14,7 +14,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Venda de Pedras v0.7.7 (`stones.js`+`content.js`): `Simular`/`Vender` pedras em Coins no máx. comprovado, confirma `.caixa-confirmar`; validado Node+venda real (3/3 em 12,9 s).
 - [ ] Analisador de Venda: soma "Meus anúncios" (`#cm-meus`, `readMyListings`) ao inventário · NÃO validado: DOM real de #cm-meus (parser às cegas), closeRmtLeaf após ler
 - [ ] Analisador de Venda v0.9.1 (`sell.js`+`content.js`): preço máx. viável (Nota/Nível/Potência, fila, liquidez, ≥15% vendas); ao vivo: Shedinja+… · NÃO validado: regra 15%, P5, Mega, Depot
-- [ ] Timing do Radar RMT (`timing.js`+`content.js`, v0.9.0): veredito ▲/●/⏳ da rota recomendada (focusId) vs média 7d + histórico por scan (`pkbot-rmt-hist… · NÃO validado: ao vivo no Chrome
+- [x] Timing do Radar RMT (timing.js+content.js, v0.9.0): veredito ● vs média 7d + mediana do histórico (9 leituras/36h) validado ao vivo em PT 2026-11-26 · NÃO validado: veredito ▲/⏳ e EN
 - [x] UI do painel v0.10.0: tema pkb-*, status+pausa, abas, pílula, cards em todas as abas; validado ao vivo (PT e EN, ULTRA, arraste) · janela estreita real NÃO validada
 - [x] Auto-reload de dev no background.js (extensão descompactada, ~40 s após editar); validado ao vivo
 - [x] Filtros de busca do jogo (`#f-mapa`, `#f-nivel-min/max`, `#f-dex`) persistem: extensão limpa antes de ler e restaura o do usuário (v0.10.1) ·… · NÃO validado: troca real, nível min/max
@@ -26,7 +26,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [ ] Hardening Market/multi-conta (`content.js`): aba Comprar, card fresco, compra parcial, fila, aviso bola 0 e `cena` só no console · NÃO validado: compra real pós-fix no perfil 2
 - [x] Limitador seletivo de FPS (`fps.js`, só `Campo.loop`, UI em 60 FPS, `0.2` mapa parado, pausa oculto) + Modo servidor (`content.js`) + Worker de timers 100 ms.
 - [x] Alarme de reserva de 30 s no service worker (`background.js`) e bloqueio de descarte da aba (`autoDiscardable: false`).
-- [ ] Modo 1 (Captura com parada automática): regex `captureRe` sobre toasts/log · NÃO confirmado com uma captura real
+- [x] Modo 1/captureRe: toast real "Shedinja capturado — vendido pela Auto Venda" gerou "captura detectada" ao vivo em PT 2026-11-26 · NÃO validado: toast de captura sem Auto Venda e EN
 - [ ] Ciclo completo de compra após saída periódica do ULTRA Economia (`ultraSupplyTick`) · NÃO validado: volta ao ULTRA confirmada, compra real no ciclo ainda não ocorreu
 - [ ] Deploy Docker multi-conta no Proxmox (`deploy/`, 4 perfis tela cheia + `tint2` + auto-minimize, ~34% CPU / 1,86 GiB) · NÃO validado: fluidez remota e captura contínua minimizada
 
