@@ -15,6 +15,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [ ] Analisador de Venda: soma "Meus anúncios" (`#cm-meus`, `readMyListings`) ao inventário · NÃO validado: DOM real de #cm-meus (parser às cegas), closeRmtLeaf após ler
 - [ ] Analisador de Venda v0.9.1 (`sell.js`+`content.js`): preço máx. viável (Nota/Nível/Potência, fila, liquidez, ≥15% vendas); ao vivo: Shedinja+… · NÃO validado: regra 15%, P5, Mega, Depot
 - [x] Timing do Radar RMT (timing.js+content.js, v0.9.0): veredito ● vs média 7d + mediana do histórico (9 leituras/36h) validado ao vivo em PT 2026-11-26 · NÃO validado: veredito ▲/⏳ e EN
+- [x] Analisador de Venda: book de uma moeda muito abaixo da média 7d não vence mais a comparação (flag suspect); Darkness Stone ao vivo virou GOLD · NÃO validado: Pokémon e EN
 - [x] UI do painel v0.10.0: tema pkb-*, status+pausa, abas, pílula, cards em todas as abas; validado ao vivo (PT e EN, ULTRA, arraste) · janela estreita real NÃO validada
 - [x] Auto-reload de dev no background.js (extensão descompactada, ~40 s após editar); validado ao vivo
 - [x] Filtros de busca do jogo (`#f-mapa`, `#f-nivel-min/max`, `#f-dex`) persistem: extensão limpa antes de ler e restaura o do usuário (v0.10.1) ·… · NÃO validado: troca real, nível min/max
