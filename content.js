@@ -2101,7 +2101,7 @@
       for (const it of items) {
         const o = document.createElement('option');
         o.value = `item:${it.id}`;
-        o.textContent = `${it.name} ×${it.qty}${it.disabled ? ' (anunciado)' : ''}`;
+        o.textContent = `${it.name} ×${it.qty}${it.listedQty ? ` (${it.listedQty} anunciado${it.listedQty > 1 ? 's' : ''})` : (it.disabled ? ' (anunciado)' : '')}`;
         grp.append(o);
       }
       sellSelEl.append(grp);
@@ -2315,6 +2315,55 @@
     return out;
   }
 
+  // Lê "Meus anúncios" (#cm-meus): itens (nome + qtd) e Pokémons já anunciados por você, em qualquer moeda.
+  async function readMyListings(getCorpo) {
+    const out = { items: [], pokemons: [] };
+    const corpo = getCorpo();
+    const btn = corpo && $('#cm-meus', corpo);
+    if (!btn) return out;
+    btn.click();
+    await sleep(900);
+    const root = $('.cm-folha') || getCorpo();
+    if (!root) return out;
+    const cards = $$('.cm-card, .cm-linha, .cmi-linha, .cm-meu, .mk-card', root);
+    const diag = [];
+    cards.forEach((c, i) => {
+      const txt = c.textContent.replace(/\s+/g, ' ').trim();
+      if (i < 3) diag.push(txt.slice(0, 80));
+      const nameEl = $('.cm-nome-txt, .cmi-nome b, .cm-slot-nome, .mk-nome', c);
+      const rawName = (nameEl && nameEl.textContent.trim()) || '';
+      if (!rawName) return;
+      const subTxt = ($('.cm-sub, .mk-sub', c) || {}).textContent || '';
+      const selosTxt = ($('.pk-selos', c) || {}).textContent || '';
+      const attrs = PK_SELL.parsePokemonAttrs(`${subTxt} ${selosTxt}`);
+      const isPk = !!$('.pk-selos', c) || attrs.level > 1 || /\bnv\.?\s*\d+|\blv\.?\s*\d+/i.test(subTxt);
+      if (isPk) {
+        const species = PK_SELL.cleanSpeciesName(rawName);
+        if (!species) return;
+        const shiny = c.classList.contains('shiny') || !!$('.cm-selo-shiny', c) || /✨|\bshiny\b/i.test(rawName);
+        const pk = {
+          kind: 'pokemon', uid: `meu-${PK_SELL.norm(species)}-${attrs.level || 0}-${attrs.iv || 0}-${i}`, id: '',
+          species, level: attrs.level || 50, potency: attrs.potency || 1, iv: attrs.iv, quality: attrs.quality,
+          nota: attrs.nota, shiny, mega: /^mega\s+/i.test(species), where: 'Anunciado',
+        };
+        const elig = PK_SELL.pokemonEligibility(pk);
+        pk.eligible = elig.eligible;
+        pk.eligReason = elig.reason;
+        out.pokemons.push(pk);
+        return;
+      }
+      // Item: quantidade em "×N" / "xN" / <b> do slot; senão 1
+      const qm = txt.match(/[×x]\s*([\d.,]+\s*[kKmM]?)/) || null;
+      const qtyB = PK_SELL.parseIntClean(($('b', c) || {}).textContent || '') || 0;
+      const qty = (qm && PK_SELL.parseCompactNum(qm[1])) || qtyB || 1;
+      const name = rawName.replace(/\s*[×x]\s*[\d.,]+.*$/i, '').trim();
+      if (name) out.items.push({ name, qty: Math.max(1, Math.round(qty)) });
+    });
+    log('venda: Meus anúncios cards=' + cards.length, JSON.stringify(diag));
+    await closeRmtLeaf();
+    return out;
+  }
+
   async function readAllRmtInventory(getCorpo) {
     const items = [];
     const pokemons = [];
@@ -2397,6 +2446,24 @@
       if (k1) seen.add(k1);
       seen.add(k2);
       pokemons.push(tp);
+    }
+
+    // 3) "Meus anúncios": o que já está anunciado sai do inventário, mas continua sendo seu (conta no analisador)
+    try {
+      const mine = await readMyListings(getCorpo);
+      log(`venda: meus anúncios lidos: ${mine.items.length} item(ns), ${mine.pokemons.length} Pokémon(s)`);
+      for (const mi of mine.items) {
+        const ex = items.find(i => PK_SELL.norm(i.name) === PK_SELL.norm(mi.name));
+        if (ex) { ex.qty += mi.qty; ex.listedQty = (ex.listedQty || 0) + mi.qty; }
+        else items.push({ kind: 'item', id: '', name: mi.name, qty: mi.qty, listedQty: mi.qty, disabled: true });
+      }
+      for (const mp of mine.pokemons) {
+        const sig = p => `${PK_SELL.norm(p.species)}:${p.level}:${p.iv}:${p.potency}:${!!p.shiny}`;
+        if (pokemons.some(p => sig(p) === sig(mp))) continue;
+        pokemons.push(mp);
+      }
+    } catch (e) {
+      log('venda: falha ao ler Meus anúncios:', e.message);
     }
 
     items.sort((a, b) => a.name.localeCompare(b.name));
