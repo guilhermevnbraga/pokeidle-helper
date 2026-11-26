@@ -8,7 +8,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Conexão MCP `chrome-devtools` (`--auto-connect`) e reload de extensão validados ao vivo com `pokeidle.io/app` no Chrome Stable.
 
 ## Extensão MV3 (estado atual v0.7.2+)
-- [ ] Gerenciador de hunt v3 (`hunt.js`+`content.js`, v0.7.8): física calibrada (`1.0`/`2.9s`), XP puro + desempate 3% · NÃO validado: ao vivo no Chrome (v0.7.8), troca real, Eco/ULTRA
+- [x] Gerenciador de hunt v3: troca real validada ao vivo em PT 2026-11-26 (Azurill 31,8M xp/h -> espera combate -> Centro -> cura -> Shedinja 66,2M) · NÃO validado: troca saindo do ULTRA e em EN
 - [ ] Analisador de Pokébola (`ball.js`+`content.js`): auto-aplica bola recomendada + mín. 10 / repor 100 (v0.7.6) · NÃO validado: hunt mista (>1 espécie) e com Shiny/Lure
 - [x] Radar RMT v0.8.2 (`rmt.js`+`content.js`): Ouro↔Gema + Trading (arbitragem cruzada, flip, média/vol 7d `.cmp-media`, anti-armadilha); validado Node (67/67) e Chrome.
 - [x] Venda de Pedras v0.7.7 (`stones.js`+`content.js`): `Simular`/`Vender` pedras em Coins no máx. comprovado, confirma `.caixa-confirmar`; validado Node+venda real (3/3 em 12,9 s).
