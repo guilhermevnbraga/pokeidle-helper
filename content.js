@@ -129,50 +129,166 @@
   const ui = { refresh() {} };
   const UI_KEY = 'pkbot-ui';
   const loadUI = () => { try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch (e) { return {}; } };
-  /* Painel: arraste pelo cabeçalho; "—" (ou duplo clique) minimiza; "×" ou Alt+P esconde/mostra.
-     Posição e estado ficam salvos. Fica semitransparente até o mouse chegar perto. */
+  /* Painel: arraste pelo cabeçalho; "—" (ou duplo clique) recolhe em pílula; "×" ou Alt+P esconde/mostra.
+     Posição, aba ativa e estado ficam salvos. Fica levemente transparente até o mouse chegar perto.
+     Visual: tema em um <style> (#pkbot-style) com variáveis --pkb-* e classes pkb-*. */
+  const PANEL_CSS = `
+#pkbot-panel{--pkb-bg:rgba(14,17,27,.96);--pkb-card:rgba(255,255,255,.045);--pkb-line:rgba(255,255,255,.09);--pkb-text:#e8ebf4;--pkb-mute:#8b93a9;--pkb-accent:#7c8cff;--pkb-ok:#4ade80;--pkb-warn:#fbbf24;--pkb-bad:#f87171;
+position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:border-box;width:340px;background:var(--pkb-bg);color:var(--pkb-text);font:12.5px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;border:1px solid var(--pkb-line);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.55);opacity:.78;transition:opacity .15s;user-select:none}
+#pkbot-panel:hover{opacity:1}
+#pkbot-panel *{box-sizing:border-box;font-family:inherit}
+#pkbot-panel.pkb-min{width:auto;min-width:210px}
+#pkbot-panel.pkb-min .pkb-strip,#pkbot-panel.pkb-min .pkb-tabs,#pkbot-panel.pkb-min .pkb-body{display:none}
+#pkbot-panel .pkb-head{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:9px 10px;cursor:move;touch-action:none}
+#pkbot-panel .pkb-dot{width:9px;height:9px;border-radius:50%;background:var(--pkb-mute);flex:0 0 auto}
+#pkbot-panel .pkb-dot.pkb-on{background:var(--pkb-ok);box-shadow:0 0 8px var(--pkb-ok)}
+#pkbot-panel .pkb-title{font-weight:650;font-size:13px;letter-spacing:.2px;white-space:nowrap}
+#pkbot-panel .pkb-sub{flex:1;min-width:0;color:var(--pkb-mute);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pkbot-panel .pkb-ibtn{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:7px;color:var(--pkb-text);background:var(--pkb-card);font-size:12px}
+#pkbot-panel .pkb-ibtn:hover{background:rgba(255,255,255,.12)}
+#pkbot-panel .pkb-ibtn:disabled{opacity:.35;cursor:default}
+#pkbot-panel .pkb-strip{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:5px;padding:0 10px 8px}
+#pkbot-panel .pkb-chip{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:99px;font-size:11px;background:var(--pkb-card);border:1px solid var(--pkb-line);color:var(--pkb-mute)}
+#pkbot-panel .pkb-chip.pkb-ok{color:var(--pkb-ok);border-color:rgba(74,222,128,.35)}
+#pkbot-panel .pkb-chip.pkb-warn{color:var(--pkb-warn);border-color:rgba(251,191,36,.35)}
+#pkbot-panel .pkb-tabs{flex:0 0 auto;display:flex;gap:2px;padding:0 6px;border-bottom:1px solid var(--pkb-line);overflow-x:auto;scrollbar-width:none}
+#pkbot-panel .pkb-tab{all:unset;box-sizing:border-box;cursor:pointer;position:relative;padding:6px 8px;font-size:12px;color:var(--pkb-mute);border-bottom:2px solid transparent;white-space:nowrap}
+#pkbot-panel .pkb-tab:hover{color:var(--pkb-text)}
+#pkbot-panel .pkb-tab.pkb-active{color:var(--pkb-text);border-bottom-color:var(--pkb-accent)}
+#pkbot-panel .pkb-tab.pkb-live::after{content:"";position:absolute;top:5px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--pkb-ok)}
+#pkbot-panel .pkb-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;padding:10px}
+#pkbot-panel .pkb-pane[hidden]{display:none}
+#pkbot-panel .pkb-pane{display:flex;flex-direction:column;gap:8px}
+#pkbot-panel .pkb-card{background:var(--pkb-card);border:1px solid var(--pkb-line);border-radius:10px;padding:8px 10px}
+#pkbot-panel .pkb-h{font-weight:650;font-size:12.5px}
+#pkbot-panel .pkb-desc{color:var(--pkb-mute);font-size:11px;margin-top:1px}
+#pkbot-panel .pkb-bar{display:flex;align-items:center;gap:6px}
+#pkbot-panel .pkb-bar>.pkb-grow{flex:1;min-width:0}
+#pkbot-panel .pkb-row{display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer}
+#pkbot-panel .pkb-row+.pkb-row{border-top:1px solid var(--pkb-line)}
+#pkbot-panel .pkb-row input[type=checkbox]{accent-color:var(--pkb-accent);width:15px;height:15px;margin:0;flex:0 0 auto;cursor:pointer}
+#pkbot-panel .pkb-num{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;background:rgba(124,140,255,.18);color:var(--pkb-accent);font-size:11px;font-weight:650;flex:0 0 auto}
+#pkbot-panel .pkb-btn{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:4px 11px;border-radius:7px;font-size:12px;font-weight:600;color:var(--pkb-text);background:var(--pkb-card);border:1px solid var(--pkb-line);white-space:nowrap}
+#pkbot-panel .pkb-btn:hover{background:rgba(255,255,255,.11)}
+#pkbot-panel .pkb-btn.pkb-primary{background:var(--pkb-accent);border-color:var(--pkb-accent);color:#0b0e1a}
+#pkbot-panel .pkb-btn.pkb-primary:hover{filter:brightness(1.1)}
+#pkbot-panel .pkb-btn.pkb-go{background:rgba(74,222,128,.18);border-color:rgba(74,222,128,.5);color:var(--pkb-ok)}
+#pkbot-panel .pkb-btn:disabled{opacity:.4;cursor:default;filter:none}
+#pkbot-panel .pkb-in{width:100%;min-width:0;background:rgba(0,0,0,.35);color:var(--pkb-text);border:1px solid var(--pkb-line);border-radius:7px;font-size:12px;padding:3px 6px;height:26px}
+#pkbot-panel .pkb-in:focus{outline:1px solid var(--pkb-accent)}
+#pkbot-panel select.pkb-in option{background:#12151f;color:var(--pkb-text)}
+#pkbot-panel .pkb-grid{display:grid;grid-template-columns:auto 1fr 56px 62px;gap:5px 6px;align-items:center}
+#pkbot-panel .pkb-cell{font-size:11px;color:var(--pkb-mute)}
+#pkbot-panel .pkb-out{margin-top:6px;font-size:11.5px;line-height:1.45;color:var(--pkb-text);user-select:text}
+#pkbot-panel .pkb-out:empty{display:none}
+#pkbot-panel .pkb-log{margin:0;white-space:pre-wrap;max-height:130px;overflow:auto;user-select:text;font:11px/1.4 ui-monospace,Consolas,monospace;color:#b8c4d8}
+#pkbot-panel details>summary{cursor:pointer;color:var(--pkb-mute);font-size:11.5px}
+`;
   function buildPanel() {
-    const u = Object.assign({ x: null, y: null, min: true, hidden: false }, loadUI());
+    const u = Object.assign({ x: null, y: null, min: true, hidden: false, tab: 'auto', resume: [] }, loadUI());
     const saveUI = () => { try { localStorage.setItem(UI_KEY, JSON.stringify(u)); } catch (e) {} };
-    const p = document.createElement('div');
-    p.id = 'pkbot-panel';
-    p.style.cssText = 'position:fixed;z-index:2147483647;display:flex;flex-direction:column;max-height:calc(100vh - 16px);max-width:calc(100vw - 16px);box-sizing:border-box;background:#1b1f2acc;color:#fff;font:12px/1.35 monospace;border:1px solid #fff3;border-radius:8px;width:316px;box-shadow:0 2px 10px #0008;opacity:.5;transition:opacity .15s;user-select:none';
-    p.onmouseenter = () => p.style.opacity = '1'; p.onmouseleave = () => p.style.opacity = '.5';
+    if (!$('#pkbot-style')) { const s = document.createElement('style'); s.id = 'pkbot-style'; s.textContent = PANEL_CSS; document.head.append(s); }
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+    const opt = (s, list) => { list.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); return s; };
+    const MODES = ['capture', 'potions', 'eterna', 'hunt'];
+    const p = el('div'); p.id = 'pkbot-panel';
 
-    const head = document.createElement('div');
-    head.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:move;touch-action:none';
-    const title = document.createElement('span'); title.style.cssText = 'flex:1;font-weight:bold'; head.append(title);
-    const btn = (txt, tip, fn) => { const b = document.createElement('button'); b.textContent = txt; b.title = tip; b.style.cssText = 'all:unset;cursor:pointer;padding:0 5px;border-radius:4px;background:#fff2'; b.onpointerdown = e => e.stopPropagation(); b.onclick = fn; head.append(b); return b; };
-    btn('—', 'Minimizar/expandir (duplo clique no título)', () => { u.min = !u.min; saveUI(); render(); });
-    btn('×', 'Esconder (Alt+P mostra de novo)', () => { u.hidden = true; saveUI(); render(); });
+    // ----- cabeçalho (arrastável): status + pausa/retoma + minimizar + esconder -----
+    const head = el('div', 'pkb-head');
+    const dot = el('span', 'pkb-dot');
+    const title = el('span', 'pkb-title', 'PokeIdle Helper');
+    const sub = el('span', 'pkb-sub');
+    head.append(dot, title, sub);
+    const ibtn = (txt, tip, fn) => { const b = el('button', 'pkb-ibtn', txt); b.title = tip; b.onpointerdown = e => e.stopPropagation(); b.onclick = fn; head.append(b); return b; };
+    const setModes = (keys, val) => keys.forEach(k => { const c = $('#pkbot-' + k); if (c && c.checked !== val) { c.checked = val; c.onchange(); } });
+    const pauseBtn = ibtn('⏸', 'Pausar todos os modos', () => {
+      const on = MODES.filter(k => st[k]);
+      if (on.length) { u.resume = on; saveUI(); setModes(on, false); } else { setModes(u.resume || [], true); }
+      render();
+    });
+    ibtn('—', 'Recolher/expandir (duplo clique no título)', () => { u.min = !u.min; saveUI(); render(); });
+    ibtn('×', 'Esconder (Alt+P mostra de novo)', () => { u.hidden = true; saveUI(); render(); });
 
-    const body = document.createElement('div'); body.style.cssText = 'flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;padding:2px 8px 8px';
-    const mk = (key, label) => {
-      const l = document.createElement('label'); l.style.cssText = 'display:block;cursor:pointer';
+    // ----- faixa de status (tela, aba oculta, dry-run) -----
+    const strip = el('div', 'pkb-strip');
+    const chipScreen = el('span', 'pkb-chip'), chipHidden = el('span', 'pkb-chip pkb-warn', 'aba oculta'), chipDry = el('span', 'pkb-chip pkb-warn', 'dry-run');
+    strip.append(chipScreen, chipHidden, chipDry);
+
+    // ----- abas -----
+    const tabsEl = el('div', 'pkb-tabs');
+    const body = el('div', 'pkb-body');
+    const TABS = [['auto', 'Auto'], ['hunt', 'Hunt'], ['ball', 'Bola'], ['rmt', 'RMT'], ['stones', 'Pedras'], ['sell', 'Venda']];
+    const panes = {}, tabBtns = {};
+    for (const [key, label] of TABS) {
+      const b = el('button', 'pkb-tab', label); b.onclick = () => { u.tab = key; saveUI(); render(); };
+      tabBtns[key] = b; tabsEl.append(b);
+      const pane = el('div', 'pkb-pane'); pane.dataset.tab = key; panes[key] = pane; body.append(pane);
+    }
+    // componentes
+    const card = () => el('div', 'pkb-card');
+    const bar = (...kids) => { const d = el('div', 'pkb-bar'); d.append(...kids); return d; };
+    const secHead = (name, desc) => { const d = el('div', 'pkb-grow'); d.append(el('div', 'pkb-h', name)); if (desc) d.append(el('div', 'pkb-desc', desc)); return d; };
+    const btn = (id, txt, tip, kind, fn) => { const b = el('button', 'pkb-btn' + (kind ? ' pkb-' + kind : ''), txt); if (id) b.id = id; b.title = tip; b.onclick = fn; return b; };
+    const sel = (id, tip, list, cls) => { const s = el('select', cls || 'pkb-in'); if (id) s.id = id; s.title = tip; opt(s, list); s.style.width = 'auto'; return s; };
+    const out = id => { const d = el('div', 'pkb-out'); d.id = id; return d; };
+
+    // ===== aba Auto =====
+    const modesCard = card();
+    const mk = (key, num, label) => {
+      const l = el('label', 'pkb-row');
       const c = document.createElement('input'); c.type = 'checkbox'; c.checked = !!st[key]; c.id = 'pkbot-' + key;
       c.onchange = () => { st[key] = c.checked; save(); log(label, c.checked ? 'ON' : 'OFF'); if (key === 'hunt') huntState.next = 0; if (key === 'keepalive') applyKeepAlive(); ui.refresh(); };
-      l.append(c, ' ' + label); body.append(l);
+      l.append(c); if (num) l.append(el('span', 'pkb-num', num)); l.append(el('span', null, label)); modesCard.append(l);
     };
-    mk('capture', '1 Captura (para ao capturar)');
-    mk('potions', '2 Repor bolas/poções');
-    mk('eterna', '3 Captura eterna');
-    // Linha do Modo 4: checkbox + seletor de foco + botão de verificação manual (encadeia Hunt -> RMT -> Pokébola)
-    const huntRow = document.createElement('div');
-    huntRow.style.cssText = 'display:flex;align-items:center;gap:4px';
-    const huntLbl = document.createElement('label');
-    huntLbl.style.cssText = 'flex:1;min-width:0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    mk('capture', '1', 'Captura (para ao capturar)');
+    mk('potions', '2', 'Repor bolas/poções');
+    mk('eterna', '3', 'Captura eterna');
+    mk('keepalive', '', 'Manter ativo em 2º plano');
+    const liteLbl = el('label', 'pkb-row');
+    liteLbl.title = 'Desliga animações CSS, transições e sombras do jogo (corta repintura a 60 Hz; ideal para servidor/multi-conta)';
+    const liteChk = document.createElement('input'); liteChk.type = 'checkbox'; liteChk.checked = !!CFG.lite; liteChk.id = 'pkbot-lite';
+    liteChk.onchange = () => { CFG.lite = liteChk.checked; saveCfg(); applyLite(); log('Modo servidor (sem animações)', CFG.lite ? 'ON' : 'OFF'); };
+    liteLbl.append(liteChk, el('span', null, 'Modo servidor (sem animações)')); modesCard.append(liteLbl);
+    panes.auto.append(modesCard);
+
+    // compras: tipo, mínimo para repor e quantidade por refill (bolas e poções)
+    const supCard = card();
+    supCard.append(el('div', 'pkb-h', 'Reposição'));
+    const grid = el('div', 'pkb-grid'); grid.style.marginTop = '6px';
+    const fld = (e, key, tip) => { e.className = 'pkb-in'; e.title = tip; e.value = CFG[key];
+      e.onchange = () => { let v = e.value; if (e.type === 'number') { v = Math.max(e.min ? +e.min : 0, Math.min(+e.max || 9999, Math.floor(+v) || 0)); e.value = v; } CFG[key] = v; saveCfg(); log('config', key, '=', v); if (key === 'fps') applyFps(); if ((key === 'ball' || key === 'ballMin' || key === 'ballBuy') && ballState.last) renderBall(); }; return e; };
+    const fsel = (list, key, tip) => fld(opt(document.createElement('select'), list), key, tip);
+    const nbr = (key, tip, min, max) => { const i = document.createElement('input'); i.type = 'number'; i.min = min; i.max = max; return fld(i, key, tip); };
+    const cell = t => el('div', 'pkb-cell', t);
+    ballSelEl = fsel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta');
+    ballSelEl.id = 'pkbot-ball-sel';
+    ballMinEl = nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999);
+    ballMinEl.id = 'pkbot-ball-min';
+    ballBuyEl = nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999);
+    ballBuyEl.id = 'pkbot-ball-buy';
+    grid.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
+      cell('Bola'), ballSelEl, ballMinEl, ballBuyEl,
+      cell('Poção'), fsel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
+    const fpsSel = fsel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2 (leve)'], [1, '1 (servidor)'], [0.2, '0.2 (mapa quase parado · captura ON)'], [0, 'sem limite']], 'fps', 'Limita apenas o desenho do mapa (canvas). A interface, cliques, combate, XP e captura ficam sempre em velocidade normal (60 FPS).');
+    fpsSel.style.gridColumn = '2 / 5'; grid.append(cell('FPS'), fpsSel);
+    supCard.append(grid); panes.auto.append(supCard);
+
+    const logCard = el('details', 'pkb-card');
+    logCard.append(el('summary', null, 'Registro'));
+    logEl = el('pre', 'pkb-log'); logEl.style.marginTop = '6px';
+    logCard.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
+    panes.auto.append(logCard);
+
+    // ===== aba Hunt (Modo 4: checkbox + foco + verificação manual; encadeia Hunt -> RMT -> Pokébola) =====
+    const huntCard = card();
+    const huntLbl = el('label', 'pkb-row');
     huntLbl.title = '4 Gerenciador de hunt (automático a cada 10 min; cada verificação também roda RMT e Analisador de Pokébola)';
     const huntChk = document.createElement('input');
     huntChk.type = 'checkbox'; huntChk.checked = !!st.hunt; huntChk.id = 'pkbot-hunt';
     huntChk.onchange = () => { st.hunt = huntChk.checked; save(); log('4 Gerenciador de hunt', huntChk.checked ? 'ON' : 'OFF'); if (huntChk.checked) huntState.next = 0; renderHunt(); ui.refresh(); };
-    huntLbl.append(huntChk, ' 4 Gerenc. hunt');
-    huntFocusEl = document.createElement('select');
-    huntFocusEl.id = 'pkbot-hunt-focus';
-    huntFocusEl.title = 'Foco automático do Gerenciador de Hunt: Equilibrado (XP + Lucro + Abates/Outland), XP, Lucro/Outland ou Shiny';
-    huntFocusEl.style.cssText = 'flex-shrink:0;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
-    [['balanced', 'Equilibrado'], ['xp', 'XP'], ['lucro', 'Lucro/Out'], ['shiny', 'Shiny']].forEach(([v, t]) => {
-      const o = document.createElement('option'); o.value = v; o.textContent = t; huntFocusEl.append(o);
-    });
+    huntLbl.append(huntChk, el('span', 'pkb-num', '4'), el('span', 'pkb-h', 'Gerenciador de hunt'));
+    huntFocusEl = sel('pkbot-hunt-focus', 'Foco automático do Gerenciador de Hunt: Equilibrado (XP + Lucro + Abates/Outland), XP, Lucro/Outland ou Shiny',
+      [['balanced', 'Equilibrado'], ['xp', 'XP'], ['lucro', 'Lucro/Out'], ['shiny', 'Shiny']]);
     huntFocusEl.value = CFG.huntFocus;
     huntFocusEl.onchange = () => {
       CFG.huntFocus = huntFocusEl.value; saveCfg();
@@ -180,184 +296,68 @@
       if (st.hunt) huntState.next = 0; // reavalia e troca automaticamente na hora
       renderHunt();
     };
-    huntBtnEl = document.createElement('button');
-    huntBtnEl.id = 'pkbot-hunt-scan';
-    huntBtnEl.textContent = 'Verificar';
-    huntBtnEl.title = 'Roda verificação manual do Gerenciador de Hunt agora (+ Radar RMT e Analisador de Pokébola)';
-    huntBtnEl.style.cssText = 'all:unset;flex-shrink:0;cursor:pointer;padding:1px 6px;border-radius:4px;background:#8f93;border:1px solid #8f96;font-size:10px;color:#fff';
-    huntBtnEl.onclick = () => runHuntCheck({ manual: true });
-    huntRow.append(huntLbl, huntFocusEl, huntBtnEl);
-    body.append(huntRow);
-    huntOutEl = document.createElement('div');
-    huntOutEl.id = 'pkbot-hunt-out';
-    huntOutEl.style.cssText = 'margin:2px 0 4px 16px;font-size:10px;line-height:1.35;color:#9ab;user-select:text';
-    body.append(huntOutEl);
-    mk('keepalive', 'Manter ativo em 2º plano');
-    const liteLbl = document.createElement('label'); liteLbl.style.cssText = 'display:block;cursor:pointer';
-    liteLbl.title = 'Desliga animações CSS, transições e sombras do jogo (corta repintura a 60 Hz; ideal para servidor/multi-conta)';
-    const liteChk = document.createElement('input'); liteChk.type = 'checkbox'; liteChk.checked = !!CFG.lite; liteChk.id = 'pkbot-lite';
-    liteChk.onchange = () => { CFG.lite = liteChk.checked; saveCfg(); applyLite(); log('Modo servidor (sem animações)', CFG.lite ? 'ON' : 'OFF'); };
-    liteLbl.append(liteChk, ' Modo servidor (sem animações)'); body.append(liteLbl);
-    // compras: tipo, mínimo para repor e quantidade por refill (bolas e poções)
-    const box = document.createElement('div'); box.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3;display:grid;grid-template-columns:auto 1fr 52px 52px;gap:3px 5px;align-items:center';
-    const fld = (el, key, tip) => { el.title = tip; el.style.cssText = 'width:100%;box-sizing:border-box;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:11px monospace;padding:1px 2px'; el.value = CFG[key];
-      el.onchange = () => { let v = el.value; if (el.type === 'number') { v = Math.max(el.min ? +el.min : 0, Math.min(+el.max || 9999, Math.floor(+v) || 0)); el.value = v; } CFG[key] = v; saveCfg(); log('config', key, '=', v); if (key === 'fps') applyFps(); if ((key === 'ball' || key === 'ballMin' || key === 'ballBuy') && ballState.last) renderBall(); }; return el; };
-    const sel = (opts, key, tip) => { const s = document.createElement('select'); opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); return fld(s, key, tip); };
-    const nbr = (key, tip, min, max) => { const i = document.createElement('input'); i.type = 'number'; i.min = min; i.max = max; return fld(i, key, tip); };
-    const cell = t => { const d = document.createElement('div'); d.textContent = t; d.style.cssText = 'font-size:10px;color:#aab'; return d; };
-    ballSelEl = sel(BALLS.map(b => [b, b]), 'ball', 'Pokébola usada nos arremessos e reposta');
-    ballSelEl.id = 'pkbot-ball-sel';
-    ballMinEl = nbr('ballMin', 'Repor quando tiver este tanto ou menos', 0, 9999);
-    ballMinEl.id = 'pkbot-ball-min';
-    ballBuyEl = nbr('ballBuy', 'Quantidade comprada por refill', 1, 9999);
-    ballBuyEl.id = 'pkbot-ball-buy';
-    box.append(cell(''), cell('item'), cell('mín.'), cell('comprar'),
-      cell('Bola'), ballSelEl, ballMinEl, ballBuyEl,
-      cell('Poção'), sel([['auto', 'auto (em uso)'], ...POTIONS.map(p => [p, p])], 'potType', 'auto = repõe as poções que você está usando'), nbr('potMin', 'Repor quando tiver este tanto ou menos', 0, 9999), nbr('potBuy', 'Quantidade comprada por refill', 1, 9999));
-    const fpsSel = sel([[60, '60 (padrão do jogo)'], [30, '30'], [15, '15'], [10, '10 (recomendado)'], [5, '5'], [2, '2 (leve)'], [1, '1 (servidor)'], [0.2, '0.2 (mapa quase parado · captura ON)'], [0, 'sem limite']], 'fps', 'Limita apenas o desenho do mapa (canvas). A interface, cliques, combate, XP e captura ficam sempre em velocidade normal (60 FPS).');
-    fpsSel.style.gridColumn = '2 / 5'; box.append(cell('FPS'), fpsSel); body.append(box);
-    // Analisador Otimizado de Pokébola (hunt atual: NPC + RMT + Shiny + ouro/h + taxa/preço)
-    const ballBox = document.createElement('div');
-    ballBox.id = 'pkbot-ball-box';
-    ballBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
-    const ballHead = document.createElement('div');
-    ballHead.style.cssText = 'display:flex;align-items:center;gap:4px';
-    const ballTit = document.createElement('span');
-    ballTit.textContent = 'Analisador Pokébola';
-    ballTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#7cf';
-    ballFocusEl = document.createElement('select');
-    ballFocusEl.id = 'pkbot-ball-focus';
-    ballFocusEl.title = 'Foco da recomendação: Equilibrado (lucro + Forte/Shiny), Dinheiro (máx lucro/h) ou Raro/Shiny';
-    ballFocusEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
-    [['balanced', 'Equilibrado'], ['money', 'Dinheiro'], ['rare', 'Raro/Shiny']].forEach(([v, t]) => {
-      const o = document.createElement('option'); o.value = v; o.textContent = t; ballFocusEl.append(o);
-    });
+    huntBtnEl = btn('pkbot-hunt-scan', 'Verificar', 'Roda verificação manual do Gerenciador de Hunt agora (+ Radar RMT e Analisador de Pokébola)', 'primary', () => runHuntCheck({ manual: true }));
+    const huntCtl = bar(el('span', 'pkb-cell', 'Foco'), huntFocusEl, el('span', 'pkb-grow'), huntBtnEl);
+    huntOutEl = out('pkbot-hunt-out');
+    huntCard.append(huntLbl, huntCtl, huntOutEl); panes.hunt.append(huntCard);
+
+    // ===== aba Bola: Analisador Otimizado de Pokébola =====
+    const ballCard = card(); ballCard.id = 'pkbot-ball-box';
+    ballFocusEl = sel('pkbot-ball-focus', 'Foco da recomendação: Equilibrado (lucro + Forte/Shiny), Dinheiro (máx lucro/h) ou Raro/Shiny',
+      [['balanced', 'Equilibrado'], ['money', 'Dinheiro'], ['rare', 'Raro/Shiny']]);
     ballFocusEl.value = ballState.focus;
     ballFocusEl.onchange = () => { ballState.focus = ballFocusEl.value; saveBall(); renderBall(); };
-    ballBtnEl = document.createElement('button');
-    ballBtnEl.id = 'pkbot-ball-scan';
-    ballBtnEl.textContent = 'Analisar';
-    ballBtnEl.title = 'Lê a hunt atual no Mapa + ficha da espécie na Pokedex + preços RMT e recomenda a melhor Pokébola';
-    ballBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#7cf3;border:1px solid #7cf6;font-size:10px;color:#fff';
-    ballBtnEl.onclick = () => analyzeCurrentHuntBalls();
-    ballHead.append(ballTit, ballFocusEl, ballBtnEl);
-    ballOutEl = document.createElement('div');
-    ballOutEl.id = 'pkbot-ball-out';
-    ballOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
-    ballBox.append(ballHead, ballOutEl);
-    body.append(ballBox);
-    // Radar RMT (Ouro <-> Gema): passivo ao abrir RMT->Itens ou scan sob demanda
-    const rmtBox = document.createElement('div');
-    rmtBox.id = 'pkbot-rmt-box';
-    rmtBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
-    const rmtHead = document.createElement('div');
-    rmtHead.style.cssText = 'display:flex;align-items:center;gap:4px';
-    const rmtTit = document.createElement('span');
-    rmtTit.textContent = 'Radar RMT';
-    rmtTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#fd8';
-    rmtDirEl = document.createElement('select');
-    rmtDirEl.id = 'pkbot-rmt-dir';
-    rmtDirEl.title = 'Sentido do Radar RMT: Tudo (Ouro→Gema, Gema→Ouro e Trading), só Ouro→Gema, só Gema→Ouro ou só Trading';
-    rmtDirEl.style.cssText = 'background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:1px 2px';
-    [['both', 'Tudo'], ['gold-to-gem', 'Ouro→Gema'], ['gem-to-gold', 'Gema→Ouro'], ['trading', 'Trading']].forEach(([v, t]) => {
-      const o = document.createElement('option'); o.value = v; o.textContent = t; rmtDirEl.append(o);
-    });
+    ballBtnEl = btn('pkbot-ball-scan', 'Analisar', 'Lê a hunt atual no Mapa + ficha da espécie na Pokedex + preços RMT e recomenda a melhor Pokébola', 'primary', () => analyzeCurrentHuntBalls());
+    ballOutEl = out('pkbot-ball-out');
+    ballCard.append(bar(secHead('Analisador Pokébola', 'Hunt atual: NPC + RMT + Shiny + ouro/h'), ballFocusEl, ballBtnEl), ballOutEl);
+    panes.ball.append(ballCard);
+
+    // ===== aba RMT: Radar (Ouro <-> Gema), passivo ao abrir RMT->Itens ou scan sob demanda =====
+    const rmtCard = card(); rmtCard.id = 'pkbot-rmt-box';
+    rmtDirEl = sel('pkbot-rmt-dir', 'Sentido do Radar RMT: Tudo (Ouro→Gema, Gema→Ouro e Trading), só Ouro→Gema, só Gema→Ouro ou só Trading',
+      [['both', 'Tudo'], ['gold-to-gem', 'Ouro→Gema'], ['gem-to-gold', 'Gema→Ouro'], ['trading', 'Trading']]);
     rmtDirEl.value = CFG.rmtDir;
     rmtDirEl.onchange = () => { CFG.rmtDir = rmtDirEl.value; saveCfg(); renderRmt(); };
-    rmtBtnEl = document.createElement('button');
-    rmtBtnEl.id = 'pkbot-rmt-scan';
-    rmtBtnEl.textContent = 'Escanear';
-    rmtBtnEl.title = 'Lê books livres + média 7d dos 8 itens líquidos e analisa Ouro→Gema, Gema→Ouro e Trading';
-    rmtBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#fd83;border:1px solid #fd86;font-size:10px;color:#fff';
-    rmtBtnEl.onclick = () => scanRmt();
-    rmtHead.append(rmtTit, rmtDirEl, rmtBtnEl);
-    rmtOutEl = document.createElement('div');
-    rmtOutEl.id = 'pkbot-rmt-out';
-    rmtOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
-    rmtBox.append(rmtHead, rmtOutEl);
-    body.append(rmtBox);
-    // Venda de Pedras (RMT — Coins): simula ou anuncia todas as pedras do inventário pelo máximo comprovado
-    const stonesBox = document.createElement('div');
-    stonesBox.id = 'pkbot-stones-box';
-    stonesBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
-    const stonesHead = document.createElement('div');
-    stonesHead.style.cssText = 'display:flex;align-items:center;gap:4px';
-    const stonesTit = document.createElement('span');
-    stonesTit.textContent = 'Venda de Pedras (Coins)';
-    stonesTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#8ef';
-    stonesPlanBtnEl = document.createElement('button');
-    stonesPlanBtnEl.id = 'pkbot-stones-plan';
-    stonesPlanBtnEl.textContent = 'Simular';
-    stonesPlanBtnEl.title = 'Lê suas pedras, o book livre e o histórico de vendas comprovadas sem anunciar';
-    stonesPlanBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#8ef3;border:1px solid #8ef6;font-size:10px;color:#fff';
-    stonesPlanBtnEl.onclick = () => sellAllStones({ dryRun: true });
-    stonesSellBtnEl = document.createElement('button');
-    stonesSellBtnEl.id = 'pkbot-stones-sell';
-    stonesSellBtnEl.textContent = 'Vender';
-    stonesSellBtnEl.title = 'Anuncia todas as pedras do inventário em Coins pelo melhor preço comprovado no mercado';
-    stonesSellBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#6f93;border:1px solid #6f96;font-size:10px;color:#fff';
-    stonesSellBtnEl.onclick = () => sellAllStones({ dryRun: false });
-    stonesHead.append(stonesTit, stonesPlanBtnEl, stonesSellBtnEl);
-    stonesOutEl = document.createElement('div');
-    stonesOutEl.id = 'pkbot-stones-out';
-    stonesOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
-    stonesBox.append(stonesHead, stonesOutEl);
-    body.append(stonesBox);
-    // Analisador de Venda de Inventário (Gold vs Gema): escolhe item ou Pokémon e recomenda a melhor moeda/valor
-    const sellBox = document.createElement('div');
-    sellBox.id = 'pkbot-sell-box';
-    sellBox.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #fff3';
-    const sellHead = document.createElement('div');
-    sellHead.style.cssText = 'display:flex;align-items:center;gap:4px';
-    const sellTit = document.createElement('span');
-    sellTit.textContent = 'Analisador Venda (Gold×Gema)';
-    sellTit.style.cssText = 'flex:1;font-size:11px;font-weight:bold;color:#c9f';
-    sellLoadBtnEl = document.createElement('button');
-    sellLoadBtnEl.id = 'pkbot-sell-load';
-    sellLoadBtnEl.textContent = 'Carregar';
-    sellLoadBtnEl.title = 'Lê os itens do inventário e Pokémons (RMT + Equipe) para escolher qual analisar';
-    sellLoadBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#c9f3;border:1px solid #c9f6;font-size:10px;color:#fff';
-    sellLoadBtnEl.onclick = () => loadSellInventory();
-    sellScanBtnEl = document.createElement('button');
-    sellScanBtnEl.id = 'pkbot-sell-scan';
-    sellScanBtnEl.textContent = 'Analisar';
-    sellScanBtnEl.title = 'Analisa o item ou Pokémon escolhido em Gold e em Gemas no RMT e indica qual vale mais a pena';
-    sellScanBtnEl.style.cssText = 'all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;background:#6f93;border:1px solid #6f96;font-size:10px;color:#fff';
-    sellScanBtnEl.onclick = () => analyzeSelectedSale();
-    sellHead.append(sellTit, sellLoadBtnEl, sellScanBtnEl);
-    const sellCtrl = document.createElement('div');
-    sellCtrl.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:4px';
-    sellSelEl = document.createElement('select');
-    sellSelEl.id = 'pkbot-sell-sel';
+    rmtBtnEl = btn('pkbot-rmt-scan', 'Escanear', 'Lê books livres + média 7d dos 8 itens líquidos e analisa Ouro→Gema, Gema→Ouro e Trading', 'primary', () => scanRmt());
+    rmtOutEl = out('pkbot-rmt-out');
+    rmtCard.append(bar(secHead('Radar RMT', 'Ouro ⇄ Gema e trading'), rmtDirEl, rmtBtnEl), rmtOutEl);
+    panes.rmt.append(rmtCard);
+
+    // ===== aba Pedras: venda em Coins pelo máximo comprovado =====
+    const stonesCard = card(); stonesCard.id = 'pkbot-stones-box';
+    stonesPlanBtnEl = btn('pkbot-stones-plan', 'Simular', 'Lê suas pedras, o book livre e o histórico de vendas comprovadas sem anunciar', '', () => sellAllStones({ dryRun: true }));
+    stonesSellBtnEl = btn('pkbot-stones-sell', 'Vender', 'Anuncia todas as pedras do inventário em Coins pelo melhor preço comprovado no mercado', 'go', () => sellAllStones({ dryRun: false }));
+    stonesOutEl = out('pkbot-stones-out');
+    stonesCard.append(bar(secHead('Venda de Pedras', 'RMT em Coins, pelo máximo comprovado'), stonesPlanBtnEl, stonesSellBtnEl), stonesOutEl);
+    panes.stones.append(stonesCard);
+
+    // ===== aba Venda: Analisador de Inventário (Gold vs Gema) =====
+    const sellCard = card(); sellCard.id = 'pkbot-sell-box';
+    sellLoadBtnEl = btn('pkbot-sell-load', 'Carregar', 'Lê os itens do inventário e Pokémons (RMT + Equipe) para escolher qual analisar', '', () => loadSellInventory());
+    sellScanBtnEl = btn('pkbot-sell-scan', 'Analisar', 'Analisa o item ou Pokémon escolhido em Gold e em Gemas no RMT e indica qual vale mais a pena', 'primary', () => analyzeSelectedSale());
+    sellSelEl = el('select', 'pkb-in'); sellSelEl.id = 'pkbot-sell-sel';
     sellSelEl.title = 'Escolha um item ou Pokémon do seu inventário para analisar';
-    sellSelEl.style.cssText = 'flex:1;min-width:0;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:2px 3px';
     sellSelEl.onchange = () => {
       sellState.selectedKey = sellSelEl.value;
       sellState.qtyOverride = null;
       syncSellQtyInput();
       saveSell();
     };
-    sellQtyEl = document.createElement('input');
-    sellQtyEl.id = 'pkbot-sell-qty';
-    sellQtyEl.type = 'number';
-    sellQtyEl.min = 1;
-    sellQtyEl.max = 999999;
+    sellQtyEl = el('input', 'pkb-in'); sellQtyEl.id = 'pkbot-sell-qty';
+    sellQtyEl.type = 'number'; sellQtyEl.min = 1; sellQtyEl.max = 999999;
     sellQtyEl.title = 'Quantidade do item a simular (padrão: todo o estoque)';
-    sellQtyEl.style.cssText = 'width:48px;display:none;box-sizing:border-box;background:#0006;color:#fff;border:1px solid #fff3;border-radius:4px;font:10px monospace;padding:2px 3px';
+    sellQtyEl.style.cssText = 'width:64px;flex:0 0 64px;display:none';
     sellQtyEl.onchange = () => {
       const v = Math.max(1, Math.floor(+sellQtyEl.value) || 1);
       sellQtyEl.value = v;
       sellState.qtyOverride = v;
     };
-    sellCtrl.append(sellSelEl, sellQtyEl);
-    sellOutEl = document.createElement('div');
-    sellOutEl.id = 'pkbot-sell-out';
-    sellOutEl.style.cssText = 'margin:4px 0 0;font-size:10px;line-height:1.38;color:#dfe;user-select:text';
-    sellBox.append(sellHead, sellCtrl, sellOutEl);
-    body.append(sellBox);
-    logEl = document.createElement('pre'); logEl.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;max-height:120px;overflow:auto;user-select:text;font-size:11px;color:#cfd';
-    body.append(logEl); logEl.textContent = logLines.slice(-12).join('\n');
-    p.append(head, body);
+    const sellCtrl = bar(sellSelEl, sellQtyEl); sellCtrl.style.marginTop = '6px';
+    sellOutEl = out('pkbot-sell-out');
+    sellCard.append(bar(secHead('Analisador de Venda', 'Gold × Gema'), sellLoadBtnEl, sellScanBtnEl), sellCtrl, sellOutEl);
+    panes.sell.append(sellCard);
+
+    p.append(head, strip, tabsEl, body);
     renderHunt();
     renderBall();
     renderRmt();
@@ -374,16 +374,32 @@
       u.y = Math.min(Math.max(8, u.y ?? maxY), maxY);
       p.style.left = u.x + 'px'; p.style.top = u.y + 'px';
     };
+    const renderStatus = () => {
+      const on = MODES.filter(k => st[k]).map(k => MODES.indexOf(k) + 1);
+      dot.classList.toggle('pkb-on', on.length > 0);
+      sub.textContent = on.length ? 'modos ' + on.join(' · ') : 'parado';
+      pauseBtn.textContent = on.length ? '⏸' : '▶';
+      pauseBtn.title = on.length ? 'Pausar todos os modos' : ((u.resume || []).length ? 'Retomar os modos pausados' : 'Nenhum modo para retomar');
+      pauseBtn.disabled = !on.length && !(u.resume || []).length;
+      const scr = energyNow();
+      chipScreen.textContent = 'tela: ' + scr; chipScreen.classList.toggle('pkb-ok', scr === 'normal');
+      chipHidden.style.display = document.hidden ? '' : 'none';
+      chipDry.style.display = CFG.dry ? '' : 'none';
+      tabBtns.hunt.classList.toggle('pkb-live', !!st.hunt);
+      tabBtns.auto.classList.toggle('pkb-live', !!(st.capture || st.potions || st.eterna));
+    };
     const render = () => {
-      p.classList.toggle('pk-oculto', u.hidden); p.style.display = u.hidden ? 'none' : 'flex'; body.style.display = u.min ? 'none' : '';
-      const on = [['capture', 1], ['potions', 2], ['eterna', 3], ['hunt', 4]].filter(([k]) => st[k]).map(([, n]) => n);
-      title.textContent = 'PokeIdle Helper' + (on.length ? ' · ativos: ' + on.join(',') : ' · parado');
+      if (!panes[u.tab]) u.tab = 'auto';
+      p.classList.toggle('pk-oculto', u.hidden); p.classList.toggle('pkb-min', u.min); p.style.display = u.hidden ? 'none' : 'flex';
+      for (const [key] of TABS) { panes[key].hidden = key !== u.tab; tabBtns[key].classList.toggle('pkb-active', key === u.tab); }
+      renderStatus();
       place();
     };
-    ui.refresh = () => { for (const k of ['capture', 'potions', 'eterna', 'hunt']) { const c = $('#pkbot-' + k); if (c) c.checked = !!st[k]; } render(); };
+    ui.refresh = () => { for (const k of MODES) { const c = $('#pkbot-' + k); if (c) c.checked = !!st[k]; } render(); };
     if (typeof ResizeObserver !== 'undefined') {
       new ResizeObserver(() => { if (!u.hidden) place(); }).observe(p);
     }
+    setInterval(() => { if (!u.hidden) renderStatus(); }, 3000);
 
     // arrastar
     head.onpointerdown = e => {

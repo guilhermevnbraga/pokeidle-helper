@@ -17,6 +17,7 @@ Vivem no `AGENTS.md` (não repetir aqui). Respeitar Termos §5 do PokeIdle (só 
 - **Deploy multi-conta Proxmox CT 104 (`deploy/`):** 1 container (`linuxserver/chromium` + `tint2` + `svc-pulseaudio`), 4 perfis em tela cheia com auto-minimize (~33,6% CPU de 1 core, `gpu-process = 0%`, 1,86 GiB RAM).
 
 ## Próximos passos (ordem)
+00. **UI nova do painel (v0.10.0, `content.js` `buildPanel`):** tema `#pkbot-style` (classes `pkb-*`), status + pausa/retoma, abas e pílula; ids/`__pkBot` preservados. **Não validada ao vivo**: recarregar a extensão em `chrome://extensions` + aba do jogo e conferir abas, arraste, ULTRA e saídas. Etapas seguintes: refinar saídas (tabelas/cards) de RMT/Pedras/Venda.
 0. **Meus anúncios no Analisador (2026-11-26, `readMyListings` em `content.js`):** `Carregar` agora soma itens/Pokémons de `#cm-meus` ao inventário. Parser escrito **às cegas** (aba MCP caiu no onboarding de conta nova, DOM real não inspecionado). Validar ao vivo: log `venda: Meus anúncios cards=N`, `closeRmtLeaf` após ler, seletor mostra `(N anunciados)`.
 1. Rodar o Analisador (`v0.9.1`) em outro Pokémon e conferir ao vivo a regra dos 15% (preço Máx. viável deve ficar perto da mediana, não da cauda); calibrar prazo com a venda real do Shiny Shedinja anunciado.
 2. Validar `v0.9.0` ao vivo: banner de timing do Radar RMT (Ouro→Gema, Gema→Ouro, Trading) e log `Timing O→G`.
