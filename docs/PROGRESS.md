@@ -17,6 +17,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [ ] Timing do Radar RMT (`timing.js`+`content.js`, v0.9.0): veredito ▲/●/⏳ da rota recomendada (focusId) vs média 7d + histórico por scan (`pkbot-rmt-hist… · NÃO validado: ao vivo no Chrome
 - [x] UI do painel v0.10.0: tema pkb-*, status+pausa, abas, pílula, cards em todas as abas; validado ao vivo (PT e EN, ULTRA, arraste) · janela estreita real NÃO validada
 - [x] Auto-reload de dev no background.js (extensão descompactada, ~40 s após editar); validado ao vivo
+- [x] Filtros de busca do jogo (`#f-mapa`, `#f-nivel-min/max`, `#f-dex`) persistem: extensão limpa antes de ler e restaura o do usuário (v0.10.1) ·… · NÃO validado: troca real, nível min/max
 - [ ] Bug readMyListings: em EN o anúncio '78× Darkness Stone' não vira item (0 itens lidos); inspecionar DOM de #cm-meus e corrigir parser
 - [ ] README.md ainda não descreve a UI nova (abas, status, pausa, pílula) · NÃO feito
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
