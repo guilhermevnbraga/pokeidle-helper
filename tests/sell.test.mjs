@@ -224,6 +224,17 @@ test('compareSaleOptions detects technical tie within 3% and falls back graceful
   assert.ok(noRate.warnings.some(w => /Radar RMT/i.test(w)));
 });
 
+test('compareSaleOptions: book suspeito (muito abaixo da média 7d) nunca vence a comparação de moedas', () => {
+  const goldEval = { currency: 'gold', available: true, unitPrice: 75009, gross: 10350000, fee: 1550000, net: 8800000, confidence: 'high', provenCount: 1, warnings: [], suspect: false };
+  const gemEval = { currency: 'gem', available: true, unitPrice: 2, gross: 276, fee: 42, net: 234, confidence: 'high', provenCount: 0, warnings: ['book muito abaixo da média 7d (2 vs 58)'], suspect: true };
+  const r = PK_SELL.compareSaleOptions({ kind: 'item', name: 'Darkness Stone', qty: 138, goldEval, gemEval, exchangeRate: { coinsPerGem: 5700000 } });
+  assert.equal(r.bestCurrency, 'gold');
+  assert.match(r.headline, /suspeito/i);
+  assert.equal(r.advantagePct, 0);
+  const r2 = PK_SELL.compareSaleOptions({ kind: 'item', name: 'X', qty: 1, goldEval: { ...goldEval, suspect: true }, gemEval: { ...gemEval, suspect: false }, exchangeRate: { coinsPerGem: 5700000 } });
+  assert.equal(r2.bestCurrency, 'gem');
+});
+
 test('pokemonEligibility validates level >= 50 and nota >= 3.5 with Shiny/P5 exceptions', () => {
   assert.equal(PK_SELL.pokemonEligibility({ species: 'Hoppip', level: 20, potency: 4, nota: 0.908 }).eligible, false);
   assert.equal(PK_SELL.pokemonEligibility({ species: 'Charizard', level: 547, potency: 2, nota: 3.704 }).eligible, true);

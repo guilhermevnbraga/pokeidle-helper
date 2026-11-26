@@ -440,7 +440,9 @@ const PK_SELL = (() => {
 
     // Aviso de dump no book (diferente de pedras em lote, aqui informamos ao usuário sem bloquear)
     const recentConfirmsCrash = proven.validCount > 0 && proven.maxProven != null && avg != null && proven.maxProven < avg * 0.65;
+    let suspect = false;
     if (avg != null && unitPrice < Math.floor(avg * 0.50) && !recentConfirmsCrash) {
+      suspect = true;
       warnings.push(`book muito abaixo da média 7d (${unitPrice} vs ${avg})`);
     }
     if (vol === 0 && proven.validCount === 0) {
@@ -471,6 +473,7 @@ const PK_SELL = (() => {
       maxProven: proven.maxProven,
       provenCount: proven.validCount,
       confidence,
+      suspect,
       warnings,
     };
   }
@@ -962,6 +965,12 @@ const PK_SELL = (() => {
       bestCurrency = 'gem';
       headline = 'VENDER EM GEMAS (única moeda com mercado)';
       explanation = `Sem ofertas/histórico confiáveis em Gold. Em Gemas recebe ${gemEval.net.toLocaleString('pt-BR')} G líq.${gemEquivGold ? ` (≈ ${formatCoins(gemEquivGold)} Coins)` : ''}.`;
+    } else if (gOk && oOk && !!goldEval.suspect !== !!gemEval.suspect) {
+      // Um lado com book muito abaixo da média 7d (isca/dump): a comparação de valores não é confiável.
+      const gemBad = !!gemEval.suspect;
+      bestCurrency = gemBad ? 'gold' : 'gem';
+      headline = `VENDER EM ${gemBad ? 'GOLD' : 'GEMAS'} (book de ${gemBad ? 'Gemas' : 'Gold'} suspeito)`;
+      explanation = `O book de ${gemBad ? 'Gemas' : 'Gold'} está muito abaixo da média 7d, então a comparação de valor não é confiável; use ${gemBad ? 'Gold' : 'Gemas'} (${gemBad ? formatCoins(goldEval.net) + ' líq.' : gemEval.net.toLocaleString('pt-BR') + ' G líq.'}).`;
     } else if (gOk && oOk) {
       if (cpg) {
         const diffPct = ((gemEquivGold - goldEval.net) / goldEval.net) * 100;
