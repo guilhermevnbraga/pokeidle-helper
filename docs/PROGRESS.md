@@ -12,6 +12,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [ ] Analisador de Pokébola (`ball.js`+`content.js`): auto-aplica bola recomendada + mín. 10 / repor 100 (v0.7.6) · NÃO validado: hunt mista (>1 espécie) e com Shiny/Lure
 - [x] Radar RMT v0.8.2 (`rmt.js`+`content.js`): Ouro↔Gema + Trading (arbitragem cruzada, flip, média/vol 7d `.cmp-media`, anti-armadilha); validado Node (67/67) e Chrome.
 - [x] Venda de Pedras v0.7.7 (`stones.js`+`content.js`): `Simular`/`Vender` pedras em Coins no máx. comprovado, confirma `.caixa-confirmar`; validado Node+venda real (3/3 em 12,9 s).
+- [ ] Analisador de Venda: soma "Meus anúncios" (`#cm-meus`, `readMyListings`) ao inventário · NÃO validado: DOM real de #cm-meus (parser às cegas), closeRmtLeaf após ler
 - [ ] Analisador de Venda v0.9.1 (`sell.js`+`content.js`): preço máx. viável (Nota/Nível/Potência, fila, liquidez, ≥15% vendas); ao vivo: Shedinja+… · NÃO validado: regra 15%, P5, Mega, Depot
 - [ ] Timing do Radar RMT (`timing.js`+`content.js`, v0.9.0): veredito ▲/●/⏳ da rota recomendada (focusId) vs média 7d + histórico por scan (`pkbot-rmt-hist… · NÃO validado: ao vivo no Chrome
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
