@@ -460,7 +460,35 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
 
   // ---------- helpers do jogo ----------
   const modalVisible = () => { const vis = $$('.modal-caixa').filter(m => m.offsetParent); return vis[vis.length - 1] || null; };
+  // Filtros de busca do jogo (Mapa/Pokedex) persistem entre aberturas: a extensão os neutraliza para ler dados
+  // completos e restaura o que o usuário tinha digitado antes de fechar o modal.
+  const FILTER_IDS = ['f-mapa', 'f-nivel-min', 'f-nivel-max', 'f-dex'];
+  let savedFilters = null;
+  function setFilter(el, v) {
+    if (el.value === v) return;
+    el.value = v;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function neutralizeFilters() {
+    const m = modalVisible(); if (!m) return;
+    for (const id of FILTER_IDS) {
+      const el = $(`#${id}`, m); if (!el) continue;
+      if (!savedFilters) savedFilters = {};
+      if (!(id in savedFilters)) savedFilters[id] = el.value;
+      setFilter(el, '');
+    }
+  }
+  function restoreFilters() {
+    const m = modalVisible(); if (!m || !savedFilters) return;
+    for (const id of FILTER_IDS) {
+      const el = $(`#${id}`, m);
+      if (el && id in savedFilters) { setFilter(el, savedFilters[id]); delete savedFilters[id]; }
+    }
+    if (!Object.keys(savedFilters).length) savedFilters = null;
+  }
   async function closeModal() {
+    restoreFilters();
     for (let i = 0; i < 4; i++) {
       const m = modalVisible(); if (!m) return;
       const x = $$('button', m).find(b => b.innerText.trim() === '×') || $('#ficha-fechar', m);
@@ -686,6 +714,7 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
 
   async function openMap(mode = 'mapa') {
     await closeModal(); const nav = navBtn('mapa'); if (!nav) throw new Error('botão do Mapa não encontrado'); nav.click(); await sleep(900);
+    neutralizeFilters(); await sleep(150);
     const bts = $$('.mapa-modo-bt');
     const idx = mode === 'lista' ? 1 : 0;
     if (bts[idx] && !bts[idx].classList.contains('on')) { bts[idx].click(); await sleep(500); }
@@ -785,6 +814,8 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     if (!nav) throw new Error('botão do Mapa não encontrado');
     nav.click();
     await sleep(900);
+    neutralizeFilters();
+    await sleep(150);
 
     const modoBts = $$('.mapa-modo-bt');
     const wasMapMode = !!(modoBts[0] && modoBts[0].classList.contains('on'));
@@ -3239,6 +3270,7 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     nav.click();
     const inp = await waitForSelector('#f-dex', () => $('#modal-corpo'), 1800);
     if (!inp) { await closeModal(); return out; }
+    neutralizeFilters();
 
     for (const item of items) {
       const key = item.key || normTxt(item.query);
@@ -3276,6 +3308,7 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     nav.click();
     const inp = await waitForSelector('#f-dex', () => $('#modal-corpo'), 1800);
     if (!inp) throw new Error('busca da Pokedex não abriu');
+    neutralizeFilters();
     inp.value = speciesName;
     inp.dispatchEvent(new Event('input', { bubbles: true }));
     await sleep(300);
