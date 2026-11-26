@@ -1,32 +1,26 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-25. Versão da extensão: `0.9.1`. Último commit de código: `e8889b0`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 96 passando (`types` + `hunt` + `rmt` + `timing` + `stones` + `sell` + `ball`). Histórico em `docs/archive/` (só Grep).
+Atualizado: 2026-11-26. Versão da extensão: `0.10.0`. Último commit de código: `f7a9b2e`. Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 96 passando. Histórico em `docs/archive/` (só Grep; versão anterior deste arquivo: `HANDOFF_ate_2026-11-26.md`).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
-Vivem no `AGENTS.md` (não repetir aqui). Respeitar Termos §5 do PokeIdle (só cliques no DOM, sem API direta, sem mexer em login/anti-robô).
+Vivem no `AGENTS.md` (não repetir aqui). Termos §5 do PokeIdle: só cliques no DOM, sem API direta, sem mexer em login/anti-robô.
 
-## Estado atual (2026-11-25)
-- **Analisador de Venda de Pokémon v0.9.1 (`sell.js` + `content.js`, `e8889b0`):** preço **máx. viável** (padrão), Rápido e Mercado com espera estimada. Ajusta comparáveis por Nota/Nível/Potência (ridge conservador, pesos ≥ 0), pesa vendas recentes, usa fila de anúncios melhores à frente + liquidez (vendas/dia) e exige que ≥15% das vendas comparáveis tenham chegado ao preço (`MIN_PROVEN_SHARE`); horizonte 14d; timing 7d vs 30d; lista "Ver N comparáveis". Corrigidos: espécie "Shiny X" nunca casava; histórico lido antes de filtrar (lista antiga ~2s, página até 2s) → agora espera a espécie aparecer. Validado ao vivo com Shiny Shedinja e Charizard (antes da regra dos 15%); **a regra dos 15% e a potência NÃO foram vistas ao vivo**. DOM: mercado sem paginação, histórico 30 linhas/pág com `.cm-hist-data` (dd/mm/aaaa).
-- **Timing do Radar RMT (`timing.js` + `content.js`, `edba6ab`, `v0.9.0`):** responde "agir agora ou esperar?". Compara preço atual com média 7d do jogo + histórico próprio (`pkbot-rmt-hist`, 1 snapshot/scan, 30d). Banner ▲ agir / ● normal / ⏳ esperar em Ouro→Gema e Gema→Ouro, julgando **só a rota recomendada** (`plan.primary.routeId` via `focusId`; o usuário quer saber se o item do `MELHOR JUNTAR` está bom, não qual item está mais barato vs o normal; "Topo absoluto" renomeado para "Taxa bruta maior (outra opção)"); Trading (cross por spread, flips por preço de compra) é reordenado e vira `WAIT` se tudo estiver abaixo do normal. Histórico confiável só com ≥8 leituras e ≥12h; "melhor janela do dia" com ≥24h. Validado só em Node; **NÃO validado ao vivo**.
-- Extensão MV3 (`0.9.0`) com 4 modos (Captura, Repor bolas/poções, Captura eterna, **Gerenciador de hunt v3** automático + `Verificar`) + **Analisador de Pokébola** (`ball.js`) + **Radar RMT (Ouro↔Gema + Trading)** (`rmt.js`) + **Venda de Pedras** (`stones.js`) + **Analisador de Venda de Inventário** (`sell.js`).
-- **Radar RMT bidirecional + Trading (`rmt.js` + `content.js`, `v0.8.2`):** calcula **Ouro → Gema**, **Gema → Ouro** e **Trading** (arbitragem cruzada `Ouro→Gema→Ouro`/`Gema→Ouro→Gema` e flip/snipe na mesma moeda) na mesma varredura; lê média e volume 7d (`.cmp-media`) dos 8 itens para separar trading lucrativo real (`PROFITABLE`) de book inflado/raso (`RISKY`, ex.: Frag. MEGA Stone +52% acima da média 7d → `-30,6%` na média 7d) e `NO_TRADE`. Seletor `Tudo | Ouro→Gema | Gema→Ouro | Trading`. Validado em Node (67/67) e ao vivo no Chrome (scan real 8/8 itens com `.cmp-media`).
-- **Analisador de Venda de Inventário — Gold vs Gema (`sell.js` + `content.js`, `71212f7`, `v0.8.0`):** seção `Analisador Venda (Gold×Gema)` (`Carregar` + seletor de itens RMT e Pokémons Depot/Equipe + qtd simulada + `Analisar`). Validado em Node e ao vivo no Chrome (Bronze Boss Token ×14 → Gold +35%; Charizard Nv 548 → Gemas +47%); **NÃO validado ao vivo** com Pokémon Shiny/P5 ou grade `#cm-pks` populada do Depot.
-- **Gerenciador de hunt v3 calibrado + desempate secundário (`hunt.js` + `content.js`, `e7c3677`, `v0.7.8`):** física calibrada (`1.0`/`2.9s`), XP puro + `TIE_BAND = 3%` com desempate secundário. Validado em Node; **NÃO validado ao vivo no Chrome**.
-- **Venda de Pedras (`8656492`, `v0.7.7`), Cadeia `Hunt → RMT → Pokébola` (`fa7365c`, `v0.7.6`), Radar RMT fungíveis (`f56c5c8`, `v0.7.5`) e FPS `0.2`/Modo servidor (`7633b2b`, `v0.7.4`):** validados em Node e ao vivo.
-- **Deploy multi-conta Proxmox CT 104 (`deploy/`):** 1 container (`linuxserver/chromium` + `tint2` + `svc-pulseaudio`), 4 perfis em tela cheia com auto-minimize (~33,6% CPU de 1 core, `gpu-process = 0%`, 1,86 GiB RAM).
+## Estado atual (2026-11-26)
+- **UI nova do painel (`content.js`, `buildPanel` + `PANEL_CSS`):** tema único em `<style id="pkbot-style">` (variáveis `--pkb-*`, classes `pkb-*`), cabeçalho de status (bolinha, modos ativos, ⏸/▶ que pausa e retoma os mesmos modos, recolher em pílula, ×/Alt+P), chips de tela/aba oculta/dry-run e **abas** Auto · Hunt · Bola · RMT · Pedras · Venda. As saídas de todas as abas são **cards** (`pkb-step`, `pkb-verdict`, `pkb-tiers`, `pkb-item`…); ids `pkbot-*` e `window.__pkBot` preservados.
+- **Validado ao vivo:** abas, pausa/retoma, pílula, arraste (contido nas bordas), ULTRA, jogo em **EN** (RMT, Pedras simular, Venda carregar, Bola analisar), sem erros no console. Janela estreita real **não** testada (o MCP não emula viewport; só CSS forçado, ok).
+- **Auto-reload de dev (`background.js`):** só em extensão descompactada; a cada 30 s compara os arquivos e chama `chrome.runtime.reload()` (~40 s após editar). Depois recarregue a aba do jogo (`navigate`). Se remover do pacote final, é só apagar o bloco `DEV`.
+- Funcionalidades (Hunt v3, Analisador de Pokébola, Radar RMT + Trading + Timing, Venda de Pedras, Analisador de Venda v0.9.1) inalteradas nesta sessão; só a apresentação mudou.
 
 ## Próximos passos (ordem)
-00. **UI nova do painel (v0.10.0, `content.js` `buildPanel`):** tema `#pkbot-style` (classes `pkb-*`), status + pausa/retoma, abas e pílula; ids/`__pkBot` preservados. Validada ao vivo (incl. ULTRA); Todas as abas já em cards (classes pkb-*). Extensão se recarrega sozinha (background.js, ~40s).
-0. **Meus anúncios no Analisador (2026-11-26, `readMyListings` em `content.js`):** `Carregar` agora soma itens/Pokémons de `#cm-meus` ao inventário. Parser escrito **às cegas** (aba MCP caiu no onboarding de conta nova, DOM real não inspecionado). Validar ao vivo: log `venda: Meus anúncios cards=N`, `closeRmtLeaf` após ler, seletor mostra `(N anunciados)`.
-1. Rodar o Analisador (`v0.9.1`) em outro Pokémon e conferir ao vivo a regra dos 15% (preço Máx. viável deve ficar perto da mediana, não da cauda); calibrar prazo com a venda real do Shiny Shedinja anunciado.
-2. Validar `v0.9.0` ao vivo: banner de timing do Radar RMT (Ouro→Gema, Gema→Ouro, Trading) e log `Timing O→G`.
-3. Validar Analisador com P5/Mega e grade `#cm-pks` do Depot; considerar ler Z-Move/TM AoE no ajuste (dispersão grande no Charizard).
-4. Validar `v0.7.8` do Gerenciador de hunt ao vivo e o CT 104 (`https://192.168.0.104:3001`).
+1. **Bug "Meus anúncios" (`readMyListings`):** em EN o log disse `0 item(ns), 1 Pokémon(s)` com 2 anúncios (Shiny Shedinja e 78× Darkness Stone a 77K/un.); o card do item não vira item. Texto do card: `78× Darkness Stone DARK 78 in stock · 77K per unit your listing`. Inspecionar o DOM de `#cm-meus` pelo fluxo da extensão e corrigir o parser (nome vem depois de `N×`).
+2. Atualizar `README.md` com a UI nova (abas, status, pausa, pílula) — pendente, não feito.
+3. Validar ao vivo o que segue `- [ ]` no PROGRESS: troca real do Gerenciador de hunt (v0.7.8), regra dos 15% do preço de venda, timing do RMT, hunt com >1 espécie/Shiny no Analisador de Bola; só depois pensar em `1.0`.
+4. Teste de janela estreita real (DevTools → device toolbar, ~500px).
 
 ## Pendente do usuário
-- Recarregar a extensão (`v0.9.0`) em `chrome://extensions` (e `F5` em `pokeidle.io/app`) nos perfis secundários do Chrome e atualizar o container no CT 104 se quiser a `v0.9.0` lá.
-- No CT 104 (`https://192.168.0.104:3001`), conferir `FPS = 0.2` (ou `ULTRA Economia`), minimizar na barra inferior e dar **Shutdown** no CT 104 pelo Proxmox quando for jogar no PC local.
+- Perfis secundários do Chrome: recarregar a extensão em `chrome://extensions` (o auto-reload só vale no perfil onde ele já está rodando) e `F5` no jogo; atualizar o container no CT 104 se quiser a UI nova lá.
+- `docs/META_ANALYSIS.md` e `scripts/meta-model.mjs` estão não rastreados (anteriores a esta sessão): decidir se entram no repo.
 
 ## Armadilhas
-Todas em `docs/BROWSER_QUIRKS.md` (fonte única; leia antes de usar o MCP).
+Todas em `docs/BROWSER_QUIRKS.md` (fonte única; leia antes de usar o MCP). Extra desta sessão: `chrome://` é bloqueado para o MCP (reload manual só na 1ª vez); `resize_window` não altera o viewport; a Cache API não aceita chave `chrome-extension://`.
