@@ -2216,6 +2216,32 @@
         meta.push(`${ev.comparableListings || 0} anún. · ${ev.comparableSales || 0} vendas`);
       }
       box.append(mk('div', 'opacity:.72;font-size:9px', meta.join(' · ')));
+      if (!isItem && ev.tiers) {
+        const fmt = v => (isGold ? fc(v) : fg(v));
+        const dTxt = d => (d == null ? '' : ` (~${d < 1 ? '<1' : Math.round(d)}d)`);
+        const t = ev.tiers;
+        box.append(mk('div', 'color:#cfe;font-size:9px;margin-top:2px',
+          `Rápido ${fmt(t.quick.price)}${dTxt(t.quick.days)} · Mercado ${fmt(t.market.price)}${dTxt(t.market.days)} · Máx. viável ${fmt(t.max.price)}${dTxt(t.max.days)}`));
+        if (t.provenCap) box.append(mk('div', 'opacity:.72;font-size:9px', `Maior preço pago (2ª maior venda ajustada): ${fmt(t.provenCap.price)} → ${fmt(t.provenCap.net)} líq.`));
+        if (ev.timing && ev.timing.verdict !== 'UNKNOWN') {
+          const tm = { SELL: ['▲ vendas 7d em alta', '#8f8'], WAIT: ['⏳ vendas 7d em baixa', '#fc9'], NORMAL: ['● vendas 7d normais', '#bcd'] }[ev.timing.verdict];
+          box.append(mk('div', `color:${tm[1]};font-size:9px`, `${tm[0]} (×${String(ev.timing.ratio).replace('.', ',')} vs 30d, ${ev.timing.recentCount} vendas)`));
+        }
+        if (ev.model) {
+          const mTxt = `Ajuste: +1 Nota ≈ +${Math.round((Math.exp(ev.model.slopeNota) - 1) * 100)}% · ×2 Nível ≈ +${Math.round((Math.pow(2, ev.model.slopeLevel) - 1) * 100)}% · +1 Potência ≈ +${Math.round((Math.exp(ev.model.slopePotency || 0) - 1) * 100)}% (${ev.model.nFit} pts) · ${String(ev.model.salesPerDay).replace('.', ',')} vendas/dia`;
+          box.append(mk('div', 'opacity:.6;font-size:8.5px', mTxt));
+        }
+        if (ev.comparables && ev.comparables.length) {
+          const det = document.createElement('details');
+          det.style.cssText = 'margin-top:2px;font-size:8.5px;opacity:.85';
+          det.append(mk('summary', 'cursor:pointer', `Ver ${ev.comparables.length} comparáveis usados`));
+          for (const c of ev.comparables) {
+            det.append(mk('div', 'opacity:.8',
+              `${c.type === 'venda' ? 'V' : 'A'} ${fmt(c.price)} → ${fmt(c.adj)} adj · Nv ${c.level ?? '?'} P${c.potency ?? '?'} N ${c.nota != null ? String(c.nota).replace('.', ',') : '?'} · peso ${String(c.w).replace('.', ',')}${c.ageDays != null ? ` · ${c.ageDays}d` : ''}`));
+          }
+          box.append(det);
+        }
+      }
       return box;
     };
 
@@ -2234,7 +2260,7 @@
       card.append(mk('div', 'color:#fc9;font-size:9px;margin-top:3px', '⚠ ' + d.eligibilityNote));
     }
 
-    for (const w of (r.warnings || []).slice(0, 4)) {
+    for (const w of (r.warnings || []).slice(0, 8)) {
       const line = mk('div', 'margin-top:2px;color:#fc9;font-size:9px;display:flex;align-items:center;gap:4px');
       line.append(mk('span', 'flex:1', '⚠ ' + w));
       if (/Radar RMT/i.test(w)) {
@@ -2257,7 +2283,7 @@
       if (nomeEl) {
         const clone = nomeEl.cloneNode(true);
         $$('.pl-lv, .pl-colecao-marca, .cm-selo-shiny', clone).forEach(x => x.remove());
-        species = (clone.textContent || '').replace(/[✨★]/g, '').replace(/\s+/g, ' ').trim();
+        species = PK_SELL.cleanSpeciesName(clone.textContent || '');
       }
       if (!species) continue;
       const lvTxt = ($('.pl-lv', el) || {}).textContent || '';
@@ -2330,7 +2356,7 @@
           const c = cards[i];
           const rawName = ($('.mk-nome', c) || {}).textContent?.trim() || '';
           const shiny = c.classList.contains('shiny') || !!$('.cm-selo-shiny', c) || /✨|\bshiny\b/i.test(rawName);
-          const species = rawName.replace(/[✨★]/g, '').replace(/^shiny\s+/i, '').replace(/\s+/g, ' ').trim();
+          const species = PK_SELL.cleanSpeciesName(rawName);
           if (!species) continue;
           const subTxt = ($('.mk-sub', c) || {}).textContent || '';
           const selosTxt = ($('.pk-selos', c) || {}).textContent || '';
@@ -2530,7 +2556,7 @@
         if (!nextBtn) break;
         nextBtn.click();
         const t0 = Date.now();
-        while (Date.now() - t0 < 1600) {
+        while (Date.now() - t0 < 5000) {
           await sleep(180);
           const f2 = $('.cm-folha');
           const rows2 = f2 ? $$('.cm-hist-linha', f2) : [];
@@ -2556,7 +2582,7 @@
       if ((wantCurrency === 'gem') !== isOrb) continue;
       const price = PK_SELL.parseCompactNum(precoEl.title || precoEl.textContent);
       if (!price) continue;
-      const species = ($('.cm-nome-txt', c) || {}).textContent?.trim() || '';
+      const species = PK_SELL.cleanSpeciesName(($('.cm-nome-txt', c) || {}).textContent || '');
       if (!species) continue;
       const subTxt = ($('.cm-sub', c) || {}).textContent || '';
       const selosTxt = ($('.pk-selos', c) || {}).textContent || '';
@@ -2674,15 +2700,16 @@
     return { goldListings, gemListings };
   }
 
-  async function readPokemonHistoryBothCurrencies(getCorpo, pk, maxPages = 2) {
+  async function readPokemonHistoryBothCurrencies(getCorpo, pk, maxPages = 6) {
     const goldSales = [];
     const gemSales = [];
+    let exhausted = false; // true quando leu até a última página (cobre os 30 dias do histórico)
     const corpo = getCorpo();
     const btnHist = corpo && $('#cm-historico-global', corpo);
-    if (!btnHist) return { goldSales, gemSales };
+    if (!btnHist) return { goldSales, gemSales, exhausted };
     btnHist.click();
     const leaf = await waitForSelector('.cm-folha', () => document, 2200);
-    if (!leaf) return { goldSales, gemSales };
+    if (!leaf) return { goldSales, gemSales, exhausted };
     await sleep(300);
 
     const clickHist = async (sel, re) => {
@@ -2700,7 +2727,18 @@
       fInp.value = pk.species;
       fInp.dispatchEvent(new Event('input', { bubbles: true }));
       fInp.dispatchEvent(new Event('change', { bubbles: true }));
-      await sleep(700);
+      // A tabela mantém as linhas antigas ~2s, zera e só então mostra as filtradas (~3s): espera a espécie aparecer
+      const want = PK_SELL.norm(pk.species);
+      const t0 = Date.now();
+      let matched = false;
+      while (Date.now() - t0 < 8000) {
+        await sleep(200);
+        const f0 = $('.cm-folha');
+        const first = f0 && $('.cm-hist-linha .cm-hist-item', f0);
+        if (first && PK_SELL.norm(first.textContent).includes(want)) { matched = true; break; }
+      }
+      if (!matched) log('venda: histórico não carregou linhas de', pk.species, 'em 8s (sem vendas ou lento)');
+      else await sleep(250);
     }
 
     let prevSig = '';
@@ -2709,11 +2747,13 @@
       if (!f) break;
       const rows = $$('.cm-hist-linha', f);
       const sig = rows.slice(0, 3).map(r => r.textContent.trim()).join('|');
-      if (!rows.length || (page > 1 && sig === prevSig)) break;
+      if (!rows.length) { exhausted = true; break; }
+      if (page > 1 && sig === prevSig) { exhausted = true; break; }
       prevSig = sig;
       for (const r of rows) {
         const itemEl = $('.cm-hist-item', r);
         const valEl = $('.cm-hist-valor', r);
+        const dateEl = $('.cm-hist-data', r);
         const isOrb = !!$('.cm-preco.orb', r);
         const isShiny = !!$('.cm-selo-shiny, .shiny', r) || /✨/.test((itemEl && itemEl.textContent) || '');
         const parsed = PK_SELL.parsePokemonHistoryRow({
@@ -2722,17 +2762,18 @@
           valueText: (valEl && valEl.textContent) || '',
           isOrb,
           isShiny,
+          dateText: (dateEl && dateEl.textContent) || '',
         });
         if (!parsed) continue;
         if (parsed.currency === 'gem') gemSales.push(parsed);
         else goldSales.push(parsed);
       }
-      if (page >= maxPages) break;
       const nextBtn = $$('button.cm-pag', f).find(b => b.textContent.trim() === '›' && !b.disabled);
-      if (!nextBtn) break;
+      if (!nextBtn) { exhausted = true; break; }
+      if (page >= maxPages) break;
       nextBtn.click();
       const t0 = Date.now();
-      while (Date.now() - t0 < 1600) {
+      while (Date.now() - t0 < 5000) {
         await sleep(180);
         const f2 = $('.cm-folha');
         const rows2 = f2 ? $$('.cm-hist-linha', f2) : [];
@@ -2742,7 +2783,7 @@
     }
 
     await closeRmtLeaf();
-    return { goldSales, gemSales };
+    return { goldSales, gemSales, exhausted };
   }
 
   async function analyzeSelectedSale(targetKey = null) {
@@ -2851,7 +2892,7 @@
         const { goldListings, gemListings } = await readPokemonMarketListings(getCorpo, entry);
 
         renderSell(`Lendo histórico de vendas de ${entry.species}...`);
-        const { goldSales, gemSales } = await readPokemonHistoryBothCurrencies(getCorpo, entry, 2);
+        const { goldSales, gemSales, exhausted: salesExhausted } = await readPokemonHistoryBothCurrencies(getCorpo, entry, 6);
 
         result = PK_SELL.analyzePokemonSale({
           pokemon: entry,
@@ -2860,7 +2901,12 @@
           goldSales,
           gemSales,
           exchangeRate,
+          salesExhausted,
         });
+        const sample = a => JSON.stringify(a.slice(0, 2).map(x => ({ sp: x.species, lv: x.level, p: x.potency, n: x.nota, sh: x.shiny, pr: x.price })));
+        const diag = `lidos: anúncios ouro ${goldListings.length}/gema ${gemListings.length}, vendas ouro ${goldSales.length}/gema ${gemSales.length} · alvo "${entry.species}" sh=${!!entry.shiny} P${entry.potency} N${entry.nota} Nv${entry.level}`;
+        result.warnings = [...(result.warnings || []), diag];
+        log('venda diag:', diag, 'anúncios gema', sample(gemListings), 'vendas gema', sample(gemSales));
       }
 
       sellState.last = { at: Date.now(), key: sellState.selectedKey, eligibilityNote, result };

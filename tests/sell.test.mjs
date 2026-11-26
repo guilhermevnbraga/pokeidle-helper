@@ -230,3 +230,144 @@ test('pokemonEligibility validates level >= 50 and nota >= 3.5 with Shiny/P5 exc
   assert.equal(PK_SELL.pokemonEligibility({ species: 'Pikachu', level: 10, potency: 1, nota: 1.0, shiny: true }).eligible, true);
   assert.equal(PK_SELL.pokemonEligibility({ species: 'Gengar', level: 15, potency: 5, nota: 2.1 }).eligible, true);
 });
+
+test('cleanSpeciesName strips shiny marks and +N badges in any order', () => {
+  assert.equal(PK_SELL.cleanSpeciesName('✨ Shiny Shedinja'), 'Shedinja');
+  assert.equal(PK_SELL.cleanSpeciesName('Shiny Shedinja'), 'Shedinja');
+  assert.equal(PK_SELL.cleanSpeciesName('Shedinja ✨'), 'Shedinja');
+  assert.equal(PK_SELL.cleanSpeciesName('Shedinja +5'), 'Shedinja');
+  assert.equal(PK_SELL.cleanSpeciesName('Mega Charizard X'), 'Mega Charizard X');
+});
+
+test('shiny target matches shiny comps once species is cleaned', () => {
+  const target = { species: PK_SELL.cleanSpeciesName('✨ Shiny Shedinja'), shiny: true, potency: 1, nota: 4.89, level: 100 };
+  const comp = { species: 'Shedinja', shiny: true, potency: 1, nota: 4.635, level: 100, price: 299 };
+  assert.ok(PK_SELL.scoreComparablePokemon(target, comp) > 0);
+});
+
+// ---------- Modelo de preço máximo viável ----------
+const NOW = new Date(2026, 10, 25, 20, 0).getTime();
+const dAgo = d => NOW - d * 86400000;
+const shedTarget = { species: 'Shedinja', shiny: true, potency: 1, nota: 4.89, level: 100, mega: false };
+const mkSale = (price, nota, daysAgo, extra = {}) => ({ species: 'Shedinja', shiny: true, potency: 1, nota, level: 100, price, ts: dAgo(daysAgo), ...extra });
+const mkList = (price, nota, extra = {}) => ({ species: 'Shedinja', shiny: true, potency: 1, nota, level: 100, price, ...extra });
+
+test('parseHistDate reads dd/mm/yyyy, hh:mm from the game history', () => {
+  const t = PK_SELL.parseHistDate('25/11/2026, 18:02');
+  const d = new Date(t);
+  assert.equal(d.getDate(), 25);
+  assert.equal(d.getMonth(), 10);
+  assert.equal(d.getHours(), 18);
+  assert.equal(PK_SELL.parseHistDate('sem data'), null);
+});
+
+test('parsePokemonHistoryRow keeps the sale timestamp and strips shiny from species', () => {
+  const r = PK_SELL.parsePokemonHistoryRow({
+    itemText: '✨Shiny Shedinja Nv 100P2IV 123Q 0,868N 4,566', valueText: '269', isOrb: true, dateText: '25/11/2026, 18:02',
+  });
+  assert.equal(r.species, 'Shedinja');
+  assert.equal(r.shiny, true);
+  assert.equal(r.currency, 'gem');
+  assert.ok(Number.isFinite(r.ts));
+});
+
+test('max viable price: tiers are ordered and never exceed the twice-proven cap', () => {
+  const sales = [
+    mkSale(269, 4.57, 0.1), mkSale(200, 4.57, 0.5), mkSale(648, 6.38, 1), mkSale(800, 6.38, 2),
+    mkSale(500, 5.2, 4), mkSale(350, 4.8, 6), mkSale(420, 5.0, 9), mkSale(300, 4.6, 14),
+  ];
+  const listings = [mkList(299, 4.6), mkList(450, 5.2), mkList(550, 5.9), mkList(573, 4.8), mkList(600, 4.9)];
+  const ev = PK_SELL.evaluatePokemonCurrency({ pokemon: shedTarget, currency: 'gem', listings, sales, salesExhausted: true, now: NOW });
+  const t = ev.tiers;
+  assert.ok(t.quick.price <= t.market.price && t.market.price <= t.max.price);
+  assert.ok(t.max.price <= t.provenCap.price || t.max.price === t.quick.price);
+  assert.equal(ev.unitPrice, t.max.price);
+  assert.ok(ev.comparables.length > 0 && ev.comparables.length <= 8);
+});
+
+test('max viable price: fewer than 3 comparable sales falls back to the conservative quick price', () => {
+  const ev = PK_SELL.evaluatePokemonCurrency({
+    pokemon: shedTarget, currency: 'gem',
+    listings: [mkList(299, 4.6), mkList(450, 5.2)],
+    sales: [mkSale(280, 4.7, 1), mkSale(900, 5.0, 2)],
+    salesExhausted: true, now: NOW,
+  });
+  assert.equal(ev.unitPrice, ev.quickPrice);
+  assert.ok(ev.warnings.some(w => /menos de 3 vendas/.test(w)));
+});
+
+test('better attributes never lower the suggested price (monotonic in nota)', () => {
+  const sales = [
+    mkSale(200, 4.2, 1), mkSale(260, 4.5, 2), mkSale(320, 4.9, 3), mkSale(400, 5.4, 4),
+    mkSale(480, 5.8, 5), mkSale(560, 6.2, 6), mkSale(300, 4.7, 7), mkSale(450, 5.6, 8),
+  ];
+  const listings = [mkList(350, 4.9), mkList(480, 5.5), mkList(620, 6.0)];
+  const price = nota => PK_SELL.evaluatePokemonCurrency({
+    pokemon: { ...shedTarget, nota }, currency: 'gem', listings, sales, salesExhausted: true, now: NOW,
+  }).unitPrice;
+  assert.ok(price(6.0) >= price(5.0));
+  assert.ok(price(5.0) >= price(4.2));
+});
+
+test('queue of cheaper comparable listings holds the price below the proven cap in a slow market', () => {
+  // Mercado lento (4 vendas em 30d) e 8 anúncios mais baratos à frente: não dá para pedir o teto.
+  const sales = [mkSale(900, 4.9, 3), mkSale(880, 4.9, 10), mkSale(500, 4.9, 20), mkSale(450, 4.9, 25)];
+  const listings = Array.from({ length: 8 }, (_, i) => mkList(300 + i * 10, 4.9));
+  const ev = PK_SELL.evaluatePokemonCurrency({ pokemon: shedTarget, currency: 'gem', listings, sales, salesExhausted: true, now: NOW });
+  assert.ok(ev.tiers.max.price < 880);
+});
+
+test('fitAttributeSlopes stays at zero with too few points and never returns negative slopes', () => {
+  const few = PK_SELL.fitAttributeSlopes([{ price: 100, nota: 4, level: 100, w: 1 }], shedTarget);
+  assert.equal(few.bN, 0);
+  const inverted = Array.from({ length: 8 }, (_, i) => ({ price: 600 - i * 50, nota: 4 + i * 0.3, level: 100, w: 1 }));
+  const s = PK_SELL.fitAttributeSlopes(inverted, shedTarget);
+  assert.ok(s.bN >= 0 && s.bL >= 0);
+});
+
+test('timing flags WAIT when the last 7d sold well below the 30d median', () => {
+  const sales = [
+    mkSale(150, 4.9, 1), mkSale(160, 4.9, 3), mkSale(400, 4.9, 10), mkSale(420, 4.9, 15),
+    mkSale(410, 4.9, 20), mkSale(430, 4.9, 25),
+  ];
+  const ev = PK_SELL.evaluatePokemonCurrency({ pokemon: shedTarget, currency: 'gem', listings: [mkList(500, 4.9)], sales, salesExhausted: true, now: NOW });
+  assert.equal(ev.timing.verdict, 'WAIT');
+});
+
+test('two outlier sales do not set the price when only a tiny share of sales reaches that level', () => {
+  const sales = [
+    ...Array.from({ length: 20 }, (_, i) => mkSale(380 + (i % 5) * 20, 4.9, 1 + i)),
+    mkSale(900, 4.9, 2), mkSale(880, 4.9, 3),
+  ];
+  const listings = [mkList(430, 4.9), mkList(450, 4.9), mkList(470, 4.9)];
+  const ev = PK_SELL.evaluatePokemonCurrency({ pokemon: shedTarget, currency: 'gem', listings, sales, salesExhausted: true, now: NOW });
+  assert.ok(ev.tiers.max.price < 700, `max ${ev.tiers.max.price}`);
+});
+
+test('a price level reached by a large share of sales is recommended above the median', () => {
+  const sales = [
+    ...Array.from({ length: 10 }, (_, i) => mkSale(300, 4.9, 1 + i)),
+    ...Array.from({ length: 10 }, (_, i) => mkSale(600, 4.9, 1 + i * 2)),
+  ];
+  const ev = PK_SELL.evaluatePokemonCurrency({ pokemon: shedTarget, currency: 'gem', listings: [], sales, salesExhausted: true, now: NOW });
+  assert.ok(ev.tiers.max.price >= 590, `max ${ev.tiers.max.price}`);
+});
+
+test('potency enters the attribute model: higher potency comps never lower the target price and slopes stay bounded', () => {
+  const pts = Array.from({ length: 12 }, (_, i) => ({ price: 200 + (i % 4) * 120, nota: 4.9, level: 100, potency: 1 + (i % 4), w: 1 }));
+  const s = PK_SELL.fitAttributeSlopes(pts, { ...shedTarget, potency: 2 });
+  assert.ok(s.bP > 0 && s.bP <= 0.5);
+  assert.ok(s.bN >= 0 && s.bN <= 1.0 && s.bL >= 0);
+  const noP = PK_SELL.fitAttributeSlopes(pts, { ...shedTarget, potency: 5 });
+  assert.equal(noP.bP, 0);
+});
+
+test('recommended price must be reached by at least 15% of comparable sales, not just two lucky ones', () => {
+  // 25 vendas: 2 a 600, o resto 250-330. Duas vendas (8%) não sustentam 600.
+  const sales = [
+    mkSale(600, 4.9, 0.5), mkSale(590, 4.9, 1),
+    ...Array.from({ length: 23 }, (_, i) => mkSale(250 + (i % 5) * 20, 4.9, 0.2 + i * 0.3)),
+  ];
+  const ev = PK_SELL.evaluatePokemonCurrency({ pokemon: shedTarget, currency: 'gem', listings: [], sales, salesExhausted: true, now: NOW });
+  assert.ok(ev.tiers.max.price < 400, `max ${ev.tiers.max.price}`);
+});

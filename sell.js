@@ -158,6 +158,14 @@ const PK_SELL = (() => {
     };
   }
 
+  // Remove marcas de shiny (✨/★/"Shiny") e badges "+N" do nome da espécie, em qualquer ordem
+  function cleanSpeciesName(raw) {
+    let s = String(raw || '').replace(/[✨★]/g, ' ').replace(/\s+/g, ' ').trim();
+    s = s.replace(/^shiny\s+/i, '').replace(/\s+shiny$/i, '');
+    s = s.replace(/\s*\+\d+$/, '');
+    return s.trim();
+  }
+
   // Parseia texto de selos (ex: "P2 IV 162 Q 1,600 N 3,704" ou colado "100P5IV 112Q 1,021N 4,174")
   function parsePokemonAttrs(text) {
     const s = String(text || '').replace(/\s+/g, ' ').trim();
@@ -181,13 +189,13 @@ const PK_SELL = (() => {
 
   // Parseia linha da Tabela de Preços de Pokémon (Coins ou Gemas)
   // Ex.: itemTitle="Brave Charizard Nv 100 · Ver ficha", itemTxt="Brave Charizard Nv 100P5IV 112Q 1,021N 4,174", valTxt="200.000.000"
-  function parsePokemonHistoryRow({ itemTitle = '', itemText = '', valueText = '', isOrb = false, isShiny = false } = {}) {
+  function parsePokemonHistoryRow({ itemTitle = '', itemText = '', valueText = '', isOrb = false, isShiny = false, dateText = '' } = {}) {
     const titleBase = String(itemTitle || '').split('·')[0].trim();
     const fullText = String(itemText || '').trim();
     const speciesSource = titleBase || fullText;
     const spM = speciesSource.match(/^(?:✨\s*)?(?:Shiny\s+)?(.+?)\s+(?:Nv\.?|Lv\.?)\s*(\d+)/i);
     if (!spM) return null;
-    const species = spM[1].replace(/^✨\s*/, '').trim();
+    const species = cleanSpeciesName(spM[1]);
     const level = parseInt(spM[2], 10) || 1;
     const price = parseIntClean(valueText) || parseCompactNum(valueText);
     const minP = isOrb ? MIN_PRICE_GEM : MIN_PRICE_GOLD;
@@ -206,6 +214,7 @@ const PK_SELL = (() => {
       shiny,
       mega: attrs.mega || /^mega\s+/i.test(species),
       price,
+      ts: parseHistDate(dateText),
     };
   }
 
@@ -519,6 +528,108 @@ const PK_SELL = (() => {
     return score;
   }
 
+  // ---------- Modelo de preço de Pokémon (ajuste por atributos, liquidez e timing) ----------
+  const DAY_MS = 86400000;
+  const HIST_WINDOW_DAYS = 30; // a Tabela de preços do jogo cobre os últimos 30 dias
+  const DEFAULT_HORIZON_DAYS = 14;
+  const MIN_PROVEN_SHARE = 0.15; // o preço recomendado precisa ter sido alcançado por >= 15% das vendas comparáveis
+  const RECENCY_HALF_LIFE_DAYS = 14;
+
+  // Lê data da linha do histórico ("25/11/2026, 18:02"). Assume dd/mm; inverte se o 1º campo > 12 não ocorrer e o 2º > 12.
+  function parseHistDate(text) {
+    const m = String(text || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s*(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    let a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+    let day = a, month = b;
+    if (b > 12 && a <= 12) { day = b; month = a; }
+    const d = new Date(parseInt(m[3], 10), month - 1, day, parseInt(m[4], 10), parseInt(m[5], 10));
+    const t = d.getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+
+  // Quantil ponderado (q em 0..1) sobre items com campo numérico val e peso w
+  function weightedQuantile(items, q) {
+    const arr = items.filter(i => Number.isFinite(i.val) && i.w > 0).sort((x, y) => x.val - y.val);
+    if (!arr.length) return null;
+    const total = arr.reduce((s, i) => s + i.w, 0);
+    let acc = 0;
+    for (const it of arr) {
+      acc += it.w;
+      if (acc >= total * q - 1e-9) return it.val;
+    }
+    return arr[arr.length - 1].val;
+  }
+
+  // Ajusta log(preço) por Nota e log(Nível) em relação ao alvo com ridge conservador e sinais travados (>= 0):
+  // atributo melhor nunca vale menos. Poucos pontos => sem ajuste (slopes 0).
+  function fitAttributeSlopes(points, target) {
+    const out = { bN: 0, bL: 0, bP: 0, n: 0 };
+    const useN = Number.isFinite(target.nota);
+    const useL = Number.isFinite(target.level) && target.level > 0;
+    const useP = Number.isFinite(target.potency) && Number(target.potency) < 5;
+    const pts = points
+      .filter(p => p.price > 0 && p.w > 0)
+      .map(p => ({
+        x: [
+          useN && Number.isFinite(p.nota) ? p.nota - target.nota : 0,
+          useL && p.level > 0 ? Math.log(p.level / target.level) : 0,
+          useP && Number.isFinite(p.potency) ? p.potency - target.potency : 0,
+        ],
+        y: Math.log(p.price),
+        w: p.w,
+      }));
+    out.n = pts.length;
+    if (pts.length < 6) return out;
+    const sw = pts.reduce((s, p) => s + p.w, 0);
+    const mean = pts[0].x.map((_, k) => pts.reduce((s, p) => s + p.w * p.x[k], 0) / sw);
+    const my = pts.reduce((s, p) => s + p.w * p.y, 0) / sw;
+    const K = 3, LAMBDA = 1.5;
+    const A = Array.from({ length: K }, (_, i) => Array.from({ length: K }, (_, j) => (i === j ? LAMBDA : 0)));
+    const t = new Array(K).fill(0);
+    for (const p of pts) {
+      const d = p.x.map((v, k) => v - mean[k]);
+      const c = p.y - my;
+      for (let i = 0; i < K; i++) {
+        t[i] += p.w * d[i] * c;
+        for (let j = 0; j < K; j++) A[i][j] += p.w * d[i] * d[j];
+      }
+    }
+    // Eliminação gaussiana (matriz 3x3 positiva definida graças ao ridge)
+    const M = A.map((row, i) => [...row, t[i]]);
+    for (let i = 0; i < K; i++) {
+      let piv = i;
+      for (let r = i + 1; r < K; r++) if (Math.abs(M[r][i]) > Math.abs(M[piv][i])) piv = r;
+      if (Math.abs(M[piv][i]) < 1e-9) return out;
+      [M[i], M[piv]] = [M[piv], M[i]];
+      for (let r = i + 1; r < K; r++) {
+        const f = M[r][i] / M[i][i];
+        for (let c = i; c <= K; c++) M[r][c] -= f * M[i][c];
+      }
+    }
+    const beta = new Array(K).fill(0);
+    for (let i = K - 1; i >= 0; i--) {
+      let acc = M[i][K];
+      for (let j = i + 1; j < K; j++) acc -= M[i][j] * beta[j];
+      beta[i] = acc / M[i][i];
+    }
+    out.bN = useN ? Math.min(1.0, Math.max(0, beta[0])) : 0;
+    out.bL = useL ? Math.min(0.8, Math.max(0, beta[1])) : 0;
+    out.bP = useP ? Math.min(0.5, Math.max(0, beta[2])) : 0;
+    return out;
+  }
+
+  function attributeFactor(target, comp, slopes) {
+    let e = 0;
+    if (Number.isFinite(target.nota) && Number.isFinite(comp.nota)) e += slopes.bN * (target.nota - comp.nota);
+    if (Number.isFinite(target.level) && Number.isFinite(comp.level) && target.level > 0 && comp.level > 0) {
+      e += slopes.bL * Math.log(target.level / comp.level);
+    }
+    if (Number.isFinite(target.potency) && Number.isFinite(comp.potency) && Number(target.potency) < 5 && Number(comp.potency) < 5) {
+      e += (slopes.bP || 0) * (target.potency - comp.potency);
+    }
+    return Math.min(2, Math.max(0.5, Math.exp(e)));
+  }
+
   function filterOutliers(items, getVal) {
     if (items.length < 4) return items;
     const med = median(items.map(getVal));
@@ -546,6 +657,9 @@ const PK_SELL = (() => {
     currency = 'gold',
     listings = [],
     sales = [],
+    salesExhausted = false,
+    horizonDays = DEFAULT_HORIZON_DAYS,
+    now = Date.now(),
   } = {}) {
     const minP = currency === 'gem' ? MIN_PRICE_GEM : MIN_PRICE_GOLD;
     if (currency === 'gold' && pokemonOnlyGems(pokemon)) {
@@ -671,15 +785,124 @@ const PK_SELL = (() => {
       }
     }
 
-    const fin = currency === 'gem' ? netGems(unitPrice, 1, 'pokemon') : netGold(unitPrice, 1);
-    const confidence = !relaxed && useSales.length >= 2
+    const netFor = p => (currency === 'gem' ? netGems(p, 1, 'pokemon') : netGold(p, 1));
+
+    // ----- Preço máximo viável: ajusta comparáveis aos atributos do alvo e respeita a fila de concorrentes -----
+    const quickPrice = unitPrice;
+    const strong = !relaxed && useSales.length >= 3;
+    let tiers = null, timing = null, model = null, comparables = null;
+    if (useSales.length || useListings.length) {
+      const recency = s => (Number.isFinite(s.ts)
+        ? Math.max(0.25, Math.pow(0.5, Math.max(0, (now - s.ts) / DAY_MS) / RECENCY_HALF_LIFE_DAYS))
+        : 1);
+      const wSales = useSales.map(s => ({ ...s, w: (s.weight || 1) * recency(s) }));
+      const wList = useListings.map(l => ({ ...l, w: (l.weight || 1) * 0.5 }));
+      const slopes = fitAttributeSlopes([...wSales, ...wList], pokemon);
+      const adjSales = wSales.map(s => ({ ...s, adj: Math.max(minP, Math.round(s.price * attributeFactor(pokemon, s, slopes))) }));
+      const adjList = wList.map(l => ({ ...l, adj: Math.max(minP, Math.round(l.price * attributeFactor(pokemon, l, slopes))) }));
+
+      // Liquidez: vendas comparáveis por dia na janela observada
+      const allTs = (sales || []).map(s => s && s.ts).filter(Number.isFinite);
+      const spanDays = salesExhausted || !allTs.length
+        ? HIST_WINDOW_DAYS
+        : Math.min(HIST_WINDOW_DAYS, Math.max(1, (now - Math.min(...allTs)) / DAY_MS));
+      const rate = useSales.length / spanDays; // vendas comparáveis/dia
+      const aheadOf = p => adjList.filter(l => l.adj < p).length;
+      // Compradores dispostos a pagar >= p chegam a rate × fração das vendas ajustadas >= p; eles compram primeiro
+      // os anúncios comparáveis mais baratos (fila à frente). Espera ≈ (fila + 1) / (taxa desse patamar).
+      const totalW = adjSales.reduce((s, x) => s + x.w, 0) || 1;
+      const shareAt = p => adjSales.reduce((s, x) => s + (x.adj >= p ? x.w : 0), 0) / totalW;
+      const countAt = p => adjSales.filter(x => x.adj >= p).length;
+      const daysAt = p => {
+        if (!(rate > 0)) return null;
+        const sh = shareAt(p);
+        return sh > 0 ? (aheadOf(p) + 1) / (rate * sh) : null;
+      };
+
+      const sortedAdj = adjSales.map(s => s.adj).sort((a, b) => b - a);
+      const provenCap = sortedAdj.length >= 2 ? sortedAdj[1] : (sortedAdj[0] ?? null); // exige >= 2 vendas nesse patamar
+      const fair = weightedQuantile(adjSales.map(s => ({ val: s.adj, w: s.w })), 0.5);
+
+      let maxPrice = quickPrice;
+      if (strong && provenCap != null && rate > 0) {
+        const allowedDays = Math.max(horizonDays, 3 / rate);
+        const cands = [...new Set([
+          provenCap,
+          ...adjSales.map(s => s.adj),
+          ...adjList.map(l => l.adj - undercut),
+        ])].filter(p => p >= minP && p <= provenCap && countAt(p) >= 2 && shareAt(p) >= MIN_PROVEN_SHARE).sort((a, b) => b - a);
+        const hit = cands.find(p => { const d = daysAt(p); return d != null && d <= allowedDays; });
+        if (hit != null) maxPrice = Math.max(quickPrice, hit);
+      }
+      const marketPrice = fair != null ? Math.max(quickPrice, Math.min(fair, maxPrice)) : quickPrice;
+      const mkTier = p => {
+        const f = netFor(p);
+        const d = daysAt(p);
+        return { price: p, net: f.net, days: d == null ? null : Math.round(d * 10) / 10 };
+      };
+      tiers = {
+        quick: mkTier(quickPrice),
+        market: mkTier(marketPrice),
+        max: mkTier(maxPrice),
+        provenCap: provenCap != null ? { price: provenCap, net: netFor(provenCap).net } : null,
+      };
+
+      // Timing: vendas dos últimos 7d (ajustadas) vs. mediana de 30d
+      const recent = adjSales.filter(s => Number.isFinite(s.ts) && now - s.ts <= 7 * DAY_MS);
+      const recMed = recent.length >= 2 ? median(recent.map(s => s.adj)) : null;
+      const baseMed = adjSales.length >= 4 ? median(adjSales.map(s => s.adj)) : null;
+      if (recMed != null && baseMed > 0) {
+        const ratio = recMed / baseMed;
+        timing = {
+          verdict: ratio >= 1.15 ? 'SELL' : (ratio <= 0.85 ? 'WAIT' : 'NORMAL'),
+          ratio: Math.round(ratio * 100) / 100,
+          recentCount: recent.length,
+        };
+      } else {
+        timing = { verdict: 'UNKNOWN', ratio: null, recentCount: recent.length };
+      }
+
+      model = {
+        slopeNota: Math.round(slopes.bN * 1000) / 1000,
+        slopeLevel: Math.round(slopes.bL * 1000) / 1000,
+        slopePotency: Math.round((slopes.bP || 0) * 1000) / 1000,
+        nFit: slopes.n,
+        spanDays: Math.round(spanDays * 10) / 10,
+        salesPerDay: Math.round(rate * 100) / 100,
+      };
+      comparables = [
+        ...adjSales.map(s => ({ type: 'venda', price: s.price, adj: s.adj, w: Math.round(s.w * 100) / 100, level: s.level, nota: s.nota, potency: s.potency, ageDays: Number.isFinite(s.ts) ? Math.round((now - s.ts) / DAY_MS * 10) / 10 : null })),
+        ...adjList.map(l => ({ type: 'anúncio', price: l.price, adj: l.adj, w: Math.round(l.w * 100) / 100, level: l.level, nota: l.nota, potency: l.potency, ageDays: null })),
+      ].sort((a, b) => b.w - a.w).slice(0, 8);
+
+      if (strong) {
+        unitPrice = maxPrice;
+        const d = daysAt(maxPrice);
+        source = maxPrice > quickPrice
+          ? `máx. viável (≥2 vendas provam; ${aheadOf(maxPrice)} anún. melhor(es) à frente${d != null ? `, ~${d < 1 ? '<1' : Math.round(d)}d` : ''})`
+          : 'menor preço competitivo (fila/liquidez não permitem mais)';
+        if (maxPrice > quickPrice) warnings.push(`preço acima do menor anúncio: aguarde, pois ${aheadOf(maxPrice)} anúncio(s) comparável(is) ficam à frente`);
+        if (timing.verdict === 'WAIT') warnings.push(`vendas dos últimos 7d estão ${Math.round((1 - timing.ratio) * 100)}% abaixo da média de 30d: considere esperar`);
+        if (timing.verdict === 'SELL') warnings.push(`vendas dos últimos 7d estão ${Math.round((timing.ratio - 1) * 100)}% acima da média de 30d: bom momento`);
+      } else if (!relaxed) {
+        warnings.push('menos de 3 vendas comparáveis: usando preço competitivo conservador (sem teto provado)');
+      }
+    }
+
+    const fin = netFor(unitPrice);
+    const confidence = !relaxed && useSales.length >= 5
       ? 'high'
-      : (!relaxed && (useSales.length >= 1 || useListings.length >= 3) ? 'medium' : 'low');
+      : (!relaxed && (useSales.length >= 2 || useListings.length >= 3) ? 'medium' : 'low');
 
     return {
       currency,
       available: fin.net > 0,
       unitPrice,
+      quickPrice,
+      tiers,
+      timing,
+      model,
+      comparables,
       gross: fin.gross,
       fee: fin.fee,
       net: fin.net,
@@ -842,18 +1065,27 @@ const PK_SELL = (() => {
     goldSales = [],
     gemSales = [],
     exchangeRate = null,
+    salesExhausted = false,
+    horizonDays = DEFAULT_HORIZON_DAYS,
+    now = Date.now(),
   } = {}) {
     const goldEval = evaluatePokemonCurrency({
       pokemon,
       currency: 'gold',
       listings: goldListings,
       sales: goldSales,
+      salesExhausted,
+      horizonDays,
+      now,
     });
     const gemEval = evaluatePokemonCurrency({
       pokemon,
       currency: 'gem',
       listings: gemListings,
       sales: gemSales,
+      salesExhausted,
+      horizonDays,
+      now,
     });
     const label = pokemon
       ? `${pokemon.shiny ? '✨ ' : ''}${pokemon.species} Nv ${pokemon.level || '?'}`
@@ -902,6 +1134,9 @@ const PK_SELL = (() => {
     parseAvg7d,
     parseItemHistoryRow,
     parsePokemonAttrs,
+    cleanSpeciesName,
+    parseHistDate,
+    fitAttributeSlopes,
     parsePokemonHistoryRow,
     extractExchangeRate,
     estimateRateFromItemList,

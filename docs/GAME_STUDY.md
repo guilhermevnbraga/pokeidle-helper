@@ -75,3 +75,7 @@ Sempre separe **Confirmado no DOM** de **Hipótese / NÃO confirmado**.
 ## Perguntas em aberto (para investigar com `/study-game`)
 - **NÃO confirmado:** formato exato do toast/log ao capturar um Pokémon (PT e EN).
 - **NÃO confirmado:** demais telas/mecânicas do jogo (equipe, mochila, ginásios, raids, eventos, shinies, breeding, quests, etc.) ainda não mapeadas.
+
+## RMT Pokémon: achados de 2026-11-25 (DOM real)
+- Mercado (`#cm-lista`, busca `shedinja` + `#cm-shiny`): **sem paginação**, lista todos os anúncios numa página (23 cards); `.cm-preco` não tem `title`, o valor está no texto.
+- Histórico global (`#cm-historico-global`): 30 linhas/página, `button.cm-pag` (`‹`/`›`), ~30 dias; linha = `.cm-hist-data` (`dd/mm/aaaa, hh:mm`), `.cm-hist-item-poke` (`✨Shiny Shedinja Nv 100P2IV 123Q 0,868N 4,566`), `.cm-hist-nick.vend`/`.comp`, `.cm-hist-valor`; Gemas = `.cm-preco.orb` na linha.
