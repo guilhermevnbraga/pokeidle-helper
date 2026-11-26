@@ -20,7 +20,8 @@ const devHash = async () => {
   }
   return h + ':' + n;
 };
-const devStore = async v => { const c = await caches.open('pk-dev'); if (v == null) { const r = await c.match('hash'); return r ? r.text() : null; } await c.put('hash', new Response(v)); };
+const DEV_KEY = 'https://pk-dev.invalid/hash'; // a Cache API só aceita chaves http(s)
+const devStore = async v => { const c = await caches.open('pk-dev'); if (v == null) { const r = await c.match(DEV_KEY); return r ? r.text() : null; } await c.put(DEV_KEY, new Response(v)); };
 const devBaseline = () => DEV && devHash().then(devStore).catch(() => {});
 chrome.runtime.onInstalled.addListener(devBaseline);
 chrome.runtime.onStartup.addListener(devBaseline);
