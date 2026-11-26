@@ -205,6 +205,26 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
 #pkbot-panel .pkb-warnline{margin-top:4px;color:#fcd34d;font-size:11px}
 #pkbot-panel .pkb-rank{margin-top:8px;border-top:1px solid var(--pkb-line);padding-top:6px}
 #pkbot-panel .pkb-rk{font-size:11px;margin-top:2px;color:var(--pkb-text)}#pkbot-panel .pkb-rk.pkb-dim{color:var(--pkb-mute)}
+#pkbot-panel .pkb-grow{flex:1;min-width:0}
+#pkbot-panel .pkb-micro{color:var(--pkb-mute);font-size:10.5px;margin-top:2px}
+#pkbot-panel .pkb-btn.pkb-mini{padding:1px 8px;font-size:11px}
+#pkbot-panel .pkb-warnrow{display:flex;align-items:center;gap:6px}
+#pkbot-panel .pkb-opt{margin-top:7px;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.28);border-left:3px solid color-mix(in srgb,var(--c) 40%,transparent)}
+#pkbot-panel .pkb-opt.pkb-win{border-left-color:var(--c);background:color-mix(in srgb,var(--c) 10%,rgba(0,0,0,.25))}
+#pkbot-panel .pkb-opt-h{font-weight:650;font-size:12px;color:var(--c)}
+#pkbot-panel .pkb-opt-net{margin-top:1px;color:var(--pkb-text)}
+#pkbot-panel .pkb-tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:6px}
+#pkbot-panel .pkb-tier{padding:4px 6px;border-radius:7px;background:rgba(255,255,255,.05);border:1px solid var(--pkb-line);text-align:center}
+#pkbot-panel .pkb-tier-max{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
+#pkbot-panel .pkb-tier-l{font-size:10px;color:var(--pkb-mute);letter-spacing:.3px}
+#pkbot-panel .pkb-tier-p{font-weight:650;font-size:12px;color:var(--pkb-text)}
+#pkbot-panel .pkb-list{margin-top:6px}
+#pkbot-panel .pkb-item{padding:5px 0;border-bottom:1px solid var(--pkb-line)}
+#pkbot-panel .pkb-item:last-child{border-bottom:0}
+#pkbot-panel .pkb-item-h{display:flex;align-items:baseline;gap:6px}
+#pkbot-panel .pkb-item-b{flex:0 0 18px}
+#pkbot-panel .pkb-item-n{flex:1;min-width:0;font-weight:600}
+#pkbot-panel .pkb-item-p{flex:0 0 auto;color:var(--c,var(--pkb-text));text-align:right}
 #pkbot-panel .pkb-log{margin:0;white-space:pre-wrap;max-height:130px;overflow:auto;user-select:text;font:11px/1.4 ui-monospace,Consolas,monospace;color:#b8c4d8}
 #pkbot-panel details>summary{cursor:pointer;color:var(--pkb-mute);font-size:11.5px}
 `;
@@ -1590,15 +1610,16 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
       stonesSellBtnEl.disabled = stoneState.running;
       stonesSellBtnEl.textContent = stoneState.running ? 'Rodando...' : 'Vender';
     }
-    const mk = (tag, css, text) => { const el = document.createElement(tag); if (css) el.style.cssText = css; if (text != null) el.textContent = text; return el; };
+    // classes pkb-* (ver PANEL_CSS)
+    const mk = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
     stonesOutEl.textContent = '';
     if (statusMsg) {
-      stonesOutEl.append(mk('div', 'color:#8ef', statusMsg));
+      stonesOutEl.append(mk('div', 'pkb-msg pkb-t-info', statusMsg));
       return;
     }
     const d = stoneState.last;
     if (!d) {
-      stonesOutEl.append(mk('div', 'opacity:.7', 'Clique "Simular" para prévia ou "Vender" para anunciar todas as pedras do inventário em Coins.'));
+      stonesOutEl.append(mk('div', 'pkb-msg', 'Clique "Simular" para prévia ou "Vender" para anunciar todas as pedras do inventário em Coins.'));
       return;
     }
     const ageMin = Math.max(0, Math.round((Date.now() - d.at) / 60000));
@@ -1608,29 +1629,32 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     const headTxt = d.items && d.items.length
       ? `${modeTag} · há ${ageMin}min · ${d.dryRun ? `${sum.sellTypes}/${sum.totalTypes} pedras` : `${listedCount}/${sum.sellTypes} anunciadas`} (${sum.totalUnits} un.) · líq. ${PK_STONES.formatCoins(sum.totalNet)}`
       : `${modeTag} · há ${ageMin}min · nenhuma pedra disponível no inventário`;
-    stonesOutEl.append(mk('div', 'opacity:.75;font-size:9.5px;margin-bottom:3px', headTxt));
+    stonesOutEl.append(mk('div', 'pkb-sum', headTxt));
 
+    const list = mk('div', 'pkb-list');
     for (const it of (d.items || [])) {
-      const row = mk('div', 'padding:2px 0;border-bottom:1px solid #fff1');
-      let badge = '';
-      let color = '#dfe';
-      if (it.execStatus === 'listed') { badge = '✅'; color = '#8f8'; }
-      else if (it.execStatus === 'dry') { badge = '👁'; color = '#8ef'; }
-      else if (it.execStatus === 'error') { badge = '⚠'; color = '#f96'; }
-      else if (it.action === 'skip' || it.execStatus === 'skipped') { badge = '⏭'; color = '#fc8'; }
+      let badge = '•';
+      let tone = '';
+      if (it.execStatus === 'listed') { badge = '✅'; tone = 'ok'; }
+      else if (it.execStatus === 'dry') { badge = '👁'; tone = 'info'; }
+      else if (it.execStatus === 'error') { badge = '⚠'; tone = 'bad'; }
+      else if (it.action === 'skip' || it.execStatus === 'skipped') { badge = '⏭'; tone = 'warn'; }
+      const row = mk('div', 'pkb-item' + (tone ? ' pkb-t-' + tone : ''));
       const priceStr = it.price ? `${it.price.toLocaleString('pt-BR')}/un.` : '—';
       const netStr = it.net ? ` → líq. ${PK_STONES.formatCoins(it.net)}` : '';
-      const line1 = `${badge} ${it.name} ×${it.qty}: ${priceStr}${netStr}`;
-      row.append(mk('div', `color:${color}`, line1));
+      const top = mk('div', 'pkb-item-h');
+      top.append(mk('span', 'pkb-item-b', badge), mk('span', 'pkb-item-n', `${it.name} ×${it.qty}`), mk('span', 'pkb-item-p', `${priceStr}${netStr}`));
+      row.append(top);
       const detailParts = [];
       if (it.execDetail) detailParts.push(it.execDetail);
       else if (it.reason) detailParts.push(it.reason);
       if (it.bestFree) detailParts.push(`livre ${it.bestFree.toLocaleString('pt-BR')}`);
       if (it.avg7d) detailParts.push(`7d ${it.avg7d.toLocaleString('pt-BR')}`);
       if (it.maxProvenRecent) detailParts.push(`máx.rec ${it.maxProvenRecent.toLocaleString('pt-BR')}`);
-      row.append(mk('div', 'opacity:.68;font-size:9px', detailParts.join(' · ')));
-      stonesOutEl.append(row);
+      if (detailParts.length) row.append(mk('div', 'pkb-micro', detailParts.join(' · ')));
+      list.append(row);
     }
+    stonesOutEl.append(list);
   }
 
   async function closeRmtLeaf(maxMs = 1500) {
@@ -2104,22 +2128,23 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     }
     populateSellSelect();
 
-    const mk = (tag, css, text) => {
+    // classes pkb-* (ver PANEL_CSS)
+    const mk = (tag, cls, text) => {
       const el = document.createElement(tag);
-      if (css) el.style.cssText = css;
+      if (cls) el.className = cls;
       if (text != null) el.textContent = text;
       return el;
     };
     sellOutEl.textContent = '';
 
     if (statusMsg) {
-      sellOutEl.append(mk('div', 'color:#c9f', statusMsg));
+      sellOutEl.append(mk('div', 'pkb-msg pkb-t-mute', statusMsg));
       return;
     }
 
     const d = sellState.last;
     if (!d || !d.result) {
-      sellOutEl.append(mk('div', 'opacity:.72', 'Clique "Carregar" para puxar seus itens e Pokémons, escolha um e clique "Analisar".'));
+      sellOutEl.append(mk('div', 'pkb-msg', 'Clique "Carregar" para puxar seus itens e Pokémons, escolha um e clique "Analisar".'));
       return;
     }
 
@@ -2129,27 +2154,19 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     const ageMin = Math.max(0, Math.round((Date.now() - (d.at || Date.now())) / 60000));
     const isItem = r.kind === 'item';
 
-    // Card do veredito principal
-    const palette = r.bestCurrency === 'gem'
-      ? { accent: '#c9f', bg: '#26183888' }
-      : r.bestCurrency === 'gold'
-        ? { accent: '#fd8', bg: '#33291488' }
-        : { accent: '#8ef', bg: '#16293888' };
-    const card = mk('div', `margin-top:3px;padding:5px 6px;border-radius:5px;background:${palette.bg};border:1px solid ${palette.accent}66`);
-    const itemHead = `${r.name}${isItem && r.qty > 1 ? ` ×${r.qty}` : ''} · há ${ageMin}m`;
-    card.append(mk('div', 'color:#bcd;font-size:9.5px', itemHead));
-    card.append(mk('div', `font-weight:bold;color:${palette.accent};margin-top:2px`, r.headline));
-    if (r.explanation) {
-      card.append(mk('div', 'color:#efe;font-size:9.5px;margin-top:2px', r.explanation));
-    }
+    // Card do veredito principal (gema = roxo, gold = âmbar, indefinido = ciano)
+    const tone = r.bestCurrency === 'gem' ? 'mute' : (r.bestCurrency === 'gold' ? 'warn' : 'info');
+    const card = mk('div', 'pkb-step pkb-t-' + tone);
+    card.append(mk('div', 'pkb-sum', `${r.name}${isItem && r.qty > 1 ? ` ×${r.qty}` : ''} · há ${ageMin}m`));
+    card.append(mk('div', 'pkb-verdict', r.headline));
+    if (r.explanation) card.append(mk('div', 'pkb-sub2', r.explanation));
 
     // Bloco comparativo: Gold (Coins) vs Gemas
-    const renderRow = (title, color, ev, isGold, equivTxt, winner) => {
-      const box = mk('div', `margin-top:4px;padding:3px 5px;border-radius:4px;background:#0004;border-left:2px solid ${winner ? color : '#fff3'}`);
-      const badge = winner ? ' ★' : '';
+    const renderRow = (title, rowTone, ev, isGold, equivTxt, winner) => {
+      const box = mk('div', `pkb-opt pkb-t-${rowTone}${winner ? ' pkb-win' : ''}`);
       if (!ev || !ev.available) {
-        box.append(mk('div', `color:${color};font-weight:bold;font-size:9.5px`, `${title}: indisponível`));
-        box.append(mk('div', 'opacity:.72;font-size:9px', (ev && (ev.blockedReason || ev.source)) || 'sem dados no mercado'));
+        box.append(mk('div', 'pkb-opt-h', `${title}: indisponível`));
+        box.append(mk('div', 'pkb-micro', (ev && (ev.blockedReason || ev.source)) || 'sem dados no mercado'));
         return box;
       }
       const unitTxt = isGold
@@ -2157,11 +2174,11 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
         : `${ev.unitPrice.toLocaleString('pt-BR')} G${isItem ? '/un.' : ''}`;
       const netTxt = isGold ? `${fc(ev.net)} líq.` : `${fg(ev.net)} líq.`;
       const feePct = Math.round((ev.effPct || 0) * 10) / 10;
-      box.append(mk('div', `color:${color};font-weight:bold;font-size:9.5px`, `${title}${badge}: ${unitTxt}`));
+      box.append(mk('div', 'pkb-opt-h', `${title}${winner ? ' ★' : ''}: ${unitTxt}`));
       const totalLine = isItem && r.qty > 1
         ? `Total ${isGold ? fc(ev.gross) : fg(ev.gross)} − ${feePct}% taxa → ${netTxt}${equivTxt ? ` (${equivTxt})` : ''}`
         : `Taxa ${feePct}% → ${netTxt}${equivTxt ? ` (${equivTxt})` : ''}`;
-      box.append(mk('div', 'color:#fff;font-size:9.5px', totalLine));
+      box.append(mk('div', 'pkb-opt-net', totalLine));
       const meta = [];
       if (ev.source) meta.push(ev.source);
       if (isItem) {
@@ -2173,28 +2190,32 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
         if (ev.medianSale != null) meta.push(`med.venda ${isGold ? fc(ev.medianSale) : fg(ev.medianSale)}`);
         meta.push(`${ev.comparableListings || 0} anún. · ${ev.comparableSales || 0} vendas`);
       }
-      box.append(mk('div', 'opacity:.72;font-size:9px', meta.join(' · ')));
+      box.append(mk('div', 'pkb-micro', meta.join(' · ')));
       if (!isItem && ev.tiers) {
         const fmt = v => (isGold ? fc(v) : fg(v));
-        const dTxt = d => (d == null ? '' : ` (~${d < 1 ? '<1' : Math.round(d)}d)`);
+        const dTxt = x => (x == null ? '' : `~${x < 1 ? '<1' : Math.round(x)}d`);
         const t = ev.tiers;
-        box.append(mk('div', 'color:#cfe;font-size:9px;margin-top:2px',
-          `Rápido ${fmt(t.quick.price)}${dTxt(t.quick.days)} · Mercado ${fmt(t.market.price)}${dTxt(t.market.days)} · Máx. viável ${fmt(t.max.price)}${dTxt(t.max.days)}`));
-        if (t.provenCap) box.append(mk('div', 'opacity:.72;font-size:9px', `Maior preço pago (2ª maior venda ajustada): ${fmt(t.provenCap.price)} → ${fmt(t.provenCap.net)} líq.`));
+        const tiers = mk('div', 'pkb-tiers');
+        for (const [lbl, tier, cls] of [['Rápido', t.quick, ''], ['Mercado', t.market, ''], ['Máx. viável', t.max, ' pkb-tier-max']]) {
+          const cell = mk('div', 'pkb-tier' + cls);
+          cell.append(mk('div', 'pkb-tier-l', lbl), mk('div', 'pkb-tier-p', fmt(tier.price)), mk('div', 'pkb-micro', dTxt(tier.days)));
+          tiers.append(cell);
+        }
+        box.append(tiers);
+        if (t.provenCap) box.append(mk('div', 'pkb-micro', `Maior preço pago (2ª maior venda ajustada): ${fmt(t.provenCap.price)} → ${fmt(t.provenCap.net)} líq.`));
         if (ev.timing && ev.timing.verdict !== 'UNKNOWN') {
-          const tm = { SELL: ['▲ vendas 7d em alta', '#8f8'], WAIT: ['⏳ vendas 7d em baixa', '#fc9'], NORMAL: ['● vendas 7d normais', '#bcd'] }[ev.timing.verdict];
-          box.append(mk('div', `color:${tm[1]};font-size:9px`, `${tm[0]} (×${String(ev.timing.ratio).replace('.', ',')} vs 30d, ${ev.timing.recentCount} vendas)`));
+          const tm = { SELL: ['▲ vendas 7d em alta', 'ok'], WAIT: ['⏳ vendas 7d em baixa', 'bad'], NORMAL: ['● vendas 7d normais', 'info'] }[ev.timing.verdict];
+          box.append(mk('div', 'pkb-sub2 pkb-t-' + tm[1], `${tm[0]} (×${String(ev.timing.ratio).replace('.', ',')} vs 30d, ${ev.timing.recentCount} vendas)`));
         }
         if (ev.model) {
           const mTxt = `Ajuste: +1 Nota ≈ +${Math.round((Math.exp(ev.model.slopeNota) - 1) * 100)}% · ×2 Nível ≈ +${Math.round((Math.pow(2, ev.model.slopeLevel) - 1) * 100)}% · +1 Potência ≈ +${Math.round((Math.exp(ev.model.slopePotency || 0) - 1) * 100)}% (${ev.model.nFit} pts) · ${String(ev.model.salesPerDay).replace('.', ',')} vendas/dia`;
-          box.append(mk('div', 'opacity:.6;font-size:8.5px', mTxt));
+          box.append(mk('div', 'pkb-micro', mTxt));
         }
         if (ev.comparables && ev.comparables.length) {
-          const det = document.createElement('details');
-          det.style.cssText = 'margin-top:2px;font-size:8.5px;opacity:.85';
-          det.append(mk('summary', 'cursor:pointer', `Ver ${ev.comparables.length} comparáveis usados`));
+          const det = mk('details', 'pkb-rank');
+          det.append(mk('summary', null, `Ver ${ev.comparables.length} comparáveis usados`));
           for (const c of ev.comparables) {
-            det.append(mk('div', 'opacity:.8',
+            det.append(mk('div', 'pkb-rk pkb-dim',
               `${c.type === 'venda' ? 'V' : 'A'} ${fmt(c.price)} → ${fmt(c.adj)} adj · Nv ${c.level ?? '?'} P${c.potency ?? '?'} N ${c.nota != null ? String(c.nota).replace('.', ',') : '?'} · peso ${String(c.w).replace('.', ',')}${c.ageDays != null ? ` · ${c.ageDays}d` : ''}`));
           }
           box.append(det);
@@ -2205,24 +2226,21 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
 
     const gEquiv = r.goldEquivGems ? `≈ ${fg(r.goldEquivGems)}` : '';
     const oEquiv = r.gemEquivGold ? `≈ ${fc(r.gemEquivGold)} Coins` : '';
-    card.append(renderRow('GOLD (Coins)', '#fd8', r.gold, true, gEquiv, r.bestCurrency === 'gold'));
-    card.append(renderRow('GEMAS', '#c9f', r.gem, false, oEquiv, r.bestCurrency === 'gem'));
+    card.append(renderRow('GOLD (Coins)', 'warn', r.gold, true, gEquiv, r.bestCurrency === 'gold'));
+    card.append(renderRow('GEMAS', 'mute', r.gem, false, oEquiv, r.bestCurrency === 'gem'));
 
     if (r.exchangeRate && r.exchangeRate.coinsPerGem > 0) {
       const implTxt = r.impliedCoinsPerGem ? ` · razão deste item: ${fc(r.impliedCoinsPerGem)}/G` : '';
-      card.append(mk('div', 'opacity:.75;font-size:9px;margin-top:4px',
-        `Câmbio RMT: 1G ≈ ${fc(r.exchangeRate.coinsPerGem)} Coins (${r.exchangeRate.label})${implTxt}`));
+      card.append(mk('div', 'pkb-micro', `Câmbio RMT: 1G ≈ ${fc(r.exchangeRate.coinsPerGem)} Coins (${r.exchangeRate.label})${implTxt}`));
     }
 
-    if (d.eligibilityNote) {
-      card.append(mk('div', 'color:#fc9;font-size:9px;margin-top:3px', '⚠ ' + d.eligibilityNote));
-    }
+    if (d.eligibilityNote) card.append(mk('div', 'pkb-warnline', '⚠ ' + d.eligibilityNote));
 
     for (const w of (r.warnings || []).slice(0, 8)) {
-      const line = mk('div', 'margin-top:2px;color:#fc9;font-size:9px;display:flex;align-items:center;gap:4px');
-      line.append(mk('span', 'flex:1', '⚠ ' + w));
+      const line = mk('div', 'pkb-warnline pkb-warnrow');
+      line.append(mk('span', 'pkb-grow', '⚠ ' + w));
       if (/Radar RMT/i.test(w)) {
-        const bRmt = mk('button', 'all:unset;cursor:pointer;padding:0 5px;border-radius:3px;background:#fd83;border:1px solid #fd86;color:#fff;font-size:9px', 'Ler RMT');
+        const bRmt = mk('button', 'pkb-btn pkb-mini', 'Ler RMT');
         bRmt.onclick = () => scanRmt();
         line.append(bRmt);
       }

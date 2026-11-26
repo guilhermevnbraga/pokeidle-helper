@@ -15,7 +15,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [ ] Analisador de Venda: soma "Meus anúncios" (`#cm-meus`, `readMyListings`) ao inventário · NÃO validado: DOM real de #cm-meus (parser às cegas), closeRmtLeaf após ler
 - [ ] Analisador de Venda v0.9.1 (`sell.js`+`content.js`): preço máx. viável (Nota/Nível/Potência, fila, liquidez, ≥15% vendas); ao vivo: Shedinja+… · NÃO validado: regra 15%, P5, Mega, Depot
 - [ ] Timing do Radar RMT (`timing.js`+`content.js`, v0.9.0): veredito ▲/●/⏳ da rota recomendada (focusId) vs média 7d + histórico por scan (`pkbot-rmt-hist… · NÃO validado: ao vivo no Chrome
-- [ ] UI do painel v0.10.0 (`content.js`): tema pkb-* em <style>, cabeçalho de status + pausa/retoma, abas Auto/Hunt/Bola/RMT/Pedras/Venda, pílula; RMT em cards (pkb-step/verdict); validado ao vivo incl. ULTRA · próximo: Pedras/Venda/Bola/Hunt em cards
+- [ ] UI do painel v0.10.0 (`content.js`): tema pkb-* em <style>, cabeçalho de status + pausa/retoma, abas Auto/Hunt/Bola/RMT/Pedras/Venda, pílula; RMT/Venda/Pedras em cards (pkb-*); validado ao vivo incl. ULTRA · próximo: Bola/Hunt em cards
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível em ULTRA, altura limitada a `100vh - 16px` com rolagem interna e `ResizeObserver` (`content.js`).
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.
