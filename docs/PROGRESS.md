@@ -28,7 +28,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Limitador seletivo de FPS (`fps.js`, só `Campo.loop`, UI em 60 FPS, `0.2` mapa parado, pausa oculto) + Modo servidor (`content.js`) + Worker de timers 100 ms.
 - [x] Alarme de reserva de 30 s no service worker (`background.js`) e bloqueio de descarte da aba (`autoDiscardable: false`).
 - [x] Modo 1/captureRe: toast real "Shedinja capturado — vendido pela Auto Venda" gerou "captura detectada" ao vivo em PT 2026-11-26 · NÃO validado: toast de captura sem Auto Venda e EN
-- [ ] Ciclo completo de compra após saída periódica do ULTRA Economia (`ultraSupplyTick`) · NÃO validado: volta ao ULTRA confirmada, compra real no ciclo ainda não ocorreu
+- [x] ULTRA Economia (ultraSupplyTick): código mantido como está; decisão do usuário 2026-11-26: não vale validar (não captura no ULTRA) · NÃO validado: compra real no ciclo do ULTRA
 - [ ] Deploy Docker multi-conta no Proxmox (`deploy/`, 4 perfis tela cheia + `tint2` + auto-minimize, ~34% CPU / 1,86 GiB) · NÃO validado: fluidez remota e captura contínua minimizada
 
 ## Estudo do jogo (`pokeidle.io/app`)
