@@ -1,6 +1,6 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-26. Versão da extensão: `0.10.0`. Último commit de código: `fix: clear persisted map and pokedex search filters` (ver git log). Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 96 passando. Histórico em `docs/archive/` (só Grep; versão anterior deste arquivo: `HANDOFF_ate_2026-11-26.md`).
+Atualizado: 2026-11-26. Versão da extensão: `1.0.0`. Último commit de código: `fix: clear persisted map and pokedex search filters` (ver git log). Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 96 passando. Histórico em `docs/archive/` (só Grep; versão anterior deste arquivo: `HANDOFF_ate_2026-11-26.md`).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
