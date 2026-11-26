@@ -1,28 +1,26 @@
 # HANDOFF — estado e como retomar (curto de propósito)
 
-Atualizado: 2026-11-26. Versão da extensão: `1.0.0`. Último commit de código: `fix: clear persisted map and pokedex search filters` (ver git log). Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 96 passando. Histórico em `docs/archive/` (só Grep; versão anterior deste arquivo: `HANDOFF_ate_2026-11-26.md`).
+Atualizado: 2026-11-26. Versão da extensão: `1.0.0`. Último commit de código: `fix: prefer the reliable currency when one sale book is far below the 7d average` (ver git log). Repo: `github.com/guilhermevnbraga/pokeidle-helper` (`main`). Testes unitários: 97 passando. Histórico em `docs/archive/` (só Grep).
 Checklist detalhado: `docs/PROGRESS.md` (use as pendências `- [ ]`, não leia inteiro).
 
 ## Regras de trabalho
 Vivem no `AGENTS.md` (não repetir aqui). Termos §5 do PokeIdle: só cliques no DOM, sem API direta, sem mexer em login/anti-robô.
 
 ## Estado atual (2026-11-26)
-- **UI nova do painel (`content.js`, `buildPanel` + `PANEL_CSS`):** tema único em `<style id="pkbot-style">` (variáveis `--pkb-*`, classes `pkb-*`), cabeçalho de status (bolinha, modos ativos, ⏸/▶ que pausa e retoma os mesmos modos, recolher em pílula, ×/Alt+P), chips de tela/aba oculta/dry-run e **abas** Auto · Hunt · Bola · RMT · Pedras · Venda. As saídas de todas as abas são **cards** (`pkb-step`, `pkb-verdict`, `pkb-tiers`, `pkb-item`…); ids `pkbot-*` e `window.__pkBot` preservados.
-- **Validado ao vivo:** abas, pausa/retoma, pílula, arraste (contido nas bordas), ULTRA, jogo em **EN** (RMT, Pedras simular, Venda carregar, Bola analisar), sem erros no console. Janela estreita real **não** testada (o MCP não emula viewport; só CSS forçado, ok).
-- **Auto-reload de dev (`background.js`):** só em extensão descompactada; a cada 30 s compara os arquivos e chama `chrome.runtime.reload()` (~40 s após editar). Depois recarregue a aba do jogo (`navigate`). Se remover do pacote final, é só apagar o bloco `DEV`.
-- Funcionalidades (Hunt v3, Analisador de Pokébola, Radar RMT + Trading + Timing, Venda de Pedras, Analisador de Venda v0.9.1) inalteradas nesta sessão; só a apresentação mudou.
-
-- **Fix 2026-11-26:** filtros de busca do jogo persistem entre aberturas (`#f-mapa`, `#f-nivel-min/max`, `#f-dex`); `neutralizeFilters`/`restoreFilters` (content.js, perto de `closeModal`) limpam ao abrir Mapa/Pokedex e restauram ao fechar. Validado ao vivo com 'pika' no mapa (scan ok, filtro restaurado). `window.__pkBot` não é acessível pelo `javascript_tool` (mundo isolado): acione pelos botões do painel (`#pkbot-hunt-scan`).
+- **1.0.0 publicada** no `main`. README descreve a UI nova (abas, status, pausa, pílula) e os módulos `sell/stones/timing`.
+- **Corrigido e validado ao vivo (PT):** `readMyListings` (toggle `#cm-meus` + `.cm-nome`/`.cm-qtd`); Analisador de Venda ignora book suspeito (muito abaixo da média 7d, flag `suspect` em `sell.js`); troca real de hunt (Azurill → Centro → Shedinja); timing do RMT; `captureRe` com toast real; Analisador de Bola na hunt atual.
+- **Deploy Proxmox (CT 104, `https://192.168.0.104:3001/`):** UI nova carregou após `docker compose down/up` (a extensão vem do volume `../:/extension`, `--build` não basta). Conta 1 minimizada ~3 min: XP +2,18M, tentativas de captura no log.
+- **Decisão do usuário:** ULTRA (`ultraSupplyTick`) fica como está, sem validar nem remover (não captura no ULTRA).
 
 ## Próximos passos (ordem)
-1. **Bug "Meus anúncios" (`readMyListings`):** em EN o log disse `0 item(ns), 1 Pokémon(s)` com 2 anúncios (Shiny Shedinja e 78× Darkness Stone a 77K/un.); o card do item não vira item. Texto do card: `78× Darkness Stone DARK 78 in stock · 77K per unit your listing`. Inspecionar o DOM de `#cm-meus` pelo fluxo da extensão e corrigir o parser (nome vem depois de `N×`).
-2. Atualizar `README.md` com a UI nova (abas, status, pausa, pílula) — pendente, não feito.
-3. Validar ao vivo o que segue `- [ ]` no PROGRESS: troca real do Gerenciador de hunt (v0.7.8), regra dos 15% do preço de venda, timing do RMT, hunt com >1 espécie/Shiny no Analisador de Bola; só depois pensar em `1.0`.
-4. Teste de janela estreita real (DevTools → device toolbar, ~500px).
+1. Teste de janela estreita (~500px): só CSS forçado (MCP não emula viewport). Opcional.
+2. Validar contas 2–4 do deploy e capturas contínuas por horas (ver log/XP depois de um tempo).
+3. Caminho multi-espécie do Analisador de Bola: nenhuma hunt da conta tem >1 espécie; só validar se aparecer uma.
+4. Itens `- [ ]` restantes do PROGRESS (Venda v0.9.1 com Pokémon, hardening Market/multi-conta, `/study-game`).
 
 ## Pendente do usuário
-- Perfis secundários do Chrome: recarregar a extensão em `chrome://extensions` (o auto-reload só vale no perfil onde ele já está rodando) e `F5` no jogo; atualizar o container no CT 104 se quiser a UI nova lá.
-- `docs/META_ANALYSIS.md` e `scripts/meta-model.mjs` estão não rastreados (anteriores a esta sessão): decidir se entram no repo.
+- Perfis secundários do Chrome local: recarregar a extensão em `chrome://extensions` + `F5` no jogo.
+- A conta é a mesma no Chrome local e no servidor: só uma sessão joga por vez (o servidor está jogando; fechei a aba local do MCP).
 
 ## Armadilhas
-Todas em `docs/BROWSER_QUIRKS.md` (fonte única; leia antes de usar o MCP). Extra desta sessão: `chrome://` é bloqueado para o MCP (reload manual só na 1ª vez); `resize_window` não altera o viewport; a Cache API não aceita chave `chrome-extension://`.
+Todas em `docs/BROWSER_QUIRKS.md` (fonte única; leia antes de usar o MCP). Extra: `javascript_tool` do Claude-in-Chrome estoura em 45 s (use esperas curtas e leia o resultado depois); a bind-mount do deploy exige reiniciar o container, não só `--build`; `#cm-meus` é toggle (classe `on`).
