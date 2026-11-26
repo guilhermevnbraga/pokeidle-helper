@@ -29,7 +29,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Alarme de reserva de 30 s no service worker (`background.js`) e bloqueio de descarte da aba (`autoDiscardable: false`).
 - [x] Modo 1/captureRe: toast real "Shedinja capturado — vendido pela Auto Venda" gerou "captura detectada" ao vivo em PT 2026-11-26 · NÃO validado: toast de captura sem Auto Venda e EN
 - [x] ULTRA Economia (ultraSupplyTick): código mantido como está; decisão do usuário 2026-11-26: não vale validar (não captura no ULTRA) · NÃO validado: compra real no ciclo do ULTRA
-- [ ] Deploy Docker multi-conta no Proxmox (`deploy/`, 4 perfis tela cheia + `tint2` + auto-minimize, ~34% CPU / 1,86 GiB) · NÃO validado: fluidez remota e captura contínua minimizada
+- [x] Deploy Docker multi-conta (CT 104, 4 perfis): UI nova carregou após reiniciar o container; minimizado ~3 min, XP +2,18M e alvos de captura no log · NÃO validado: fluidez ao digitar, contas 2-4, capturas por horas
 
 ## Estudo do jogo (`pokeidle.io/app`)
 - [x] Estudo de caso RMT (5.000 tx Itens + 900 tx Pokémon + books): trio de Fragmentos (~5,3–5,7M/G, ~5,6B p/ 1.000G), Stones = transfer P2P, high-end Pokémon só em Gemas (`GAME_STUDY.md`).
