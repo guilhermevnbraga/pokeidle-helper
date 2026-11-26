@@ -187,6 +187,24 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
 #pkbot-panel .pkb-out [style*="font-size:10px"]{font-size:11.5px!important}
 #pkbot-panel .pkb-out div[style*="border-radius:5px"]{border-radius:8px!important;padding:6px 8px!important}
 #pkbot-panel .pkb-out details{margin-top:6px!important;padding-top:5px!important}
+#pkbot-panel .pkb-t-ok{--c:var(--pkb-ok)}#pkbot-panel .pkb-t-warn{--c:var(--pkb-warn)}#pkbot-panel .pkb-t-bad{--c:#fb923c}#pkbot-panel .pkb-t-info{--c:#67e8f9}#pkbot-panel .pkb-t-mute{--c:#c4b5fd}
+#pkbot-panel .pkb-msg{color:var(--pkb-mute)}#pkbot-panel .pkb-msg.pkb-t-warn{color:var(--pkb-warn)}
+#pkbot-panel .pkb-sec{padding:2px 0 8px}
+#pkbot-panel .pkb-sec+.pkb-sec{border-top:1px dashed var(--pkb-line);padding-top:10px}
+#pkbot-panel .pkb-sec-t{font-size:10.5px;font-weight:700;letter-spacing:.6px;color:var(--c);margin-bottom:3px}
+#pkbot-panel .pkb-verdict{font-size:13px;font-weight:650;color:var(--c);line-height:1.3}
+#pkbot-panel .pkb-sum{color:var(--pkb-mute);font-size:11px;margin-top:1px}
+#pkbot-panel .pkb-sub2{color:var(--pkb-mute);font-size:11px;margin-top:3px}
+#pkbot-panel .pkb-sub2.pkb-t-ok,#pkbot-panel .pkb-sub2.pkb-t-bad,#pkbot-panel .pkb-sub2.pkb-t-info{color:var(--c)}
+#pkbot-panel .pkb-banner,#pkbot-panel .pkb-step{margin-top:6px;padding:7px 9px;border-radius:9px;background:color-mix(in srgb,var(--c) 9%,transparent);border:1px solid color-mix(in srgb,var(--c) 32%,transparent)}
+#pkbot-panel .pkb-banner-h,#pkbot-panel .pkb-step-h{font-weight:650;font-size:12px;color:var(--c)}
+#pkbot-panel .pkb-kv{display:flex;gap:8px;margin-top:3px;word-break:break-word}
+#pkbot-panel .pkb-k{flex:0 0 60px;color:var(--pkb-mute);font-size:10px;font-weight:700;letter-spacing:.4px;padding-top:1px}
+#pkbot-panel .pkb-vv{flex:1;min-width:0;color:var(--pkb-text)}
+#pkbot-panel .pkb-vv.pkb-where{color:#9fb6ff}#pkbot-panel .pkb-vv.pkb-sell{color:#a7f3c0}#pkbot-panel .pkb-vv.pkb-strong{color:var(--c);font-weight:650}
+#pkbot-panel .pkb-warnline{margin-top:4px;color:#fcd34d;font-size:11px}
+#pkbot-panel .pkb-rank{margin-top:8px;border-top:1px solid var(--pkb-line);padding-top:6px}
+#pkbot-panel .pkb-rk{font-size:11px;margin-top:2px;color:var(--pkb-text)}#pkbot-panel .pkb-rk.pkb-dim{color:var(--pkb-mute)}
 #pkbot-panel .pkb-log{margin:0;white-space:pre-wrap;max-height:130px;overflow:auto;user-select:text;font:11px/1.4 ui-monospace,Consolas,monospace;color:#b8c4d8}
 #pkbot-panel details>summary{cursor:pointer;color:var(--pkb-mute);font-size:11.5px}
 `;
@@ -1183,19 +1201,20 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     if (rmtBtnEl) rmtBtnEl.textContent = rmtState.scanning ? 'Lendo...' : 'Escanear';
     if (rmtDirEl && rmtDirEl.value !== CFG.rmtDir) rmtDirEl.value = CFG.rmtDir;
     rmtOutEl.textContent = '';
-    const mk = (tag, css, txt) => {
+    // classes pkb-* (ver PANEL_CSS): tons pkb-t-ok/warn/bad/info/mute definem a cor de destaque (--c)
+    const mk = (tag, cls, txt) => {
       const el = document.createElement(tag);
-      if (css) el.style.cssText = css;
+      if (cls) el.className = cls;
       if (txt != null) el.textContent = txt;
       return el;
     };
     if (statusMsg) {
-      rmtOutEl.append(mk('div', 'color:#fd8', statusMsg));
+      rmtOutEl.append(mk('div', 'pkb-msg pkb-t-warn', statusMsg));
       return;
     }
     const d = rmtState.last;
     if (!d || !d.routes || !d.routes.length) {
-      rmtOutEl.append(mk('div', 'color:#aab', 'Clique em Escanear para ver Ouro→Gema, Gema→Ouro e oportunidades de Trading (itens fungíveis).'));
+      rmtOutEl.append(mk('div', 'pkb-msg', 'Clique em Escanear para ver Ouro→Gema, Gema→Ouro e oportunidades de Trading (itens fungíveis).'));
       return;
     }
     const curGold = gold();
@@ -1210,226 +1229,143 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     const tradePlanRaw = showTrade ? PK_RMT.buildTradingPlan({ routes: d.routes, gold: curGold, gems: curGems, source: d.source }) : null;
     const tradePlan = tradePlanRaw && typeof PK_TIMING !== 'undefined' ? PK_TIMING.annotateTrading(tradePlanRaw, d.routes, rmtHist, { currentAt: d.at }) : tradePlanRaw;
     if (!plan && !revPlan && !tradePlan) {
-      rmtOutEl.append(mk('div', 'color:#aab', 'Sem rotas válidas no último scan.'));
+      rmtOutEl.append(mk('div', 'pkb-msg', 'Sem rotas válidas no último scan.'));
       return;
     }
     const ageMin = Math.max(0, Math.round((Date.now() - d.at) / 60000));
     const tag = d.source === 'book' ? 'books livres' : '~estimado (clique Escanear)';
     const both = CFG.rmtDir === 'both';
+    const toneOf = v => (v === 'NOW' || v === 'BUY_NOW' || v === 'PROFITABLE') ? 'ok' : (v === 'WAIT' ? 'bad' : (v === 'NEUTRAL' ? 'info' : (v === 'RISKY' ? 'warn' : 'mute')));
 
     const renderTimingBanner = (parent, dir, focusId) => {
       if (typeof PK_TIMING === 'undefined') return null;
       const adv = PK_TIMING.adviseTiming(d.routes, rmtHist, dir, { currentAt: d.at, focusId });
-      const color = adv.verdict === 'NOW' ? '#6f9' : (adv.verdict === 'WAIT' ? '#f96' : (adv.verdict === 'NEUTRAL' ? '#8ef' : '#aab'));
       const icon = adv.verdict === 'NOW' ? '▲' : (adv.verdict === 'WAIT' ? '⏳' : (adv.verdict === 'NEUTRAL' ? '●' : '?'));
-      const box = mk('div', `margin-top:3px;padding:3px 6px;border-radius:5px;border:1px solid ${color}77;background:${color}18`);
-      box.append(mk('div', `font-weight:bold;color:${color}`, `${icon} TIMING: ${adv.headline}`));
+      const box = mk('div', 'pkb-banner pkb-t-' + toneOf(adv.verdict));
+      box.append(mk('div', 'pkb-banner-h', `${icon} TIMING: ${adv.headline}`));
       const extra = [];
       if (adv.best && adv.best.reasons && adv.best.reasons.length) extra.push(adv.best.reasons.join(' · '));
       if (adv.bestWindow) extra.push(`melhor janela do dia: ${adv.bestWindow}`);
       const nHist = adv.focus && adv.best ? (adv.best.n || 0) : Math.max(0, ...Object.values(adv.byId).map(a => a.n || 0));
       extra.push(`histórico: ${nHist} leitura(s)`);
-      box.append(mk('div', 'color:#bcd;font-size:9px;margin-top:1px', extra.join(' · ')));
+      box.append(mk('div', 'pkb-sub2', extra.join(' · ')));
       parent.append(box);
       return adv;
     };
 
-    const renderStepCard = (title, inst, accent, bg) => {
-      const box = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
-      box.append(mk('div', `font-weight:bold;color:${accent};margin-bottom:2px`, title));
-      const row = (lbl, val, valCss = 'color:#fff') => {
-        const line = mk('div', 'margin-top:1px;word-break:break-word');
-        line.append(mk('span', 'color:#aab;font-weight:bold', lbl + ' '), mk('span', valCss, val));
-        return line;
-      };
-      box.append(row('ONDE:', inst.where, 'color:#bde'));
-      box.append(row('COMPRAR:', inst.buyText, 'color:#fff'));
-      box.append(row('VENDER:', inst.sellText, 'color:#bfa'));
-      if (inst.note) box.append(mk('div', 'margin-top:2px;color:#fc9;font-size:9px', '⚠ ' + inst.note));
+    const kv = (lbl, val, vcls) => {
+      const line = mk('div', 'pkb-kv');
+      line.append(mk('span', 'pkb-k', lbl), mk('span', 'pkb-vv' + (vcls ? ' ' + vcls : ''), val));
+      return line;
+    };
+    const renderStepCard = (title, inst, tone) => {
+      const box = mk('div', 'pkb-step pkb-t-' + tone);
+      box.append(mk('div', 'pkb-step-h', title));
+      box.append(kv('ONDE', inst.where, 'pkb-where'), kv('COMPRAR', inst.buyText), kv('VENDER', inst.sellText, 'pkb-sell'));
+      if (inst.note) box.append(mk('div', 'pkb-warnline', '⚠ ' + inst.note));
       return box;
+    };
+    const rankDetails = (open, setOpen, title, rows) => {
+      const det = mk('details', 'pkb-rank');
+      det.open = open;
+      det.ontoggle = () => setOpen(det.open);
+      det.append(mk('summary', null, title));
+      for (const [txt, dim] of rows) det.append(mk('div', 'pkb-rk' + (dim ? ' pkb-dim' : ''), txt));
+      return det;
+    };
+    const sectionHead = (wrap, title, tone) => { if (both) wrap.append(mk('div', 'pkb-sec-t pkb-t-' + tone, title)); };
+    const headline = (wrap, tone, head, summary) => {
+      wrap.append(mk('div', 'pkb-verdict pkb-t-' + tone, head));
+      wrap.append(mk('div', 'pkb-sum', summary));
     };
 
     if (both) {
-      rmtOutEl.append(mk('div', 'color:#9ab;font-size:9px;margin-bottom:3px', `${tag}, ${ageMin}m · Saldo: ${PK_RMT.formatCoins(curGold)} · ${PK_RMT.formatGems(curGems)}`));
+      rmtOutEl.append(mk('div', 'pkb-sum', `${tag}, ${ageMin}m · Saldo: ${PK_RMT.formatCoins(curGold)} · ${PK_RMT.formatGems(curGems)}`));
     }
 
     if (plan) {
-      const wrap = mk('div', both ? 'padding-bottom:5px' : '');
-      if (both) wrap.append(mk('div', 'font-weight:bold;color:#fd8;font-size:10px;letter-spacing:.3px;margin-bottom:1px', 'OURO → GEMA (menor Coins/Gema)'));
-      const headColor = plan.verdict === 'BUY_NOW' ? '#6f9' : '#fd8';
-      wrap.append(mk('div', `font-weight:bold;color:${headColor}`, plan.headline));
-      wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? plan.summary : `${plan.summary} · ${tag}, ${ageMin}m`));
+      const wrap = mk('div', 'pkb-sec');
+      sectionHead(wrap, 'OURO → GEMA (menor Coins/Gema)', 'warn');
+      headline(wrap, plan.verdict === 'BUY_NOW' ? 'ok' : 'warn', plan.headline, both ? plan.summary : `${plan.summary} · ${tag}, ${ageMin}m`);
       const advG = renderTimingBanner(wrap, 'gold-to-gem', plan.primary && plan.primary.routeId);
+      const other = (o, plus) => mk('div', 'pkb-sub2', `Taxa bruta maior (outra opção): ${o.label} (${PK_RMT.formatCoins(o.coinsPerGem)}/G · falta ${plus ? '+' : ''}${PK_RMT.formatCoins(o.missingCoins)})`);
 
       if (plan.verdict === 'BUY_NOW' && plan.primary) {
-        wrap.append(renderStepCard(`PLANO COM SEUS ${PK_RMT.formatCoins(curGold)}`, plan.primary, '#6f9', '#16332288'));
-        if (plan.goal) {
-          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Taxa bruta maior (outra opção): ${plan.goal.label} (${PK_RMT.formatCoins(plan.goal.coinsPerGem)}/G · falta ${PK_RMT.formatCoins(plan.goal.missingCoins)})`));
-        }
+        wrap.append(renderStepCard(`PLANO COM SEUS ${PK_RMT.formatCoins(curGold)}`, plan.primary, 'ok'));
+        if (plan.goal) wrap.append(other(plan.goal, false));
       } else if (plan.verdict === 'SAVE_OR_BUY') {
-        if (plan.primary) {
-          wrap.append(renderStepCard(
-            `META RECOMENDADA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
-            plan.primary, '#fd8', '#332b1488'
-          ));
-        }
-        if (plan.bestOverall) {
-          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Taxa bruta maior (outra opção): ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
-        }
-        if (plan.fallback) {
-          wrap.append(renderStepCard(
-            `SE QUISER CONVERTER JÁ (${PK_RMT.formatCoins(curGold)} · -${plan.lossPct}% gemas)`,
-            plan.fallback, '#7cf', '#14263688'
-          ));
-        }
+        if (plan.primary) wrap.append(renderStepCard(`META RECOMENDADA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`, plan.primary, 'warn'));
+        if (plan.bestOverall) wrap.append(other(plan.bestOverall, true));
+        if (plan.fallback) wrap.append(renderStepCard(`SE QUISER CONVERTER JÁ (${PK_RMT.formatCoins(curGold)} · -${plan.lossPct}% gemas)`, plan.fallback, 'info'));
       } else if (plan.verdict === 'SAVE_ONLY') {
-        if (plan.primary) {
-          wrap.append(renderStepCard(
-            `META ÓTIMA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`,
-            plan.primary, '#fd8', '#332b1488'
-          ));
-        }
-        if (plan.bestOverall) {
-          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Taxa bruta maior (outra opção): ${plan.bestOverall.label} (${PK_RMT.formatCoins(plan.bestOverall.coinsPerGem)}/G · falta +${PK_RMT.formatCoins(plan.bestOverall.missingCoins)})`));
-        }
-        if (plan.fallback) {
-          wrap.append(renderStepCard(
-            `1ª ENTRADA (falta +${PK_RMT.formatCoins(plan.fallback.missingCoins)})`,
-            plan.fallback, '#7cf', '#14263688'
-          ));
-        }
+        if (plan.primary) wrap.append(renderStepCard(`META ÓTIMA (falta +${PK_RMT.formatCoins(plan.primary.missingCoins)})`, plan.primary, 'warn'));
+        if (plan.bestOverall) wrap.append(other(plan.bestOverall, true));
+        if (plan.fallback) wrap.append(renderStepCard(`1ª ENTRADA (falta +${PK_RMT.formatCoins(plan.fallback.missingCoins)})`, plan.fallback, 'info'));
       }
 
-      const det = document.createElement('details');
-      det.open = rmtRankingOpen;
-      det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
-      det.ontoggle = () => { rmtRankingOpen = det.open; };
-      det.append(mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Ranking Ouro→Gema (${plan.ranked.length} itens)`));
-      for (const r of plan.ranked) {
-        const ok = curGold >= r.buyCoins ? '✓' : '○';
+      wrap.append(rankDetails(rmtRankingOpen, o => { rmtRankingOpen = o; }, `Ranking Ouro→Gema (${plan.ranked.length} itens)`, plan.ranked.map(r => {
+        const ok = curGold >= r.buyCoins;
         const warn = r.warnings && r.warnings.length ? ' !' + r.warnings[0] : '';
         const tb = advG ? PK_TIMING.badge(advG.byId[r.id]) : '';
-        det.append(mk('div', `color:${ok === '✓' ? '#cfd' : '#9aa'};font-size:9.5px;margin-top:1px`,
-          `${ok} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${tb ? ' ' + tb : ''}${warn}`));
-      }
-      wrap.append(det);
+        return [`${ok ? '✓' : '○'} ${r.label}: ${PK_RMT.formatCoins(r.coinsPerGem)}/G (${PK_RMT.formatCoins(r.buyCoins)}→${r.sellGems}G)${tb ? ' ' + tb : ''}${warn}`, !ok];
+      })));
       rmtOutEl.append(wrap);
     }
 
     if (revPlan) {
-      const wrap = mk('div', both ? 'margin-top:5px;padding-top:5px;border-top:1px dashed #8ef5' : '');
-      if (both) wrap.append(mk('div', 'font-weight:bold;color:#8ef;font-size:10px;letter-spacing:.3px;margin-bottom:1px', 'GEMA → OURO (maior Coins/Gema líq.)'));
-      const headColor = revPlan.verdict === 'BUY_NOW' ? '#6f9' : '#8ef';
-      wrap.append(mk('div', `font-weight:bold;color:${headColor}`, revPlan.headline));
-      wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? revPlan.summary : `${revPlan.summary} · ${tag}, ${ageMin}m`));
+      const wrap = mk('div', 'pkb-sec');
+      sectionHead(wrap, 'GEMA → OURO (maior Coins/Gema líq.)', 'info');
+      headline(wrap, revPlan.verdict === 'BUY_NOW' ? 'ok' : 'info', revPlan.headline, both ? revPlan.summary : `${revPlan.summary} · ${tag}, ${ageMin}m`);
       const advR = renderTimingBanner(wrap, 'gem-to-gold', revPlan.primary && revPlan.primary.routeId);
+      const other = (o, plus) => mk('div', 'pkb-sub2', `Taxa bruta maior (outra opção): ${o.label} (${PK_RMT.formatCoins(o.netCoinsPerGem)}/G · falta ${plus ? '+' : ''}${PK_RMT.formatGems(o.missingGems)})`);
 
       if (revPlan.verdict === 'BUY_NOW' && revPlan.primary) {
-        wrap.append(renderStepCard(`PLANO COM SUAS ${PK_RMT.formatGems(curGems)}`, revPlan.primary, '#6f9', '#16332288'));
-        if (revPlan.goal) {
-          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Taxa bruta maior (outra opção): ${revPlan.goal.label} (${PK_RMT.formatCoins(revPlan.goal.netCoinsPerGem)}/G · falta ${PK_RMT.formatGems(revPlan.goal.missingGems)})`));
-        }
+        wrap.append(renderStepCard(`PLANO COM SUAS ${PK_RMT.formatGems(curGems)}`, revPlan.primary, 'ok'));
+        if (revPlan.goal) wrap.append(other(revPlan.goal, false));
       } else if (revPlan.verdict === 'SAVE_OR_BUY') {
-        if (revPlan.primary) {
-          wrap.append(renderStepCard(
-            `META RECOMENDADA (falta +${PK_RMT.formatGems(revPlan.primary.missingGems)})`,
-            revPlan.primary, '#8ef', '#142a3688'
-          ));
-        }
-        if (revPlan.bestOverall) {
-          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Taxa bruta maior (outra opção): ${revPlan.bestOverall.label} (${PK_RMT.formatCoins(revPlan.bestOverall.netCoinsPerGem)}/G · falta +${PK_RMT.formatGems(revPlan.bestOverall.missingGems)})`));
-        }
-        if (revPlan.fallback) {
-          wrap.append(renderStepCard(
-            `SE QUISER CONVERTER JÁ (${PK_RMT.formatGems(curGems)} · -${revPlan.lossPct}% ouro)`,
-            revPlan.fallback, '#fd8', '#332b1488'
-          ));
-        }
+        if (revPlan.primary) wrap.append(renderStepCard(`META RECOMENDADA (falta +${PK_RMT.formatGems(revPlan.primary.missingGems)})`, revPlan.primary, 'info'));
+        if (revPlan.bestOverall) wrap.append(other(revPlan.bestOverall, true));
+        if (revPlan.fallback) wrap.append(renderStepCard(`SE QUISER CONVERTER JÁ (${PK_RMT.formatGems(curGems)} · -${revPlan.lossPct}% ouro)`, revPlan.fallback, 'warn'));
       } else if (revPlan.verdict === 'SAVE_ONLY') {
-        if (revPlan.primary) {
-          wrap.append(renderStepCard(
-            `META ÓTIMA (falta +${PK_RMT.formatGems(revPlan.primary.missingGems)})`,
-            revPlan.primary, '#8ef', '#142a3688'
-          ));
-        }
-        if (revPlan.bestOverall) {
-          wrap.append(mk('div', 'margin-top:3px;color:#aab;font-size:9px',
-            `Taxa bruta maior (outra opção): ${revPlan.bestOverall.label} (${PK_RMT.formatCoins(revPlan.bestOverall.netCoinsPerGem)}/G · falta +${PK_RMT.formatGems(revPlan.bestOverall.missingGems)})`));
-        }
-        if (revPlan.fallback) {
-          wrap.append(renderStepCard(
-            `1ª ENTRADA (falta +${PK_RMT.formatGems(revPlan.fallback.missingGems)})`,
-            revPlan.fallback, '#fd8', '#332b1488'
-          ));
-        }
+        if (revPlan.primary) wrap.append(renderStepCard(`META ÓTIMA (falta +${PK_RMT.formatGems(revPlan.primary.missingGems)})`, revPlan.primary, 'info'));
+        if (revPlan.bestOverall) wrap.append(other(revPlan.bestOverall, true));
+        if (revPlan.fallback) wrap.append(renderStepCard(`1ª ENTRADA (falta +${PK_RMT.formatGems(revPlan.fallback.missingGems)})`, revPlan.fallback, 'warn'));
       }
 
-      const det = document.createElement('details');
-      det.open = rmtReverseRankingOpen;
-      det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
-      det.ontoggle = () => { rmtReverseRankingOpen = det.open; };
-      det.append(mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Ranking Gema→Ouro (${revPlan.ranked.length} itens)`));
-      for (const r of revPlan.ranked) {
-        const ok = curGems >= r.buyGems ? '✓' : '○';
+      wrap.append(rankDetails(rmtReverseRankingOpen, o => { rmtReverseRankingOpen = o; }, `Ranking Gema→Ouro (${revPlan.ranked.length} itens)`, revPlan.ranked.map(r => {
+        const ok = curGems >= r.buyGems;
         const warn = r.reverseWarnings && r.reverseWarnings.length ? ' !' + r.reverseWarnings[0] : '';
         const tb = advR ? PK_TIMING.badge(advR.byId[r.id]) : '';
-        det.append(mk('div', `color:${ok === '✓' ? '#cef' : '#9aa'};font-size:9.5px;margin-top:1px`,
-          `${ok} ${r.label}: ${PK_RMT.formatCoins(r.netCoinsPerGem)}/G (${r.buyGems}G→${PK_RMT.formatCoins(r.netCoinsUnit)} líq.)${tb ? ' ' + tb : ''}${warn}`));
-      }
-      wrap.append(det);
+        return [`${ok ? '✓' : '○'} ${r.label}: ${PK_RMT.formatCoins(r.netCoinsPerGem)}/G (${r.buyGems}G→${PK_RMT.formatCoins(r.netCoinsUnit)} líq.)${tb ? ' ' + tb : ''}${warn}`, !ok];
+      })));
       rmtOutEl.append(wrap);
     }
 
     if (tradePlan) {
-      const wrap = mk('div', both ? 'margin-top:5px;padding-top:5px;border-top:1px dashed #c9f5' : '');
-      if (both) wrap.append(mk('div', 'font-weight:bold;color:#d9f;font-size:10px;letter-spacing:.3px;margin-bottom:1px', 'TRADING (arbitragem & flip)'));
-      const headColor = tradePlan.verdict === 'PROFITABLE' ? '#6f9' : (tradePlan.verdict === 'WAIT' ? '#f96' : (tradePlan.verdict === 'RISKY' ? '#fd8' : '#aab'));
-      wrap.append(mk('div', `font-weight:bold;color:${headColor}`, tradePlan.headline));
-      wrap.append(mk('div', 'color:#bcd;font-size:9.5px', both ? tradePlan.summary : `${tradePlan.summary} · ${tag}, ${ageMin}m`));
+      const wrap = mk('div', 'pkb-sec');
+      sectionHead(wrap, 'TRADING (arbitragem & flip)', 'mute');
+      headline(wrap, toneOf(tradePlan.verdict), tradePlan.headline, both ? tradePlan.summary : `${tradePlan.summary} · ${tag}, ${ageMin}m`);
 
       if (tradePlan.best) {
         const b = tradePlan.best;
-        const accent = tradePlan.verdict === 'PROFITABLE' ? '#6f9' : (tradePlan.verdict === 'WAIT' ? '#f96' : '#fd8');
-        const bg = tradePlan.verdict === 'PROFITABLE' ? '#16332288' : '#332b1488';
-        const box = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
+        const tone = tradePlan.verdict === 'PROFITABLE' ? 'ok' : (tradePlan.verdict === 'WAIT' ? 'bad' : 'warn');
+        const box = mk('div', 'pkb-step pkb-t-' + tone);
         const capTag = b.affordable ? b.capitalText : `${b.capitalText} (${b.missingText})`;
-        box.append(mk('div', `font-weight:bold;color:${accent};margin-bottom:2px`, `${b.subtitle} · ${capTag}`));
-        const row = (lbl, val, valCss = 'color:#fff') => {
-          const line = mk('div', 'margin-top:1px;word-break:break-word');
-          line.append(mk('span', 'color:#aab;font-weight:bold', lbl + ' '), mk('span', valCss, val));
-          return line;
-        };
-        box.append(row('1:', b.step1, 'color:#fff'));
-        box.append(row('2:', b.step2, 'color:#bfa'));
-        box.append(row('LUCRO:', b.profitText + (b.roiAtAvg7dPct != null ? ` · média 7d: ${b.roiAtAvg7dPct >= 0 ? '+' : ''}${b.roiAtAvg7dPct.toFixed(1).replace('.', ',')}%` : ''), `color:${accent};font-weight:bold`));
+        box.append(mk('div', 'pkb-step-h', `${b.subtitle} · ${capTag}`));
+        box.append(kv('1', b.step1), kv('2', b.step2, 'pkb-sell'));
+        box.append(kv('LUCRO', b.profitText + (b.roiAtAvg7dPct != null ? ` · média 7d: ${b.roiAtAvg7dPct >= 0 ? '+' : ''}${b.roiAtAvg7dPct.toFixed(1).replace('.', ',')}%` : ''), 'pkb-strong'));
         if (b.timing && b.timing.scorePct != null) {
-          const tc = b.timing.verdict === 'NOW' ? '#6f9' : (b.timing.verdict === 'WAIT' ? '#f96' : '#8ef');
-          box.append(mk('div', `margin-top:2px;color:${tc};font-size:9px`, `${PK_TIMING.badge(b.timing)} TIMING: ${b.timing.reasons.join(' · ')}`));
+          box.append(mk('div', 'pkb-sub2 pkb-t-' + toneOf(b.timing.verdict), `${PK_TIMING.badge(b.timing)} TIMING: ${b.timing.reasons.join(' · ')}`));
         }
-        if (b.risks && b.risks.length) {
-          box.append(mk('div', 'margin-top:2px;color:#fc9;font-size:9px', '⚠ ' + b.risks.join(' · ')));
-        }
+        if (b.risks && b.risks.length) box.append(mk('div', 'pkb-warnline', '⚠ ' + b.risks.join(' · ')));
         wrap.append(box);
       }
 
       if (tradePlan.opportunities && tradePlan.opportunities.length > 1) {
-        const det = document.createElement('details');
-        det.open = rmtTradeListOpen;
-        det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
-        det.ontoggle = () => { rmtTradeListOpen = det.open; };
-        det.append(mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Outras rotas de trading (${tradePlan.opportunities.length})`));
-        for (const op of tradePlan.opportunities) {
+        wrap.append(rankDetails(rmtTradeListOpen, o => { rmtTradeListOpen = o; }, `Outras rotas de trading (${tradePlan.opportunities.length})`, tradePlan.opportunities.map(op => {
           const badge = op.confidence === 'high' ? '●' : (op.confidence === 'medium' ? '◐' : '○');
-          const c = op.confidence === 'low' ? '#9aa' : '#dfd';
-          det.append(mk('div', `color:${c};font-size:9.5px;margin-top:1px`,
-            `${badge} ${op.title}: ${op.profitText}${op.timing && op.timing.scorePct != null ? ' ' + PK_TIMING.badge(op.timing) : ''}${op.risks.length ? ' !' + op.risks[0] : ''}`));
-        }
-        wrap.append(det);
+          return [`${badge} ${op.title}: ${op.profitText}${op.timing && op.timing.scorePct != null ? ' ' + PK_TIMING.badge(op.timing) : ''}${op.risks.length ? ' !' + op.risks[0] : ''}`, op.confidence === 'low'];
+        })));
       }
       rmtOutEl.append(wrap);
     }
