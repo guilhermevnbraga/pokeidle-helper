@@ -206,6 +206,7 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
 #pkbot-panel .pkb-rank{margin-top:8px;border-top:1px solid var(--pkb-line);padding-top:6px}
 #pkbot-panel .pkb-rk{font-size:11px;margin-top:2px;color:var(--pkb-text)}#pkbot-panel .pkb-rk.pkb-dim{color:var(--pkb-mute)}
 #pkbot-panel .pkb-grow{flex:1;min-width:0}
+#pkbot-panel .pkb-strongrow{font-weight:650;color:var(--c)}
 #pkbot-panel .pkb-micro{color:var(--pkb-mute);font-size:10.5px;margin-top:2px}
 #pkbot-panel .pkb-btn.pkb-mini{padding:1px 8px;font-size:11px}
 #pkbot-panel .pkb-warnrow{display:flex;align-items:center;gap:6px}
@@ -1032,15 +1033,16 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     if (huntFocusEl && huntFocusEl.value !== CFG.huntFocus) huntFocusEl.value = CFG.huntFocus;
     if (huntBtnEl) huntBtnEl.textContent = huntState.scanning ? 'Lendo...' : 'Verificar';
     huntOutEl.textContent = '';
-    const mk = (tag, css, txt) => {
+    // classes pkb-* (ver PANEL_CSS)
+    const mk = (tag, cls, txt) => {
       const el = document.createElement(tag);
-      if (css) el.style.cssText = css;
+      if (cls) el.className = cls;
       if (txt != null) el.textContent = txt;
       return el;
     };
     if (statusMsg) {
       huntOutEl.style.display = '';
-      huntOutEl.append(mk('div', 'color:#fd8', statusMsg));
+      huntOutEl.append(mk('div', 'pkb-msg pkb-t-warn', statusMsg));
       return;
     }
     const last = huntState.last;
@@ -1050,7 +1052,7 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     }
     huntOutEl.style.display = '';
     if (!last || !last.detailed || !Object.keys(last.detailed).length) {
-      huntOutEl.append(mk('div', 'color:#9ab', 'Aguardando avaliação automática...'));
+      huntOutEl.append(mk('div', 'pkb-msg', 'Aguardando avaliação automática...'));
       return;
     }
     const dec = PK_HUNT.pickBestHunt({
@@ -1073,14 +1075,25 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     const bs = best.sim || {};
     const badge = best.isOutland ? ' [OUT]' : '';
     const tieTag = dec.tieBroken ? ' · desempate' : '';
-    const potTxt = (bs.potionsH || 0) >= 1 ? ` · ${Math.round(bs.potionsH)}pot` : '';
-    huntOutEl.append(mk('div', 'color:#8f9',
-      `${st.hunt ? 'Auto' : 'Melhor'}: ${best.displayName || best.nome} Nv${best.level || '?'}${badge}${tieTag}`));
-    huntOutEl.append(mk('div', 'color:#bcd;font-size:9px',
-      `${fmt(bs.xpH)} xp/h · ${fmt(bs.netGoldH)} líq/h · ${bs.kph || 0}/h${potTxt}`));
+    const potTxt = (bs.potionsH || 0) >= 1 ? `${Math.round(bs.potionsH)} pot/h` : '';
+    const card = mk('div', 'pkb-step pkb-t-ok');
+    card.append(mk('div', 'pkb-step-h', `${st.hunt ? 'Auto' : 'Melhor'}: ${best.displayName || best.nome} Nv${best.level || '?'}${badge}${tieTag}`));
+    const stats = mk('div', 'pkb-tiers');
+    for (const [lbl, val] of [['XP/h', fmt(bs.xpH)], ['Líquido/h', fmt(bs.netGoldH)], ['Abates/h', String(bs.kph || 0)]]) {
+      const cell = mk('div', 'pkb-tier');
+      cell.append(mk('div', 'pkb-tier-l', lbl), mk('div', 'pkb-tier-p', val));
+      stats.append(cell);
+    }
+    card.append(stats);
+    if (potTxt) card.append(mk('div', 'pkb-micro', potTxt));
+    huntOutEl.append(card);
     if (top.length > 1) {
-      const alts = top.slice(1).map(h => `${h.displayName || h.nome} (${fmt(h.sim?.xpH)} xp, ${fmt(h.sim?.netGoldH)} líq)`).join(' · ');
-      huntOutEl.append(mk('div', 'color:#89a;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis', `Alt: ${alts}`));
+      const det = mk('details', 'pkb-rank');
+      det.append(mk('summary', null, `Alternativas (${top.length - 1})`));
+      for (const h of top.slice(1)) {
+        det.append(mk('div', 'pkb-rk', `${h.displayName || h.nome}: ${fmt(h.sim?.xpH)} xp · ${fmt(h.sim?.netGoldH)} líq`));
+      }
+      huntOutEl.append(det);
     }
   }
 
@@ -3006,19 +3019,20 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     if (ballBtnEl) ballBtnEl.textContent = ballState.scanning ? 'Lendo...' : 'Analisar';
     if (ballFocusEl && ballFocusEl.value !== ballState.focus) ballFocusEl.value = ballState.focus;
     ballOutEl.textContent = '';
-    const mk = (tag, css, txt) => {
+    // classes pkb-* (ver PANEL_CSS)
+    const mk = (tag, cls, txt) => {
       const el = document.createElement(tag);
-      if (css) el.style.cssText = css;
+      if (cls) el.className = cls;
       if (txt != null) el.textContent = txt;
       return el;
     };
     if (statusMsg) {
-      ballOutEl.append(mk('div', 'color:#7cf', statusMsg));
+      ballOutEl.append(mk('div', 'pkb-msg pkb-t-info', statusMsg));
       return;
     }
     const raw = ballState.last;
     if (!raw || !raw.balls || !raw.balls.length) {
-      ballOutEl.append(mk('div', 'color:#aab', 'Clique em Analisar para calcular a melhor Pokébola da hunt atual (ouro/h, NPC, RMT e Shiny).'));
+      ballOutEl.append(mk('div', 'pkb-msg', 'Clique em Analisar para calcular a melhor Pokébola da hunt atual (ouro/h, NPC, RMT e Shiny).'));
       return;
     }
 
@@ -3053,25 +3067,21 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
       res.boosts.catchBoostActive ? 'Boost Cap ×2' : '',
       res.boosts.shinyLureActive ? 'Shiny Lure ×2' : '',
     ].filter(Boolean).join(' · ');
-    ballOutEl.append(mk('div', 'color:#bcd;font-size:9.5px',
+    ballOutEl.append(mk('div', 'pkb-sum',
       `${raw.huntName} · Nv ${res.huntLevel} (cap Nv ${res.captureLevel}) · ${fc(res.pace.goldPerHour)}/h abates (~${Math.round(res.pace.killsPerHour)}/h) · ${ageMin}m`
       + (boostTags ? ` · ${boostTags}` : '')));
     if (huntChanged) {
-      ballOutEl.append(mk('div', 'color:#fd8;font-size:9px', `⚠ Você mudou de hunt (${curHunt}) — clique Analisar p/ atualizar.`));
+      ballOutEl.append(mk('div', 'pkb-warnline', `⚠ Você mudou de hunt (${curHunt}) — clique Analisar p/ atualizar.`));
     }
 
     // Card da recomendação
-    const accent = rec.id === 'none' ? '#fd8' : (rec.ballProfitPerKill >= 0 ? '#6f9' : '#7cf');
-    const bg = rec.id === 'none' ? '#332b1488' : (rec.ballProfitPerKill >= 0 ? '#16332288' : '#14263688');
-    const card = mk('div', `margin-top:4px;padding:4px 6px;border-radius:5px;background:${bg};border:1px solid ${accent}55`);
-    const topRow = mk('div', 'display:flex;align-items:center;gap:6px');
-    const titleEl = mk('div', `flex:1;font-weight:bold;color:${accent}`, `MELHOR: ${rec.name}`);
-    topRow.append(titleEl);
+    const tone = rec.id === 'none' ? 'warn' : (rec.ballProfitPerKill >= 0 ? 'ok' : 'info');
+    const card = mk('div', 'pkb-step pkb-t-' + tone);
+    const topRow = mk('div', 'pkb-bar');
+    topRow.append(mk('div', 'pkb-step-h pkb-grow', `MELHOR: ${rec.name}`));
     if (BALLS.includes(rec.name)) {
       const already = CFG.ball === rec.name && CFG.ballMin === PK_BALL.DEFAULT_RESTOCK_MIN && CFG.ballBuy === PK_BALL.DEFAULT_RESTOCK_BUY;
-      const useBtn = mk('button',
-        `all:unset;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:9.5px;border:1px solid ${accent}88;background:${already ? '#fff2' : accent + '33'};color:#fff`,
-        already ? 'Em uso' : 'Usar');
+      const useBtn = mk('button', 'pkb-btn pkb-mini' + (already ? '' : ' pkb-primary'), already ? 'Em uso' : 'Usar');
       useBtn.title = `Configurar ${rec.name} (mín. ${PK_BALL.DEFAULT_RESTOCK_MIN}, repor ${PK_BALL.DEFAULT_RESTOCK_BUY}) como Pokébola padrão do bot`;
       useBtn.onclick = () => applyRecommendedBall(rec);
       topRow.append(useBtn);
@@ -3081,35 +3091,37 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     const netBallTxt = rec.id === 'none'
       ? 'gasto em bolas: 0'
       : `bolas: ${rec.ballNetPerHour >= 0 ? '+' : ''}${fc(rec.ballNetPerHour)}/h (${rec.priceGold}/un)`;
-    card.append(mk('div', 'color:#fff;margin-top:2px',
-      `Lucro total: ${fc(rec.totalProfitPerHour)}/h · ${netBallTxt}`));
+    card.append(mk('div', 'pkb-opt-net', `Lucro total: ${fc(rec.totalProfitPerHour)}/h · ${netBallTxt}`));
 
     if (rec.id !== 'none') {
       const rareTxt = Number.isFinite(rec.hoursPerRare) ? `1 raro/${fh(rec.hoursPerRare)}` : 'raro: —';
       const shinyTxt = Number.isFinite(rec.hoursPerShiny) ? `1 shiny/${fh(rec.hoursPerShiny)}` : 'sem shiny';
-      card.append(mk('div', 'color:#cfe;font-size:9.5px',
-        `Taxa ${fp(rec.catchChance)} (~${rec.capturesPerHour.toFixed(1)} cap/h · ${fc(rec.costPerCapture)}/cap) · ${rareTxt} · ${shinyTxt}`));
+      const stats = mk('div', 'pkb-tiers');
+      for (const [lbl, val] of [['Taxa', fp(rec.catchChance)], ['Capturas/h', rec.capturesPerHour.toFixed(1)], ['Custo/cap', fc(rec.costPerCapture)]]) {
+        const cell = mk('div', 'pkb-tier');
+        cell.append(mk('div', 'pkb-tier-l', lbl), mk('div', 'pkb-tier-p', val));
+        stats.append(cell);
+      }
+      card.append(stats, mk('div', 'pkb-micro', `${rareTxt} · ${shinyTxt}`));
     }
     if (res.focus === 'balanced' && res.balancedReason) {
-      card.append(mk('div', 'color:#9df;font-size:9px;margin-top:1px', res.balancedReason));
+      card.append(mk('div', 'pkb-sub2 pkb-t-info', res.balancedReason));
     }
 
     // Decomposição do EV por Pokémon capturado
     const v = res.value;
-    card.append(mk('div', 'color:#aab;font-size:9px;margin-top:2px',
-      `EV/captura: ${fc(v.evTotal)} (NPC ${fc(v.evNpc)} + RMT N≥3,5 ${fc(v.evStrong)} + P5 ${fc(v.evP5)} + Shiny ${fc(v.evShiny)})`));
+    card.append(mk('div', 'pkb-micro', `EV/captura: ${fc(v.evTotal)} (NPC ${fc(v.evNpc)} + RMT N≥3,5 ${fc(v.evStrong)} + P5 ${fc(v.evP5)} + Shiny ${fc(v.evShiny)})`));
 
     // Comparativo rápido dos 3 focos quando diferem
-    const fNames = `Dinheiro: ${res.byFocus.money.name} | Equil.: ${res.byFocus.balanced.name} | Raro: ${res.byFocus.rare.name}`;
-    card.append(mk('div', 'color:#bcd;font-size:9px;margin-top:2px', fNames));
+    card.append(mk('div', 'pkb-micro', `Dinheiro: ${res.byFocus.money.name} | Equil.: ${res.byFocus.balanced.name} | Raro: ${res.byFocus.rare.name}`));
     ballOutEl.append(card);
 
     // Avisos + atalho para escanear RMT se sem dados RMT
     for (const w of res.warnings) {
-      const line = mk('div', 'margin-top:2px;color:#fc9;font-size:9px;display:flex;align-items:center;gap:4px');
-      line.append(mk('span', 'flex:1', '⚠ ' + w));
+      const line = mk('div', 'pkb-warnline pkb-warnrow');
+      line.append(mk('span', 'pkb-grow', '⚠ ' + w));
       if (/Radar RMT/i.test(w)) {
-        const bRmt = mk('button', 'all:unset;cursor:pointer;padding:0 5px;border-radius:3px;background:#fd83;border:1px solid #fd86;color:#fff;font-size:9px', 'Ler RMT');
+        const bRmt = mk('button', 'pkb-btn pkb-mini', 'Ler RMT');
         bRmt.onclick = () => scanRmt();
         line.append(bRmt);
       }
@@ -3117,26 +3129,22 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     }
 
     // Tabela dobrável comparando todas as Pokébolas
-    const det = document.createElement('details');
+    const det = mk('details', 'pkb-rank');
     det.open = ballTableOpen;
-    det.style.cssText = 'margin-top:4px;border-top:1px solid #fff2;padding-top:3px';
     det.ontoggle = () => { ballTableOpen = det.open; };
-    det.append(mk('summary', 'cursor:pointer;color:#aab;font-size:9.5px', `Comparar todas as bolas (${res.options.length})`));
+    det.append(mk('summary', null, `Comparar todas as bolas (${res.options.length})`));
     for (const o of res.options) {
       const mark = o.id === rec.id ? '★' : (o.diamondOnly ? '◆' : '·');
-      const color = o.id === rec.id ? '#6f9' : (o.diamondOnly ? '#c9f' : '#cfd');
+      const cls = 'pkb-rk' + (o.id === rec.id ? ' pkb-t-ok pkb-strongrow' : (o.diamondOnly ? ' pkb-dim' : ''));
       if (o.diamondOnly) {
         const sh = Number.isFinite(o.hoursPerShiny) ? `1 shiny/${fh(o.hoursPerShiny)}` : 'sem shiny';
-        det.append(mk('div', `color:${color};font-size:9px;margin-top:1px`,
-          `${mark} ${o.name} (só Diamante): ${fp(o.catchChance)} · ${o.capturesPerHour.toFixed(1)} cap/h · ${sh}`));
+        det.append(mk('div', cls, `${mark} ${o.name} (só Diamante): ${fp(o.catchChance)} · ${o.capturesPerHour.toFixed(1)} cap/h · ${sh}`));
       } else if (o.id === 'none') {
-        det.append(mk('div', `color:${color};font-size:9px;margin-top:1px`,
-          `${mark} ${o.name}: total ${fc(o.totalProfitPerHour)}/h · 0 cap/h`));
+        det.append(mk('div', cls, `${mark} ${o.name}: total ${fc(o.totalProfitPerHour)}/h · 0 cap/h`));
       } else {
         const bSign = o.ballNetPerHour >= 0 ? '+' : '';
         const sh = Number.isFinite(o.hoursPerShiny) ? ` · sh/${fh(o.hoursPerShiny)}` : '';
-        det.append(mk('div', `color:${color};font-size:9px;margin-top:1px`,
-          `${mark} ${o.name} (${o.priceGold}): ${fp(o.catchChance)} · total ${fc(o.totalProfitPerHour)}/h (bola ${bSign}${fc(o.ballNetPerHour)}/h)${sh}`));
+        det.append(mk('div', cls, `${mark} ${o.name} (${o.priceGold}): ${fp(o.catchChance)} · total ${fc(o.totalProfitPerHour)}/h (bola ${bSign}${fc(o.ballNetPerHour)}/h)${sh}`));
       }
     }
     ballOutEl.append(det);
