@@ -2341,8 +2341,12 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     const corpo = getCorpo();
     const btn = corpo && $('#cm-meus', corpo);
     if (!btn) return out;
-    btn.click();
-    await sleep(900);
+    // #cm-meus é um toggle (classe "on"): clicar com ele já ligado voltaria à lista geral do mercado.
+    const meusBtn = () => { const c = getCorpo(); return (c && $('#cm-meus', c)) || btn; };
+    const isOn = () => meusBtn().classList.contains('on');
+    for (let t = 0; t < 3 && !isOn(); t++) { meusBtn().click(); await sleep(700); }
+    if (!isOn()) { log('venda: Meus anúncios não abriu'); return out; }
+    await sleep(500);
     const root = $('.cm-folha') || getCorpo();
     if (!root) return out;
     const cards = $$('.cm-card, .cm-linha, .cmi-linha, .cm-meu, .mk-card', root);
@@ -2350,7 +2354,7 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
     cards.forEach((c, i) => {
       const txt = c.textContent.replace(/\s+/g, ' ').trim();
       if (i < 3) diag.push(txt.slice(0, 80));
-      const nameEl = $('.cm-nome-txt, .cmi-nome b, .cm-slot-nome, .mk-nome', c);
+      const nameEl = $('.cm-nome-txt', c) || $('.cm-nome, .cmi-nome b, .cm-slot-nome, .mk-nome', c);
       const rawName = (nameEl && nameEl.textContent.trim()) || '';
       if (!rawName) return;
       const subTxt = ($('.cm-sub, .mk-sub', c) || {}).textContent || '';
@@ -2373,13 +2377,17 @@ position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:
         return;
       }
       // Item: quantidade em "×N" / "xN" / <b> do slot; senão 1
+      // Card real: <span class="cm-qtd">138×</span> (número antes do ×); fallback "×N" e <b>.
+      const qtdTxt = ($('.cm-qtd', c) || {}).textContent || '';
+      const qBefore = qtdTxt.match(/([\d.,]+\s*[kKmM]?)\s*[×x]/);
       const qm = txt.match(/[×x]\s*([\d.,]+\s*[kKmM]?)/) || null;
       const qtyB = PK_SELL.parseIntClean(($('b', c) || {}).textContent || '') || 0;
-      const qty = (qm && PK_SELL.parseCompactNum(qm[1])) || qtyB || 1;
+      const qty = (qBefore && PK_SELL.parseCompactNum(qBefore[1])) || (qm && PK_SELL.parseCompactNum(qm[1])) || qtyB || 1;
       const name = rawName.replace(/\s*[×x]\s*[\d.,]+.*$/i, '').trim();
       if (name) out.items.push({ name, qty: Math.max(1, Math.round(qty)) });
     });
     log('venda: Meus anúncios cards=' + cards.length, JSON.stringify(diag));
+    if (isOn()) { meusBtn().click(); await sleep(300); }
     await closeRmtLeaf();
     return out;
   }
