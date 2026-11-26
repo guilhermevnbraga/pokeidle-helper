@@ -18,8 +18,8 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] UI do painel v0.10.0: tema pkb-*, status+pausa, abas, pílula, cards em todas as abas; validado ao vivo (PT e EN, ULTRA, arraste) · janela estreita real NÃO validada
 - [x] Auto-reload de dev no background.js (extensão descompactada, ~40 s após editar); validado ao vivo
 - [x] Filtros de busca do jogo (`#f-mapa`, `#f-nivel-min/max`, `#f-dex`) persistem: extensão limpa antes de ler e restaura o do usuário (v0.10.1) ·… · NÃO validado: troca real, nível min/max
-- [ ] Bug readMyListings: em EN o anúncio '78× Darkness Stone' não vira item (0 itens lidos); inspecionar DOM de #cm-meus e corrigir parser
-- [ ] README.md ainda não descreve a UI nova (abas, status, pausa, pílula) · NÃO feito
+- [x] readMyListings corrigido (toggle #cm-meus + card .cm-nome/.cm-qtd): lê 138× Darkness Stone + Shiny Shedinja ao vivo em PT · NÃO validado: EN após o fix
+- [x] README.md descreve a UI nova (abas, status, pausa, pílula) e módulos sell/stones/timing
 - [ ] Radar RMT: seletores de itens em idioma EN · NÃO validado: jogo testado só em PT
 - [x] Painel flutuante arrastável, minimizável e ocultável (`Alt+P`), visível em ULTRA, altura limitada a `100vh - 16px` com rolagem interna e `ResizeObserver` (`content.js`).
 - [x] Modo 2 (Repor bolas/poções): compra no Market com seletores independentes de idioma, checa ouro e suporta poção `auto` ou fixa.

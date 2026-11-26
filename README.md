@@ -69,8 +69,12 @@ Depois de editar o código, clique em **Recarregar** na extensão e recarregue a
 
 ## Painel
 
-- **Arrastar:** pelo cabeçalho. A posição fica salva.
-- **Minimizar:** botão `—` ou duplo clique no título. O painel começa minimizado e mostra os modos ativos.
+O painel tem um único tema visual e um cabeçalho de status: uma bolinha de estado, os modos ativos (ex.: `modos 2 · 3 · 4`) e chips para o modo de tela do jogo, aba oculta e dry-run.
+
+- **Abas:** `Auto` (modos e compras) · `Hunt` · `Bola` · `RMT` · `Pedras` · `Venda`. O resultado de cada análise aparece em cards.
+- **Pausar/retomar:** botão `⏸` / `▶` no cabeçalho. Pausa todos os modos ligados e, ao retomar, religa exatamente os mesmos.
+- **Arrastar:** pelo cabeçalho, sem sair das bordas da tela. A posição fica salva.
+- **Minimizar:** botão `—` recolhe o painel numa pílula com os modos ativos.
 - **Esconder:** botão `×`, ou **Alt+P** para esconder e mostrar. Os modos continuam rodando escondido.
 
 ## Configuração
@@ -194,5 +198,9 @@ Os [Termos do Pokeidle](https://pokeidle.io/terms) (seção 5, "Automação") pe
 - `hunt.js`: lógica pura do gerenciador de hunt.
 - `rmt.js`: lógica pura do Radar RMT (Ouro ↔ Gema e detector de Trading).
 - `ball.js`: lógica pura do Analisador Otimizado de Pokébola.
+- `sell.js`: lógica pura do Analisador de Venda (Gold vs Gema, preço máximo viável).
+- `stones.js`: lógica pura da Venda de Pedras.
+- `timing.js`: lógica pura do veredito de timing do Radar RMT.
+- `server-flag.js`: sinalização do modo servidor (deploy).
 - `content.js`: interface do painel e interação com o DOM.
 - `background.js`: service worker (alarme de 30 s e `autoDiscardable: false`).
