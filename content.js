@@ -134,7 +134,9 @@
      Visual: tema em um <style> (#pkbot-style) com variáveis --pkb-* e classes pkb-*. */
   const PANEL_CSS = `
 #pkbot-panel{--pkb-bg:rgba(14,17,27,.96);--pkb-card:rgba(255,255,255,.045);--pkb-line:rgba(255,255,255,.09);--pkb-text:#e8ebf4;--pkb-mute:#8b93a9;--pkb-accent:#7c8cff;--pkb-ok:#4ade80;--pkb-warn:#fbbf24;--pkb-bad:#f87171;
-position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:border-box;width:340px;background:var(--pkb-bg);color:var(--pkb-text);font:12.5px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;border:1px solid var(--pkb-line);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.55);opacity:.78;transition:opacity .15s;user-select:none}
+position:fixed;z-index:2147483647;display:flex;flex-direction:column;box-sizing:border-box;width:340px;background:var(--pkb-bg);color:var(--pkb-text);font:12.5px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;border:1px solid var(--pkb-line);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.55);opacity:.94;transition:opacity .15s;user-select:none}
+#pkbot-panel input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;background:none;border:0;box-shadow:none;border-radius:0;padding:0;margin:0;outline:0}
+#pkbot-panel input[type=checkbox]::before,#pkbot-panel input[type=checkbox]::after{content:none;display:none}
 #pkbot-panel:hover{opacity:1}
 #pkbot-panel *{box-sizing:border-box;font-family:inherit}
 #pkbot-panel.pkb-min{width:auto;min-width:210px}
