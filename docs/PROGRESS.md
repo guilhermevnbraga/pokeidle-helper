@@ -30,6 +30,7 @@ Regra: UMA linha por item (≤ 190 chars). Compacte com `compact-progress.mjs` d
 - [x] Modo 1/captureRe: toast real "Shedinja capturado — vendido pela Auto Venda" gerou "captura detectada" ao vivo em PT 2026-11-26 · NÃO validado: toast de captura sem Auto Venda e EN
 - [x] ULTRA Economia (ultraSupplyTick): código mantido como está; decisão do usuário 2026-11-26: não vale validar (não captura no ULTRA) · NÃO validado: compra real no ciclo do ULTRA
 - [x] Deploy Docker multi-conta (CT 104, 4 perfis): UI nova carregou após reiniciar o container; minimizado ~3 min, XP +2,1… · NÃO validado: fluidez ao digitar, contas 2-4, capturas por horas
+- [ ] OOM no servidor: MEM_LIMIT=3500m + cron restart 05:00 BRT aplicados no CT 104 · NÃO validado: abas vivas na manhã seguinte; falta doc no README
 
 ## Estudo do jogo (`pokeidle.io/app`)
 - [x] Estudo de caso RMT (5.000 tx Itens + 900 tx Pokémon + books): trio de Fragmentos (~5,3–5,7M/G, ~5,6B p/ 1.000G), Stones = transfer P2P, high-end Pokémon só em Gemas (`GAME_STUDY.md`).
